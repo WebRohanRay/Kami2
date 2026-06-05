@@ -50,6 +50,12 @@ const THEMES = [
   { id: 'blush', label: 'Blush Pink', emoji: '🌸' },
   { id: 'indigo', label: 'Midnight Indigo', emoji: '🌙' },
   { id: 'slate', label: 'Slate Gray', emoji: '⛰️' },
+  { id: 'sage', label: 'Sage Green', emoji: '🌿' },
+  { id: 'honey', label: 'Honey Gold', emoji: '🍯' },
+  { id: 'lavender', label: 'Lavender Mist', emoji: '🪻' },
+  { id: 'coral', label: 'Coral Peach', emoji: '🍑' },
+  { id: 'ocean', label: 'Ocean Breeze', emoji: '🌊' },
+  { id: 'crimson', label: 'Crimson Rose', emoji: '🌹' },
 ] as const;
 
 const TEXT_SIZES = [

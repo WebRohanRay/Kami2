@@ -11,9 +11,69 @@ if (__DEV__ && (!url || !anonKey)) {
 }
 
 const secureStorage = {
-  getItem:    (k: string) => SecureStore.getItemAsync(k),
-  setItem:    (k: string, v: string) => SecureStore.setItemAsync(k, v),
-  removeItem: (k: string) => SecureStore.deleteItemAsync(k),
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      const info = await SecureStore.getItemAsync(key);
+      if (!info) return null;
+      if (info.startsWith('chunked:')) {
+        const count = parseInt(info.split(':')[1], 10);
+        let val = '';
+        for (let i = 0; i < count; i++) {
+          const chunk = await SecureStore.getItemAsync(`${key}_chunk_${i}`);
+          if (!chunk) return null;
+          val += chunk;
+        }
+        return val;
+      }
+      return info;
+    } catch (e) {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      // Clean up any old chunks first to be safe
+      const oldInfo = await SecureStore.getItemAsync(key);
+      if (oldInfo && oldInfo.startsWith('chunked:')) {
+        const count = parseInt(oldInfo.split(':')[1], 10);
+        for (let i = 0; i < count; i++) {
+          await SecureStore.deleteItemAsync(`${key}_chunk_${i}`);
+        }
+      }
+
+      const CHUNK_SIZE = 2000;
+      if (value.length > CHUNK_SIZE) {
+        const chunks = [];
+        for (let i = 0; i < value.length; i += CHUNK_SIZE) {
+          chunks.push(value.substring(i, i + CHUNK_SIZE));
+        }
+        // Save chunk header
+        await SecureStore.setItemAsync(key, `chunked:${chunks.length}`);
+        // Save chunks
+        for (let i = 0; i < chunks.length; i++) {
+          await SecureStore.setItemAsync(`${key}_chunk_${i}`, chunks[i]);
+        }
+      } else {
+        await SecureStore.setItemAsync(key, value);
+      }
+    } catch (e) {
+      console.error('secureStorage setItem error:', e);
+    }
+  },
+  removeItem: async (key: string): Promise<void> => {
+    try {
+      const oldInfo = await SecureStore.getItemAsync(key);
+      if (oldInfo && oldInfo.startsWith('chunked:')) {
+        const count = parseInt(oldInfo.split(':')[1], 10);
+        for (let i = 0; i < count; i++) {
+          await SecureStore.deleteItemAsync(`${key}_chunk_${i}`);
+        }
+      }
+      await SecureStore.deleteItemAsync(key);
+    } catch (e) {
+      console.error('secureStorage removeItem error:', e);
+    }
+  },
 };
 
 export const supabase = createClient(

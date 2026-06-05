@@ -37,6 +37,7 @@ export default {
 
     android: {
       package: 'com.rohanray12345.Kami',
+      googleServicesFile: './google-services.json',
 
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
