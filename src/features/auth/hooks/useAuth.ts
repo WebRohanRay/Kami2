@@ -37,6 +37,13 @@ export function useAuth() {
     let mounted = true;
     const { setUser, setStatus, setError, reset } = store();
 
+    // 0. Configure Google Sign-In once on mount
+    authService.configureGoogleSignIn(
+      // webClientId is read from the native strings.xml resource at runtime;
+      // the value below must match strings.xml server_client_id exactly.
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
+    );
+
     // 1. Restore session on mount
     authService.getSession().then(async ({ data: { session } }) => {
       if (!mounted) return;

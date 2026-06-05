@@ -44,7 +44,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,  setLoading]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const { login, signInWithGoogle } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const error = useAuthStore(s => s.error);
 
   // ── Email / Password Login ────────────────────────────────────────────────
@@ -77,7 +77,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const handleGoogleLogin = async () => {
     Keyboard.dismiss();
     setGoogleLoading(true);
-    const result = await signInWithGoogle();
+    const result = await loginWithGoogle();
     setGoogleLoading(false);
 
     if (!result.success) {

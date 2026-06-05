@@ -8,6 +8,10 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { supabase } from '@shared/lib/supabase';
 import type { Result } from '@features/auth/types';
 
+export function configureGoogleSignIn(webClientId: string): void {
+  GoogleSignin.configure({ webClientId, offlineAccess: false });
+}
+
 function friendly(raw: string): string {
   const map: [string, string][] = [
     ['Invalid login credentials',   'Incorrect email or password.'],

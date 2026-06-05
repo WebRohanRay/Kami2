@@ -86,7 +86,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,  setLoading]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp, loginWithGoogle } = useAuth();
 
   const has8   = password.length >= 8;
   const hasUp  = /[A-Z]/.test(password);
@@ -121,7 +121,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const handleGoogleSignUp = async () => {
     Keyboard.dismiss();
     setGoogleLoading(true);
-    const result = await signInWithGoogle();
+    const result = await loginWithGoogle();
     setGoogleLoading(false);
 
     if (!result.success) {
