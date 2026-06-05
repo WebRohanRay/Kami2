@@ -9,8 +9,8 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StyleSheet } from 'react-native';
 
-import HomeScreen from '@features/home';
-import SettingsScreen from '@features/settings';
+import { HomeScreen } from '@features/home';
+import { SettingsScreen } from '@features/settings';
 import { Colors, FontSize } from '@shared/constants';
 import type { MainTabParamList } from './types';
 
