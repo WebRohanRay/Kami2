@@ -35,6 +35,7 @@ export interface JournalEntry {
   body:      string;
   moodId:    string | null;
   tags:      string[];
+  imageUrls?: string[];
   entryDate: string; // ISO date YYYY-MM-DD
   isPinned:  boolean;
   createdAt: string;
@@ -46,6 +47,7 @@ export type CreateJournalInput = {
   body:   string;
   moodId?: string;
   tags?:  string[];
+  imageUrls?: string[];
 };
 
 export type UpdateJournalInput = Partial<CreateJournalInput> & {
@@ -76,6 +78,7 @@ export interface Goal {
   targetDate:  string | null;
   completedAt: string | null;
   emoji:       string;
+  imageUrl?:   string | null;
   sortOrder:   number;
   createdAt:   string;
   updatedAt:   string;
@@ -87,6 +90,7 @@ export type CreateGoalInput = {
   category:    GoalCategory;
   targetDate?: string;
   emoji?:      string;
+  imageUrl?:   string | null;
 };
 
 export type UpdateGoalInput = Partial<{
@@ -97,6 +101,7 @@ export type UpdateGoalInput = Partial<{
   progress:    number;
   targetDate:  string;
   emoji:       string;
+  imageUrl:    string | null;
 }>;
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
@@ -125,6 +130,50 @@ export interface Streak {
   lastCheckinDate: string | null;
   totalCheckins:   number;
 }
+
+// ─── Memories ────────────────────────────────────────────────────────────────
+
+export interface Memory {
+  id:         string;
+  userId:     string;
+  title:      string;
+  body:       string;
+  emoji:      string;
+  mood:       string | null;
+  imageUrls:  string[];
+  memoryDate: string;
+  createdAt:  string;
+}
+
+export type CreateMemoryInput = {
+  title:      string;
+  body?:      string;
+  emoji:      string;
+  mood?:      string | null;
+  imageUrls?: string[];
+};
+
+export type UpdateMemoryInput = Partial<CreateMemoryInput>;
+
+// ─── Letters ─────────────────────────────────────────────────────────────────
+
+export interface Letter {
+  id:           string;
+  userId:       string;
+  subject:      string;
+  body?:        string;
+  deliverAt:    string;
+  isUnlocked:   boolean;
+  imageUrls?:   string[];
+  createdAt:    string;
+}
+
+export type CreateLetterInput = {
+  subject:    string;
+  body:       string;
+  deliverAt:  string;
+  imageUrls?: string[];
+};
 
 // ─── Result ──────────────────────────────────────────────────────────────────
 

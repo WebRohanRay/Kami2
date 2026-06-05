@@ -19,7 +19,7 @@ export default BottomSheet;
 
 const styles = StyleSheet.create({
   sheet: {
-    backgroundColor: Colors.sheetBg,
+    backgroundColor: Colors.cardBg,
     borderTopLeftRadius:  Radii.sheet,
     borderTopRightRadius: Radii.sheet,
     paddingHorizontal: 24,

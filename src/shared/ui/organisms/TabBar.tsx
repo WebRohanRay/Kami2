@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Colors, Radii, Shadows, Space, FontSize, FontWeight, ZIndex } from '@shared/constants';
+import { Colors, Radii, Shadows, Space, FontSize, FontWeight } from '@shared/constants';
 
 export interface TabItem {
   id:    string;
@@ -56,13 +56,13 @@ export default TabBar;
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    backgroundColor: Colors.sheetBg,
+    backgroundColor: Colors.cardBg,
     borderTopWidth: 1,
     borderTopColor: 'rgba(217,193,196,0.4)',
     paddingTop: Space[2],
     paddingBottom: Platform.OS === 'ios' ? Space[6] : Space[3],
-    zIndex: ZIndex.nav,
-    ...Shadows.lg,
+    zIndex: 10,
+    ...Shadows.md,
   },
   item: {
     flex: 1,

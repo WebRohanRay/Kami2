@@ -9,7 +9,7 @@ type PickResult =
   | { success: false; cancelled: false; error: string };
 
 type UploadResult =
-  | { success: true; publicUrl: string }
+  | { success: true; path: string }
   | { success: false; error: string };
 
 export async function pickAvatarImage(): Promise<PickResult> {
@@ -69,7 +69,7 @@ export async function uploadAvatar(
       };
     }
 
-    const path = `${userId}/avatar_${Date.now()}.jpg`;
+    const path = `${userId}/avatar.jpg`;
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
@@ -85,13 +85,9 @@ export async function uploadAvatar(
       };
     }
 
-    const { data } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(path);
-
     return {
       success: true,
-      publicUrl: data.publicUrl,
+      path,
     };
   } catch (error) {
     console.error('uploadAvatar error:', error);

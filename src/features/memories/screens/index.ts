@@ -1,0 +1,1 @@
+export { MemoriesScreen } from './MemoriesScreen';

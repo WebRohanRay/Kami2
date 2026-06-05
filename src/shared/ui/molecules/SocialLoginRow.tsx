@@ -15,6 +15,7 @@ export interface SocialProvider {
   onPress?: () => void;
   loading?: boolean;
   disabled?: boolean;
+  emoji?: string;
 }
 
 // ─── Google "G" SVG-style drawn with Text layers ─────────────────────────────

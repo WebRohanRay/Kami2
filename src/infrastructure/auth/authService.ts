@@ -113,3 +113,10 @@ export async function signOut(): Promise<Result<void>> {
   if (error) return { success: false, error: friendly(error.message) };
   return { success: true, data: undefined };
 }
+
+export async function deleteAccount(): Promise<Result<void>> {
+  const { error } = await supabase.rpc('delete_user_account');
+  if (error) return { success: false, error: friendly(error.message) };
+  try { await GoogleSignin.signOut(); } catch { /* ignore */ }
+  return { success: true, data: undefined };
+}

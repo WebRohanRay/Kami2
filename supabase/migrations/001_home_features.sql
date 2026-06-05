@@ -47,7 +47,7 @@ CREATE TRIGGER set_mood_logs_updated_at
   FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 -- Enable realtime for live streak/mood updates
-ALTER PUBLICATION supabase_realtime ADD TABLE mood_logs;
+-- TODO(couples): ALTER PUBLICATION supabase_realtime ADD TABLE <table_name>;
 
 -- ============================================================
 -- TABLE: journal_entries
@@ -83,7 +83,7 @@ CREATE TRIGGER set_journal_entries_updated_at
   BEFORE UPDATE ON journal_entries
   FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-ALTER PUBLICATION supabase_realtime ADD TABLE journal_entries;
+-- TODO(couples): ALTER PUBLICATION supabase_realtime ADD TABLE <table_name>;
 
 -- ============================================================
 -- TABLE: goals
@@ -125,7 +125,7 @@ CREATE TRIGGER set_goals_updated_at
   BEFORE UPDATE ON goals
   FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-ALTER PUBLICATION supabase_realtime ADD TABLE goals;
+-- TODO(couples): ALTER PUBLICATION supabase_realtime ADD TABLE <table_name>;
 
 -- ============================================================
 -- TABLE: daily_prompts
@@ -185,7 +185,7 @@ CREATE TRIGGER set_prompt_responses_updated_at
   BEFORE UPDATE ON prompt_responses
   FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-ALTER PUBLICATION supabase_realtime ADD TABLE prompt_responses;
+-- TODO(couples): ALTER PUBLICATION supabase_realtime ADD TABLE <table_name>;
 
 -- ============================================================
 -- TABLE: streaks
@@ -215,7 +215,7 @@ CREATE TRIGGER set_streaks_updated_at
   BEFORE UPDATE ON streaks
   FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-ALTER PUBLICATION supabase_realtime ADD TABLE streaks;
+-- TODO(couples): ALTER PUBLICATION supabase_realtime ADD TABLE <table_name>;
 
 -- ============================================================
 -- FUNCTION + TRIGGER: Auto-update streak on mood_log insert

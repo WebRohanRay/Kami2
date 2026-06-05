@@ -3,28 +3,31 @@
  *
  * Full settings interface with sections:
  *  - Profile (avatar, nickname)
- *  - Appearance (theme hints for future)
- *  - Notifications (toggle rows)
- *  - Privacy
- *  - Account (email, sign out, delete)
- *
- * Fixes: updateProfileDetails → updateProfile (correct hook export name)
+ *  - Appearance (theme, text size synced to Supabase)
+ *  - Notifications (daily reminders, weekly digests, streak alerts)
+ *  - Privacy (data export, privacy statement sheet)
+ *  - Terms of Service
+ *  - Account (email, sign out, delete account)
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
   Keyboard,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
+  Share,
   StyleSheet,
   Switch,
   Text,
   TouchableOpacity,
   View,
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -32,7 +35,7 @@ import KamiButton  from '@shared/ui/atoms/KamiButton';
 import InputField  from '@shared/ui/atoms/InputField';
 import KamiText    from '@shared/ui/atoms/KamiText';
 import {
-  Colors, FontSize, FontWeight, Radii, Shadows, Sizing, Space,
+  Colors, FontSize, FontWeight, Radii, Shadows, Sizing, Space, FontFamily
 } from '@shared/constants';
 import { useAuth }      from '@features/auth';
 import { useAuthStore } from '@features/auth';
@@ -41,7 +44,19 @@ import type { MainTabScreenProps } from '@core/navigation/types';
 
 type Props = MainTabScreenProps<'Settings'>;
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── Constants & Helpers ───────────────────────────────────────────────────
+
+const THEMES = [
+  { id: 'blush', label: 'Blush Pink', emoji: '🌸' },
+  { id: 'indigo', label: 'Midnight Indigo', emoji: '🌙' },
+  { id: 'slate', label: 'Slate Gray', emoji: '⛰️' },
+] as const;
+
+const TEXT_SIZES = [
+  { id: 'small', label: 'Small', emoji: '▫️' },
+  { id: 'medium', label: 'Medium', emoji: '◽' },
+  { id: 'large', label: 'Large', emoji: '◻️' },
+] as const;
 
 function initialsFor(name?: string, email?: string) {
   return (name?.trim() || email?.trim() || 'K').slice(0, 1).toUpperCase();
@@ -49,7 +64,6 @@ function initialsFor(name?: string, email?: string) {
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-/** A single tappable row inside a settings group */
 const SettingRow: React.FC<{
   icon: string;
   label: string;
@@ -82,6 +96,7 @@ const SettingRow: React.FC<{
           <KamiText
             variant="body"
             color={danger ? Colors.error : Colors.textPrimary}
+            bold={danger}
           >
             {label}
           </KamiText>
@@ -120,16 +135,15 @@ const rowStyles = StyleSheet.create({
   chevron: { fontSize: FontSize.xl, color: Colors.textMuted, marginTop: -2 },
 });
 
-/** A labeled card section wrapping multiple rows */
 const SettingGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <View style={groupStyles.wrap}>
     <KamiText variant="overline" style={groupStyles.title}>{title}</KamiText>
     <View style={groupStyles.card}>
       {React.Children.map(children, (child, i) => (
-        <>
+        <React.Fragment key={i}>
           {child}
           {i < React.Children.count(children) - 1 && <View style={groupStyles.divider} />}
-        </>
+        </React.Fragment>
       ))}
     </View>
   </View>
@@ -153,26 +167,117 @@ const groupStyles = StyleSheet.create({
   },
 });
 
-// ─── Screen ──────────────────────────────────────────────────────────────────
+// ─── Text / Info Sheet Modal ───────────────────────────────────────────────
 
-const SettingsScreen: React.FC<Props> = ({ navigation }) => {
+const InfoSheet: React.FC<{
+  visible: boolean;
+  title: string;
+  content: string;
+  onClose: () => void;
+}> = ({ visible, title, content, onClose }) => (
+  <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SafeAreaView style={sheetStyles.root}>
+      <View style={sheetStyles.header}>
+        <KamiText variant="title">{title}</KamiText>
+        <TouchableOpacity onPress={onClose} style={sheetStyles.closeBtn}>
+          <KamiText variant="label" color={Colors.primary} bold>Done</KamiText>
+        </TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={sheetStyles.scroll}>
+        <KamiText variant="body" style={sheetStyles.text}>{content}</KamiText>
+      </ScrollView>
+    </SafeAreaView>
+  </Modal>
+);
+
+const sheetStyles = StyleSheet.create({
+  root:     { flex: 1, backgroundColor: Colors.pageBg },
+  header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  closeBtn: { padding: Space[2] },
+  scroll:   { padding: Space[5] },
+  text:     { lineHeight: 24, color: Colors.textSecondary },
+});
+
+// ─── Selection Selector Sheet Modal ───────────────────────────────────────
+
+interface SelectOption {
+  id: string;
+  label: string;
+  emoji: string;
+}
+
+const SelectorSheet: React.FC<{
+  visible: boolean;
+  title: string;
+  options: readonly SelectOption[];
+  selectedValue: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}> = ({ visible, title, options, selectedValue, onSelect, onClose }) => (
+  <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SafeAreaView style={selectorStyles.root}>
+      <View style={selectorStyles.header}>
+        <KamiText variant="title">{title}</KamiText>
+        <TouchableOpacity onPress={onClose} style={selectorStyles.closeBtn}>
+          <KamiText variant="label" color={Colors.primary} bold>Cancel</KamiText>
+        </TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={selectorStyles.scroll}>
+        <View style={selectorStyles.list}>
+          {options.map((opt) => {
+            const active = opt.id === selectedValue;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[selectorStyles.item, active && selectorStyles.itemActive]}
+                onPress={() => { onSelect(opt.id); onClose(); }}
+              >
+                <Text style={selectorStyles.emoji}>{opt.emoji}</Text>
+                <KamiText variant="body" style={{ flex: 1 }} bold={active} color={active ? Colors.primary : Colors.textPrimary}>
+                  {opt.label}
+                </KamiText>
+                {active && <KamiText variant="label" color={Colors.primary}>✓</KamiText>}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  </Modal>
+);
+
+const selectorStyles = StyleSheet.create({
+  root:     { flex: 1, backgroundColor: Colors.pageBg },
+  header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  closeBtn: { padding: Space[2] },
+  scroll:   { padding: Space[5] },
+  list:     { backgroundColor: Colors.cardBg, borderRadius: Radii.card, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border + '44' },
+  item:     { flexDirection: 'row', alignItems: 'center', paddingVertical: Space[4], paddingHorizontal: Space[5], gap: Space[3], borderBottomWidth: 1, borderBottomColor: Colors.border + '11' },
+  itemActive: { backgroundColor: Colors.primary + '0a' },
+  emoji:    { fontSize: 18 },
+});
+
+// ─── Main Component ────────────────────────────────────────────────────────
+
+export function SettingsScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { signOut, updateProfile } = useAuth();
+  const { signOut, deleteAccount, updateProfile, exportData } = useAuth();
 
   const [nickname,       setNickname]       = useState(user?.nickname ?? '');
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingNickname, setSavingNickname] = useState(false);
   const [avatarLoading,  setAvatarLoading]  = useState(false);
   const [signingOut,     setSigningOut]     = useState(false);
+  const [deleting,       setDeleting]       = useState(false);
+  const [exporting,      setExporting]      = useState(false);
 
-  // notification toggles (local state — wire to a store/API when ready)
-  const [dailyReminder,  setDailyReminder]  = useState(true);
-  const [weeklyDigest,   setWeeklyDigest]   = useState(false);
-  const [streakAlerts,   setStreakAlerts]   = useState(true);
+  // Selector & Info Sheets
+  const [activeSelector, setActiveSelector] = useState<'theme' | 'textSize' | null>(null);
+  const [activeInfo,     setActiveInfo]     = useState<'privacy' | 'terms' | null>(null);
 
   useEffect(() => { setNickname(user?.nickname ?? ''); }, [user?.nickname]);
 
-  // ── Profile actions ──────────────────────────────────────────────────────
+  // ── Action Handlers ──────────────────────────────────────────────────────
 
   const handleSaveNickname = async () => {
     Keyboard.dismiss();
@@ -185,23 +290,62 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     setSavingNickname(false);
     if (!result.success) { Alert.alert('Kami', result.error); return; }
     setEditingProfile(false);
-    Alert.alert('Kami', 'Nickname saved! 🎉');
+    Alert.alert('Kami', 'Display name updated! 🌸');
   };
 
   const handleAvatarPress = async () => {
     if (!user?.id) { Alert.alert('Kami', 'Please sign in again.'); return; }
     const picked = await pickAvatarImage();
     if (!picked.success) {
-      if (!(picked as any).cancelled) Alert.alert('Kami', (picked as any).error);
+      if (!picked.cancelled) Alert.alert('Kami', picked.error);
       return;
     }
     setAvatarLoading(true);
-    const uploaded = await uploadAvatar(user.id, (picked as any).uri);
-    if (!uploaded.success) { setAvatarLoading(false); Alert.alert('Kami', (uploaded as any).error); return; }
-    const saved = await updateProfile(user.id, { avatarUrl: (uploaded as any).signedUrl });
+    const uploaded = await uploadAvatar(user.id, picked.uri);
+    if (!uploaded.success) { setAvatarLoading(false); Alert.alert('Kami', uploaded.error); return; }
+    
+    // Save relative path, profileRepo resolves fresh signed URL
+    const saved = await updateProfile(user.id, { avatarUrl: uploaded.path });
     setAvatarLoading(false);
     if (!saved.success) { Alert.alert('Kami', saved.error); return; }
-    Alert.alert('Kami', 'Profile photo updated 🌸');
+    Alert.alert('Kami', 'Display photo updated! 🌸');
+  };
+
+  const handleTogglePref = async (key: 'dailyReminder' | 'weeklyDigest' | 'streakAlerts', val: boolean) => {
+    if (!user?.id) return;
+    const r = await updateProfile(user.id, { [key]: val });
+    if (!r.success) {
+      Alert.alert('Kami', r.error);
+    }
+  };
+
+  const handleThemeSelect = async (themeId: string) => {
+    if (!user?.id) return;
+    const r = await updateProfile(user.id, { theme: themeId });
+    if (!r.success) Alert.alert('Kami', r.error);
+  };
+
+  const handleTextSizeSelect = async (sizeId: string) => {
+    if (!user?.id) return;
+    const r = await updateProfile(user.id, { textSize: sizeId });
+    if (!r.success) Alert.alert('Kami', r.error);
+  };
+
+  const handleExportData = async () => {
+    if (!user?.id) return;
+    setExporting(true);
+    const r = await exportData(user.id);
+    setExporting(false);
+    if (!r.success) { Alert.alert('Kami', r.error); return; }
+
+    try {
+      await Share.share({
+        message: JSON.stringify(r.data, null, 2),
+        title: 'Kami Data Export',
+      });
+    } catch (e) {
+      Alert.alert('Kami', 'Could not open share prompt.');
+    }
   };
 
   const handleSignOut = () => {
@@ -226,14 +370,32 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all your data. This cannot be undone.',
+      'Delete Account ⚠️',
+      'This will permanently delete your account and all of your data, including photos, notes, goals, and history. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Forever',
           style: 'destructive',
-          onPress: () => Alert.alert('Kami', 'Please contact support@kami.app to delete your account.'),
+          onPress: () => {
+            Alert.alert(
+              'Double Confirmation 🚨',
+              'Are you absolutely sure? Everything is wiped instantly from the cloud.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    const result = await deleteAccount();
+                    setDeleting(false);
+                    if (!result.success) Alert.alert('Kami', result.error);
+                  }
+                }
+              ]
+            );
+          },
         },
       ]
     );
@@ -241,11 +403,14 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  const themeLabel = THEMES.find(t => t.id === (user?.theme ?? 'blush'))?.label ?? 'Blush Pink';
+  const sizeLabel  = TEXT_SIZES.find(t => t.id === (user?.textSize ?? 'medium'))?.label ?? 'Medium';
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
 
-      {/* ── Top bar ── */}
+      {/* ── Top Bar ── */}
       <View style={styles.topBar}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -267,8 +432,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
       >
-
-        {/* ── Profile card ── */}
+        {/* ── Profile Card ── */}
         <View style={styles.profileCard}>
           <TouchableOpacity
             style={styles.avatarWrap}
@@ -309,10 +473,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* ── Nickname editor (shown when editing) ── */}
+        {/* ── Nickname Editor ── */}
         {editingProfile && (
           <View style={styles.editCard}>
-            <KamiText variant="subtitle">Edit Nickname</KamiText>
+            <KamiText variant="subtitle">Edit display name</KamiText>
             <InputField
               icon="✦"
               placeholder="Your display name"
@@ -335,14 +499,14 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <SettingRow
             icon="🌸"
             label="Theme"
-            value="Blush (default)"
-            onPress={() => Alert.alert('Kami', 'More themes coming soon!')}
+            value={themeLabel}
+            onPress={() => setActiveSelector('theme')}
           />
           <SettingRow
             icon="🔤"
             label="Text Size"
-            value="Medium"
-            onPress={() => Alert.alert('Kami', 'Text size settings coming soon!')}
+            value={sizeLabel}
+            onPress={() => setActiveSelector('textSize')}
           />
         </SettingGroup>
 
@@ -355,10 +519,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             showChevron={false}
             rightEl={
               <Switch
-                value={dailyReminder}
-                onValueChange={setDailyReminder}
+                value={user?.dailyReminder ?? true}
+                onValueChange={(val) => handleTogglePref('dailyReminder', val)}
                 trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-                thumbColor={dailyReminder ? Colors.primary : Colors.fog ?? '#ccc'}
+                thumbColor={Colors.primary}
               />
             }
           />
@@ -369,10 +533,10 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             showChevron={false}
             rightEl={
               <Switch
-                value={weeklyDigest}
-                onValueChange={setWeeklyDigest}
+                value={user?.weeklyDigest ?? false}
+                onValueChange={(val) => handleTogglePref('weeklyDigest', val)}
                 trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-                thumbColor={weeklyDigest ? Colors.primary : Colors.fog ?? '#ccc'}
+                thumbColor={Colors.primary}
               />
             }
           />
@@ -383,26 +547,28 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             showChevron={false}
             rightEl={
               <Switch
-                value={streakAlerts}
-                onValueChange={setStreakAlerts}
+                value={user?.streakAlerts ?? true}
+                onValueChange={(val) => handleTogglePref('streakAlerts', val)}
                 trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-                thumbColor={streakAlerts ? Colors.primary : Colors.fog ?? '#ccc'}
+                thumbColor={Colors.primary}
               />
             }
           />
         </SettingGroup>
 
         {/* ── Privacy ── */}
-        <SettingGroup title="Privacy">
+        <SettingGroup title="Privacy & Data">
           <SettingRow
             icon="🔒"
-            label="Data & Privacy"
-            onPress={() => Alert.alert('Kami', 'Your data is stored securely and never sold. Coming soon: full privacy controls.')}
+            label="Data & Privacy Statement"
+            onPress={() => setActiveInfo('privacy')}
           />
           <SettingRow
             icon="📤"
-            label="Export My Data"
-            onPress={() => Alert.alert('Kami', 'Data export coming soon!')}
+            label={exporting ? "Preparing file..." : "Export My Data"}
+            onPress={exporting ? undefined : handleExportData}
+            showChevron={!exporting}
+            rightEl={exporting ? <ActivityIndicator size="small" color={Colors.primary} /> : undefined}
           />
         </SettingGroup>
 
@@ -411,22 +577,12 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <SettingRow
             icon="💌"
             label="Send Feedback"
-            onPress={() => Alert.alert('Kami', 'Email us at support@kami.app — we read every message!')}
-          />
-          <SettingRow
-            icon="⭐"
-            label="Rate Kami"
-            onPress={() => Alert.alert('Kami', 'App store review coming soon!')}
+            onPress={() => Alert.alert('Kami', 'Feedback & suggestions read daily at support@kami.app')}
           />
           <SettingRow
             icon="📋"
             label="Terms of Service"
-            onPress={() => Alert.alert('Kami', 'Terms coming soon!')}
-          />
-          <SettingRow
-            icon="🛡️"
-            label="Privacy Policy"
-            onPress={() => Alert.alert('Kami', 'Privacy policy coming soon!')}
+            onPress={() => setActiveInfo('terms')}
           />
           <SettingRow
             icon="ℹ️"
@@ -445,9 +601,9 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           />
           <SettingRow
             icon="🗑️"
-            label="Delete Account"
+            label={deleting ? 'Deleting account...' : 'Delete Account'}
             danger
-            onPress={handleDeleteAccount}
+            onPress={deleting ? undefined : handleDeleteAccount}
           />
         </SettingGroup>
 
@@ -457,15 +613,46 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             Made with love for your wellbeing
           </KamiText>
         </View>
-
       </ScrollView>
+
+      {/* ── SELECTOR SHEETS ── */}
+      <SelectorSheet
+        visible={activeSelector === 'theme'}
+        title="Theme Option"
+        options={THEMES}
+        selectedValue={user?.theme ?? 'blush'}
+        onSelect={handleThemeSelect}
+        onClose={() => setActiveSelector(null)}
+      />
+
+      <SelectorSheet
+        visible={activeSelector === 'textSize'}
+        title="Text Size"
+        options={TEXT_SIZES}
+        selectedValue={user?.textSize ?? 'medium'}
+        onSelect={handleTextSizeSelect}
+        onClose={() => setActiveSelector(null)}
+      />
+
+      {/* ── INFO SHEETS ── */}
+      <InfoSheet
+        visible={activeInfo === 'privacy'}
+        title="Privacy Statement"
+        content="At Kami, your privacy is our primary engineering metric.\n\nAll personal reflections, moods, goal progress logs, and letters are locked down using database Row Level Security (RLS) policies. Only your logged-in session can access your data.\n\nAll image uploads, memory photos, and profile pictures are hosted in secure, private Supabase Storage buckets. Access to these items requires freshly signed, temporary URLs that are generated client-side and automatically expire.\n\nWe do not monitor, parse, or sell your thoughts, nor do we run analytical telemetry on your journals. You can export your data at any time in raw JSON format using the Export tool."
+        onClose={() => setActiveInfo(null)}
+      />
+
+      <InfoSheet
+        visible={activeInfo === 'terms'}
+        title="Terms of Service"
+        content="Welcome to Kami. By using this software, you agree to the following conditions:\n\n1. Ownership of Content: You retain full ownership and intellectual copyright of all text, emojis, and photos you upload to the database. We claim zero rights over your entries.\n\n2. Acceptable Use: You must use the database storage responsibly. Refrain from attempting to bypass RLS policies, injecting malicious scripts via triggers, or flooding storage buckets with oversized uploads.\n\n3. Deletion Guarantee: Tapping 'Delete Account' triggers a cascading database query that removes all of your rows and storage objects. This deletion is absolute and cannot be recovered by the team."
+        onClose={() => setActiveInfo(null)}
+      />
     </SafeAreaView>
   );
-};
+}
 
 export default SettingsScreen;
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const AVATAR_SIZE = 72;
 
@@ -476,7 +663,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Space[4],
     paddingHorizontal: Space[5],
-    paddingTop: Platform.OS === 'android' ? Space[4] : Space[2],
+    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2],
     paddingBottom: Space[3],
     borderBottomWidth: 1,
     borderBottomColor: Colors.border + '44',
@@ -525,7 +712,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primaryLight,
   },
   avatar:        { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 },
-  avatarInitial: { color: Colors.primary, fontSize: FontSize.xl, fontWeight: FontWeight.extrabold },
+  avatarInitial: { color: Colors.primary, fontSize: FontSize.xl, fontWeight: FontWeight.extrabold, fontFamily: FontFamily.display },
   avatarBadge: {
     position: 'absolute',
     bottom: -2,
@@ -568,7 +755,4 @@ const styles = StyleSheet.create({
   // Footer
   footer:      { alignItems: 'center', gap: Space[2], paddingTop: Space[4] },
   footerHeart: { fontSize: FontSize.xl },
-
-  // Misc
-  fog: Colors.fog,
 });

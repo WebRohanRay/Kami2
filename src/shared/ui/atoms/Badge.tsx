@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: Space[3],
     paddingVertical: Space[1],
-    borderRadius: Radii.badge,
+    borderRadius: Radii.sm,
     gap: Space[1],
   },
   icon: { fontSize: FontSize.xs },

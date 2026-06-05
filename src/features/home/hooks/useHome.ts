@@ -12,9 +12,10 @@
  *  - Refresh data when app comes back to foreground
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useAuthStore } from '@features/auth';
+import { supabase } from '@shared/lib/supabase';
 import * as homeService from '@infrastructure/home';
 import { useHomeStore } from '../store';
 import type {
@@ -37,8 +38,58 @@ export function useHome() {
   const user  = useAuthStore((s) => s.user);
   const store = useHomeStore.getState;
 
-  const unsubRealtime = useRef<(() => void) | null>(null);
-  const appState      = useRef<AppStateStatus>(AppState.currentState);
+  // ── Bootstrap: load all data on first mount ─────────────────────────────
+
+  // ── Individual loaders ───────────────────────────────────────────────────
+
+  const loadMood = useCallback(async () => {
+    const s = store();
+    s.setMoodLoading('loading');
+    const [todayResult, recentResult] = await Promise.all([
+      homeService.fetchTodayMood(),
+      homeService.fetchRecentMoods(7),
+    ]);
+    if (todayResult.success)  s.setTodayMood(todayResult.data);
+    else                      s.setMoodError(todayResult.error);
+    if (recentResult.success) s.setRecentMoods(recentResult.data);
+    s.setMoodLoading('idle');
+  }, []);
+
+  const loadJournal = useCallback(async (searchQuery?: string, tagFilter?: string) => {
+    const s = store();
+    s.setJournalLoading('loading');
+    const result = await homeService.fetchJournalEntries(20, searchQuery, tagFilter);
+    if (result.success) s.setJournalEntries(result.data);
+    else                s.setJournalError(result.error);
+    s.setJournalLoading('idle');
+  }, []);
+
+  const loadGoals = useCallback(async () => {
+    const s = store();
+    s.setGoalsLoading('loading');
+    const result = await homeService.fetchGoals();
+    if (result.success) s.setGoals(result.data);
+    else                s.setGoalsError(result.error);
+    s.setGoalsLoading('idle');
+  }, []);
+
+  const loadPrompt = useCallback(async () => {
+    const s = store();
+    s.setPromptLoading('loading');
+    const promptResult = await homeService.fetchTodayPrompt();
+    if (promptResult.success) {
+      s.setTodayPrompt(promptResult.data);
+      // Check if user already responded today
+      const responseResult = await homeService.fetchTodayPromptResponse(promptResult.data.id);
+      if (responseResult.success) s.setPromptResponse(responseResult.data);
+    }
+    s.setPromptLoading('idle');
+  }, []);
+
+  const loadStreak = useCallback(async () => {
+    const result = await homeService.fetchStreak();
+    if (result.success) store().setStreak(result.data);
+  }, []);
 
   // ── Bootstrap: load all data on first mount ─────────────────────────────
 
@@ -60,108 +111,57 @@ export function useHome() {
 
     store().setInitialised(true);
     store().setLastRefreshed(Date.now());
-  }, [user?.id]);
+  }, [user?.id, loadMood, loadJournal, loadGoals, loadPrompt, loadStreak]);
 
   // ── Mount: init data + realtime + app-state listener ────────────────────
 
   useEffect(() => {
     if (!user?.id) return;
-
     loadAll();
 
-    // Realtime: subscribe to user's own data changes
-    unsubRealtime.current = homeService.subscribeToHomeUpdates(
-      user.id,
-      handleRealtimeChange,
-    );
-
-    // Re-fetch when app comes back to foreground
-    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
-        store().setLastRefreshed(0); // force stale
+    // Foreground listener
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
         loadAll();
       }
-      appState.current = next;
-    });
+    };
+    const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+
+    // Setup realtime subscription
+    const channel = supabase
+      .channel(`home_realtime_${user.id}_${Math.random().toString(36).substring(7)}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mood_logs', filter: `user_id=eq.${user.id}` },
+        () => { loadMood(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'journal_entries', filter: `user_id=eq.${user.id}` },
+        () => { loadJournal(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'goals', filter: `user_id=eq.${user.id}` },
+        () => { loadGoals(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'streaks', filter: `user_id=eq.${user.id}` },
+        () => { loadStreak(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'prompt_responses', filter: `user_id=eq.${user.id}` },
+        () => { loadPrompt(); }
+      )
+      .subscribe();
 
     return () => {
-      unsubRealtime.current?.();
-      sub.remove();
+      appStateSub.remove();
+      supabase.removeChannel(channel);
     };
-  }, [user?.id, loadAll]);
-
-  // ── Realtime handler ─────────────────────────────────────────────────────
-
-  function handleRealtimeChange(table: string, payload: unknown) {
-    const p = payload as { eventType: string; new: Record<string, unknown>; old: { id?: string } };
-
-    switch (table) {
-      case 'mood_logs':
-        // Re-fetch mood on any change — keeps streak + recent moods in sync
-        loadMood();
-        break;
-      case 'journal_entries':
-        loadJournal();
-        break;
-      case 'goals':
-        loadGoals();
-        break;
-      case 'streaks':
-        loadStreak();
-        break;
-    }
-  }
-
-  // ── Individual loaders ───────────────────────────────────────────────────
-
-  async function loadMood() {
-    const s = store();
-    s.setMoodLoading('loading');
-    const [todayResult, recentResult] = await Promise.all([
-      homeService.fetchTodayMood(),
-      homeService.fetchRecentMoods(7),
-    ]);
-    if (todayResult.success)  s.setTodayMood(todayResult.data);
-    else                      s.setMoodError(todayResult.error);
-    if (recentResult.success) s.setRecentMoods(recentResult.data);
-    s.setMoodLoading('idle');
-  }
-
-  async function loadJournal() {
-    const s = store();
-    s.setJournalLoading('loading');
-    const result = await homeService.fetchJournalEntries(5);
-    if (result.success) s.setJournalEntries(result.data);
-    else                s.setJournalError(result.error);
-    s.setJournalLoading('idle');
-  }
-
-  async function loadGoals() {
-    const s = store();
-    s.setGoalsLoading('loading');
-    const result = await homeService.fetchGoals();
-    if (result.success) s.setGoals(result.data);
-    else                s.setGoalsError(result.error);
-    s.setGoalsLoading('idle');
-  }
-
-  async function loadPrompt() {
-    const s = store();
-    s.setPromptLoading('loading');
-    const promptResult = await homeService.fetchTodayPrompt();
-    if (promptResult.success) {
-      s.setTodayPrompt(promptResult.data);
-      // Check if user already responded today
-      const responseResult = await homeService.fetchTodayPromptResponse(promptResult.data.id);
-      if (responseResult.success) s.setPromptResponse(responseResult.data);
-    }
-    s.setPromptLoading('idle');
-  }
-
-  async function loadStreak() {
-    const result = await homeService.fetchStreak();
-    if (result.success) store().setStreak(result.data);
-  }
+  }, [user?.id, loadAll, loadMood, loadJournal, loadGoals, loadPrompt, loadStreak]);
 
   // ── Public actions ───────────────────────────────────────────────────────
 
@@ -246,6 +246,7 @@ export function useHome() {
 
   return {
     logMood,
+    loadJournal,
     addJournalEntry,
     editJournalEntry,
     removeJournalEntry,

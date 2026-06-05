@@ -11,6 +11,12 @@ export type AuthUser = {
   emailVerified: boolean;
   nickname?: string;
   avatarUrl?: string;
+  theme?: string;
+  textSize?: string;
+  dailyReminder?: boolean;
+  weeklyDigest?: boolean;
+  streakAlerts?: boolean;
+  pushToken?: string;
 };
 
 export type AuthState = {

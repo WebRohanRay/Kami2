@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import * as authService  from '@infrastructure/auth';
 import * as profileRepo  from '@infrastructure/profile';
+import { registerForPushNotificationsAsync } from '@infrastructure/notifications/notificationService';
 import { useAuthStore }  from '../store';
 import type { AuthUser, AuthStatus, Result } from '../types';
 
@@ -24,6 +25,19 @@ async function hydrateUser(
   const authUser = result.success ? result.data : profileRepo.supabaseUserToAuthUser(supabaseUser);
   setUser(authUser);
   setStatus(statusFor(authUser));
+
+  // If email is verified/authenticated, request push notification permission and sync token
+  if (authUser.emailVerified) {
+    registerForPushNotificationsAsync().then((token) => {
+      if (token && token !== authUser.pushToken) {
+        profileRepo.updateProfile(authUser.id, { pushToken: token }).then((updateResult) => {
+          if (updateResult.success) {
+            setUser(updateResult.data);
+          }
+        }).catch(err => console.error('Failed to update push token in profiles:', err));
+      }
+    }).catch(err => console.error('Push token registration failed:', err));
+  }
 }
 
 export function useAuth() {
@@ -126,9 +140,26 @@ export function useAuth() {
     return { success: true, data: undefined };
   }
 
+  async function deleteAccount(): Promise<Result<void>> {
+    const { reset, setStatus } = store();
+    const r = await authService.deleteAccount();
+    if (!r.success) return r;
+    reset();
+    setStatus('unauthenticated');
+    return { success: true, data: undefined };
+  }
+
   async function updateProfile(
     userId: string,
-    input: { nickname?: string; avatarUrl?: string }
+    input: {
+      nickname?: string;
+      avatarUrl?: string;
+      theme?: string;
+      textSize?: string;
+      dailyReminder?: boolean;
+      weeklyDigest?: boolean;
+      streakAlerts?: boolean;
+    }
   ): Promise<Result<void>> {
     const { setUser } = store();
     const r = await profileRepo.updateProfile(userId, input);
@@ -137,10 +168,14 @@ export function useAuth() {
     return { success: true, data: undefined };
   }
 
+  async function exportData(userId: string): Promise<Result<Record<string, any>>> {
+    return profileRepo.exportUserData(userId);
+  }
+
   return {
     signUp, login, loginWithGoogle,
     resendVerificationEmail, refreshUser,
     forgotPassword, resetPassword, signOut,
-    updateProfile,
+    deleteAccount, updateProfile, exportData,
   };
 }

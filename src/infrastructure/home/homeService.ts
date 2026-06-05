@@ -25,7 +25,8 @@ import type {
   CreateGoalInput,
   UpdateGoalInput,
   Result,
-} from '../types';
+} from '@features/home/types';
+import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
 
 // ─── Error normaliser ────────────────────────────────────────────────────────
 
@@ -127,13 +128,15 @@ export async function createJournalEntry(
         body:       input.body,
         mood_id:    input.moodId ?? null,
         tags:       input.tags ?? [],
+        image_urls: input.imageUrls ?? [],
         entry_date: new Date().toISOString().split('T')[0],
       })
       .select()
       .single();
 
     if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    return { success: true, data: mapJournalEntry(data) };
+    const resolved = await resolveSignedUrls('journal_images', data.image_urls || []);
+    return { success: true, data: mapJournalEntry(data, resolved) };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -146,11 +149,12 @@ export async function updateJournalEntry(
 ): Promise<Result<JournalEntry>> {
   try {
     const patch: Record<string, unknown> = {};
-    if (input.title     !== undefined) patch.title     = input.title;
-    if (input.body      !== undefined) patch.body      = input.body;
-    if (input.moodId    !== undefined) patch.mood_id   = input.moodId;
-    if (input.tags      !== undefined) patch.tags      = input.tags;
-    if (input.isPinned  !== undefined) patch.is_pinned = input.isPinned;
+    if (input.title     !== undefined) patch.title      = input.title;
+    if (input.body      !== undefined) patch.body       = input.body;
+    if (input.moodId    !== undefined) patch.mood_id    = input.moodId;
+    if (input.tags      !== undefined) patch.tags       = input.tags;
+    if (input.isPinned  !== undefined) patch.is_pinned  = input.isPinned;
+    if (input.imageUrls !== undefined) patch.image_urls = input.imageUrls;
 
     const { data, error } = await supabase
       .from('journal_entries')
@@ -160,7 +164,8 @@ export async function updateJournalEntry(
       .single();
 
     if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    return { success: true, data: mapJournalEntry(data) };
+    const resolved = await resolveSignedUrls('journal_images', data.image_urls || []);
+    return { success: true, data: mapJournalEntry(data, resolved) };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -169,10 +174,16 @@ export async function updateJournalEntry(
 /** Delete a journal entry. */
 export async function deleteJournalEntry(id: string): Promise<Result<void>> {
   try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (userRes?.user) {
+      await deleteImages('journal_images', userRes.user.id, id);
+    }
+
     const { error } = await supabase
       .from('journal_entries')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userRes?.user?.id ?? '');
 
     if (error) return { success: false, error: friendly(error.message) };
     return { success: true, data: undefined };
@@ -181,18 +192,38 @@ export async function deleteJournalEntry(id: string): Promise<Result<void>> {
   }
 }
 
-/** Fetch recent journal entries (latest first). */
-export async function fetchJournalEntries(limit = 5): Promise<Result<JournalEntry[]>> {
+/** Fetch recent journal entries (latest first, supporting search & tag filters). */
+export async function fetchJournalEntries(
+  limit = 20,
+  searchQuery?: string,
+  tagFilter?: string
+): Promise<Result<JournalEntry[]>> {
   try {
-    const { data, error } = await supabase
-      .from('journal_entries')
-      .select('*')
+    let query = supabase.from('journal_entries').select('*');
+
+    if (tagFilter) {
+      query = query.contains('tags', [tagFilter]);
+    }
+
+    if (searchQuery?.trim()) {
+      query = query.textSearch('fts', searchQuery.trim());
+    }
+
+    const { data, error } = await query
+      .order('is_pinned', { ascending: false })
       .order('entry_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) return { success: false, error: friendly(error.message) };
-    return { success: true, data: (data ?? []).map(mapJournalEntry) };
+
+    const mapped: JournalEntry[] = [];
+    for (const row of (data ?? [])) {
+      const resolved = await resolveSignedUrls('journal_images', row.image_urls || []);
+      mapped.push(mapJournalEntry(row, resolved));
+    }
+
+    return { success: true, data: mapped };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -211,12 +242,14 @@ export async function createGoal(input: CreateGoalInput): Promise<Result<Goal>> 
         category:    input.category,
         target_date: input.targetDate ?? null,
         emoji:       input.emoji ?? '🌱',
+        image_url:   input.imageUrl ?? null,
       })
       .select()
       .single();
 
     if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    return { success: true, data: mapGoal(data) };
+    const resolved = data.image_url ? (await resolveSignedUrls('goal_images', [data.image_url]))[0] : null;
+    return { success: true, data: mapGoal(data, resolved) };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -236,9 +269,10 @@ export async function updateGoal(
       patch.status = input.status;
       if (input.status === 'completed') patch.completed_at = new Date().toISOString();
     }
-    if (input.progress  !== undefined) patch.progress    = input.progress;
-    if (input.targetDate !== undefined) patch.target_date = input.targetDate;
-    if (input.emoji      !== undefined) patch.emoji       = input.emoji;
+    if (input.progress    !== undefined) patch.progress    = input.progress;
+    if (input.targetDate  !== undefined) patch.target_date = input.targetDate;
+    if (input.emoji       !== undefined) patch.emoji       = input.emoji;
+    if (input.imageUrl    !== undefined) patch.image_url   = input.imageUrl;
 
     const { data, error } = await supabase
       .from('goals')
@@ -248,7 +282,8 @@ export async function updateGoal(
       .single();
 
     if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    return { success: true, data: mapGoal(data) };
+    const resolved = data.image_url ? (await resolveSignedUrls('goal_images', [data.image_url]))[0] : null;
+    return { success: true, data: mapGoal(data, resolved) };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -257,7 +292,17 @@ export async function updateGoal(
 /** Delete a goal. */
 export async function deleteGoal(id: string): Promise<Result<void>> {
   try {
-    const { error } = await supabase.from('goals').delete().eq('id', id);
+    const { data: userRes } = await supabase.auth.getUser();
+    if (userRes?.user) {
+      await deleteImages('goal_images', userRes.user.id, id);
+    }
+
+    const { error } = await supabase
+      .from('goals')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userRes?.user?.id ?? '');
+
     if (error) return { success: false, error: friendly(error.message) };
     return { success: true, data: undefined };
   } catch (e) {
@@ -276,7 +321,14 @@ export async function fetchGoals(): Promise<Result<Goal[]>> {
       .order('created_at', { ascending: false });
 
     if (error) return { success: false, error: friendly(error.message) };
-    return { success: true, data: (data ?? []).map(mapGoal) };
+
+    const mapped: Goal[] = [];
+    for (const row of (data ?? [])) {
+      const resolved = row.image_url ? (await resolveSignedUrls('goal_images', [row.image_url]))[0] : null;
+      mapped.push(mapGoal(row, resolved));
+    }
+
+    return { success: true, data: mapped };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -412,49 +464,6 @@ export async function fetchStreak(): Promise<Result<Streak>> {
   }
 }
 
-// ─── Realtime ────────────────────────────────────────────────────────────────
-
-type RealtimeCallback = (table: string, payload: unknown) => void;
-
-/**
- * Subscribe to realtime changes on the user's home data.
- * Returns an unsubscribe function — always call on cleanup.
- *
- * Uses a private channel per user (user_id in channel name)
- * so only this user's changes arrive on this channel.
- */
-export function subscribeToHomeUpdates(
-  userId: string,
-  onChange: RealtimeCallback,
-): () => void {
-  const channel = supabase
-    .channel(`home:${userId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'mood_logs',      filter: `user_id=eq.${userId}` },
-      (payload) => onChange('mood_logs', payload),
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'journal_entries', filter: `user_id=eq.${userId}` },
-      (payload) => onChange('journal_entries', payload),
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'goals',           filter: `user_id=eq.${userId}` },
-      (payload) => onChange('goals', payload),
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'streaks',         filter: `user_id=eq.${userId}` },
-      (payload) => onChange('streaks', payload),
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}
 
 // ─── Row mappers (snake_case DB → camelCase TS) ──────────────────────────────
 
@@ -472,7 +481,7 @@ function mapMoodLog(row: Record<string, unknown>): MoodLog {
   };
 }
 
-function mapJournalEntry(row: Record<string, unknown>): JournalEntry {
+function mapJournalEntry(row: Record<string, any>, resolvedUrls?: string[]): JournalEntry {
   return {
     id:        row.id          as string,
     userId:    row.user_id     as string,
@@ -480,6 +489,7 @@ function mapJournalEntry(row: Record<string, unknown>): JournalEntry {
     body:      row.body        as string,
     moodId:    (row.mood_id    as string | null) ?? null,
     tags:      (row.tags       as string[]) ?? [],
+    imageUrls: resolvedUrls    ?? (row.image_urls as string[]) ?? [],
     entryDate: row.entry_date  as string,
     isPinned:  (row.is_pinned  as boolean) ?? false,
     createdAt: row.created_at  as string,
@@ -487,7 +497,7 @@ function mapJournalEntry(row: Record<string, unknown>): JournalEntry {
   };
 }
 
-function mapGoal(row: Record<string, unknown>): Goal {
+function mapGoal(row: Record<string, any>, resolvedUrl?: string | null): Goal {
   return {
     id:          row.id          as string,
     userId:      row.user_id     as string,
@@ -499,6 +509,7 @@ function mapGoal(row: Record<string, unknown>): Goal {
     targetDate:  (row.target_date as string | null) ?? null,
     completedAt: (row.completed_at as string | null) ?? null,
     emoji:       (row.emoji      as string) ?? '🌱',
+    imageUrl:    resolvedUrl     ?? row.image_url ?? null,
     sortOrder:   (row.sort_order as number) ?? 0,
     createdAt:   row.created_at  as string,
     updatedAt:   row.updated_at  as string,
