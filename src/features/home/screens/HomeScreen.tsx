@@ -35,6 +35,7 @@ import {
 } from '@shared/constants';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { useTheme }      from '@shared/hooks';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple }      from '@features/couple/hooks/useCouple';
 
@@ -262,7 +263,7 @@ export function HomeScreen({ navigation }: Props) {
             <KamiText style={[s.kamiLogo, { color: colors.primary }]}>Kami</KamiText>
             <View style={s.onlineContainer}>
               <KamiText variant="caption" color={Colors.textMuted} style={s.greeting}>
-                {couple.name || `${user.nickname || 'You'} & ${partnerName}`} ❤️
+                {couple.name || `${name} & ${partnerName}`} ❤️
               </KamiText>
               {partner && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 }}>
@@ -292,33 +293,72 @@ export function HomeScreen({ navigation }: Props) {
           contentContainerStyle={s.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         >
-          {/* ── RELATIONSHIP DURATION & STREAK BANNERS ─────── */}
-          <View style={s.streakBanner}>
-            <View style={s.streakItem}>
-              <View style={[s.streakIconContainer, { backgroundColor: colors.creamDeep }]}>
-                <Text style={s.streakEmoji}>💑</Text>
+          {/* ── RELATIONSHIP HERO BANNER (GRADIENT CARD) ─────── */}
+          <LinearGradient
+            colors={[colors.primary, colors.primaryDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.heroGradient}
+          >
+            <View style={s.heroContent}>
+              <View style={s.heroHeader}>
+                <View style={s.dualAvatarsContainer}>
+                  {/* Current User Avatar */}
+                  <View style={[s.heroAvatarWrap, { borderColor: '#fff' }]}>
+                    {user?.avatarUrl ? (
+                      <Image source={{ uri: user.avatarUrl }} style={s.heroAvatar} />
+                    ) : (
+                      <Text style={[s.heroAvatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
+                    )}
+                  </View>
+                  {/* Overlapping Partner Avatar */}
+                  <View style={[s.heroAvatarWrap, s.heroAvatarOverlap, { borderColor: '#fff' }]}>
+                    {partner?.avatarUrl ? (
+                      <Image source={{ uri: partner.avatarUrl }} style={s.heroAvatar} />
+                    ) : (
+                      <Text style={[s.heroAvatarLetter, { color: colors.primary }]}>{initial(partnerName)}</Text>
+                    )}
+                    <View style={[s.heroOnlineBadge, { backgroundColor: isPartnerOnline ? Colors.success : '#CBD5E1' }]} />
+                  </View>
+                </View>
+                
+                {/* Stats / Day Count */}
+                <View style={s.dayCountBadge}>
+                  <Text style={s.dayCountText}>Day {relationshipDays}</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <KamiText style={s.streakNum}>
-                  {couple.anniversaryDate ? getRelationshipDuration(couple.anniversaryDate) : 'Couple Space'}
+
+              <View style={s.heroTextSection}>
+                <KamiText style={s.heroTitle} color="#fff" bold>
+                  {couple.name || `${name} & ${partnerName}`}
                 </KamiText>
-                <KamiText variant="caption" color={Colors.textMuted} style={s.streakLabel}>
-                  {daysUntilAnniversary !== null ? `${daysUntilAnniversary} days to anniversary 📅` : 'Set your anniversary in settings'}
+                <KamiText style={s.heroDuration} color="#ffffffdd">
+                  {couple.anniversaryDate ? getRelationshipDuration(couple.anniversaryDate) : 'Your shared space'}
                 </KamiText>
+              </View>
+
+              <View style={s.heroFooter}>
+                <Text style={s.heroFooterText}>
+                  {daysUntilAnniversary !== null 
+                    ? `🎉 ${daysUntilAnniversary} days until your next anniversary!` 
+                    : '📅 Set your anniversary date in Settings'}
+                </Text>
               </View>
             </View>
-          </View>
+          </LinearGradient>
 
-          {/* ── MOOD INSIGHTS BANNER ──────────────────────── */}
+          {/* ── PARTNER'S MOOD SPEECH BUBBLE ────────────── */}
           {partner && (partner as any).currentMoodEmoji ? (
-            <View style={[s.card, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11', gap: Space[1] }]}>
-              <View style={s.cardTitleRow}>
-                <Text style={s.cardIcon}>🌸</Text>
-                <KamiText variant="caption" color={colors.primary} bold>{partnerName}'s Mood Check-in</KamiText>
+            <View style={[s.card, { borderColor: colors.primaryLight + '55', backgroundColor: colors.creamDeep + '44', padding: Space[4], flexDirection: 'row', alignItems: 'center', gap: Space[4] }]}>
+              <View style={[s.moodDoneEmojiWrap, { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', elevation: 2 }]}>
+                <Text style={{ fontSize: 26 }}>{(partner as any).currentMoodEmoji}</Text>
               </View>
-              <KamiText variant="body" style={{ fontStyle: 'italic', marginTop: 2 }}>
-                {partnerName} is feeling **{(partner as any).currentMoodLabel}** today {(partner as any).currentMoodEmoji}
-              </KamiText>
+              <View style={{ flex: 1, gap: 2 }}>
+                <KamiText variant="caption" color={colors.primary} bold>{partnerName}'s Mood Check-in</KamiText>
+                <KamiText variant="body" style={{ fontStyle: 'italic', color: Colors.textPrimary }}>
+                  "{partnerName} is feeling <KamiText bold color={colors.primaryDark}>{(partner as any).currentMoodLabel}</KamiText> today."
+                </KamiText>
+              </View>
             </View>
           ) : null}
 
@@ -332,7 +372,7 @@ export function HomeScreen({ navigation }: Props) {
                 </View>
               </View>
 
-              <View style={[s.promptCard, { borderColor: colors.primary + '22', backgroundColor: colors.primary + '05', padding: Space[4], gap: Space[1] }]}>
+              <View style={[s.promptCard, { borderColor: colors.primaryLight + '22', backgroundColor: colors.creamDeep + '22', padding: Space[4], gap: Space[1] }]}>
                 <KamiText variant="body" style={s.promptText} numberOfLines={3}>
                   “{todayQuestion.content}”
                 </KamiText>
@@ -340,13 +380,13 @@ export function HomeScreen({ navigation }: Props) {
 
               {bothAnswered ? (
                 <View style={{ gap: Space[3], marginTop: Space[2] }}>
-                  <View style={[s.answerBubble, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primary + '22' }]}>
-                    <KamiText variant="caption" color={colors.primary} bold>You answered:</KamiText>
-                    <KamiText variant="body" style={{ marginTop: 2 }}>{myAnswer.response}</KamiText>
+                  <View style={[s.bubbleMine, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primaryLight + '44' }]}>
+                    <KamiText variant="caption" color={colors.primaryDark} bold>You answered:</KamiText>
+                    <KamiText variant="body" style={{ marginTop: 2, color: Colors.textPrimary }}>{myAnswer.response}</KamiText>
                   </View>
-                  <View style={[s.answerBubble, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primary + '22' }]}>
-                    <KamiText variant="caption" color={colors.primary} bold>{partnerName} answered:</KamiText>
-                    <KamiText variant="body" style={{ marginTop: 2 }}>{partnerAnswer.response}</KamiText>
+                  <View style={[s.bubblePartner, { backgroundColor: '#F8FAFC', borderColor: Colors.border + '44' }]}>
+                    <KamiText variant="caption" color={Colors.textMuted} bold>{partnerName} answered:</KamiText>
+                    <KamiText variant="body" style={{ marginTop: 2, color: Colors.textPrimary }}>{partnerAnswer.response}</KamiText>
                   </View>
                 </View>
               ) : myAnswer ? (
@@ -401,16 +441,20 @@ export function HomeScreen({ navigation }: Props) {
                 <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Write entry ›</KamiText>
               </Tap>
             ) : (
-              <Tap onPress={() => navigation.navigate('Journal')} style={[s.journalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
-                <View style={[s.journalPreviewDot, { backgroundColor: colors.primary }]} />
+              <Tap onPress={() => navigation.navigate('Journal')} style={[s.journalPreview, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primaryLight + '44' }]}>
+                {coupleJournals[0].imageUrls && coupleJournals[0].imageUrls.length > 0 ? (
+                  <Image source={{ uri: coupleJournals[0].imageUrls[0] }} style={s.journalPreviewThumb} />
+                ) : (
+                  <View style={[s.journalPreviewDot, { backgroundColor: colors.primary }]} />
+                )}
                 <View style={{ flex: 1, gap: 2 }}>
                   <KamiText variant="label" numberOfLines={1} bold>
                     {coupleJournals[0].title || 'Untitled shared entry'}
                   </KamiText>
-                  <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>
+                  <KamiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
                     {coupleJournals[0].body}
                   </KamiText>
-                  <KamiText variant="caption" color={colors.primary} style={{ fontSize: 10 }} bold>
+                  <KamiText variant="caption" color={colors.primaryDark} style={{ fontSize: 10 }} bold>
                     Written by {coupleJournals[0].userNickname}
                   </KamiText>
                 </View>
@@ -425,21 +469,25 @@ export function HomeScreen({ navigation }: Props) {
           <View style={{ gap: Space[2] }}>
             <KamiText variant="overline" style={{ paddingHorizontal: Space[2] }}>Relationship Growth Stats</KamiText>
             <View style={s.statsGrid}>
-              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
-                <KamiText style={s.statsNum}>{relationshipDays}</KamiText>
-                <KamiText variant="caption" color={Colors.textMuted}>Days Connected</KamiText>
+              <View style={[s.statsCard, { backgroundColor: colors.creamDeep, borderColor: colors.primaryLight + '44' }]}>
+                <Text style={{ fontSize: 24 }}>📅</Text>
+                <KamiText style={s.statsNum} color={colors.primaryDark}>{relationshipDays}</KamiText>
+                <KamiText variant="caption" color={Colors.textSecondary}>Days Connected</KamiText>
               </View>
-              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
-                <KamiText style={s.statsNum}>{dailyAnswers.length}</KamiText>
-                <KamiText variant="caption" color={Colors.textMuted}>Answers Shared</KamiText>
+              <View style={[s.statsCard, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '33' }]}>
+                <Text style={{ fontSize: 24 }}>💬</Text>
+                <KamiText style={s.statsNum} color={colors.primaryDark}>{dailyAnswers.length}</KamiText>
+                <KamiText variant="caption" color={Colors.textSecondary}>Answers Shared</KamiText>
               </View>
-              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
-                <KamiText style={s.statsNum}>{coupleMemories.length}</KamiText>
-                <KamiText variant="caption" color={Colors.textMuted}>Memories Saved</KamiText>
+              <View style={[s.statsCard, { backgroundColor: '#FEF9C3' + '88', borderColor: '#FDE047' + 'aa' }]}>
+                <Text style={{ fontSize: 24 }}>📸</Text>
+                <KamiText style={s.statsNum} color="#A16207">{coupleMemories.length}</KamiText>
+                <KamiText variant="caption" color={Colors.textSecondary}>Memories Saved</KamiText>
               </View>
-              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
-                <KamiText style={s.statsNum}>{coupleGoals.filter(g => g.status === 'completed').length}</KamiText>
-                <KamiText variant="caption" color={Colors.textMuted}>Goals Completed</KamiText>
+              <View style={[s.statsCard, { backgroundColor: '#DCFCE7' + '88', borderColor: '#86EFAC' + 'aa' }]}>
+                <Text style={{ fontSize: 24 }}>🏆</Text>
+                <KamiText style={s.statsNum} color="#15803D">{coupleGoals.filter(g => g.status === 'completed').length}</KamiText>
+                <KamiText variant="caption" color={Colors.textSecondary}>Goals Completed</KamiText>
               </View>
             </View>
           </View>
@@ -464,7 +512,7 @@ export function HomeScreen({ navigation }: Props) {
             ) : (
               <View style={{ gap: Space[3] }}>
                 {activeCoupleGoals.slice(0, 3).map(g => (
-                  <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={[s.goalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
+                  <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={[s.goalPreview, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primaryLight + '44' }]}>
                     <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
                     <View style={{ flex: 1, gap: 4 }}>
                       <KamiText variant="label" numberOfLines={1} bold>{g.title}</KamiText>
@@ -472,7 +520,7 @@ export function HomeScreen({ navigation }: Props) {
                         <View style={[s.miniFill, { width: `${g.progress}%` as any, backgroundColor: colors.primary }]} />
                       </View>
                     </View>
-                    <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
+                    <KamiText variant="caption" color={colors.primaryDark} bold>{g.progress}%</KamiText>
                   </Tap>
                 ))}
               </View>

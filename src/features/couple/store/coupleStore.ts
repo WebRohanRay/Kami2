@@ -12,6 +12,7 @@ interface CoupleState {
   couple: Couple | null;
   partner: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null } | null;
   receivedInvitations: CoupleInvitation[];
+  sentInvitations: CoupleInvitation[];
   metaLoading: LoadingState;
   metaError: string | null;
 
@@ -45,6 +46,7 @@ interface CoupleState {
   setCouple: (c: Couple | null) => void;
   setPartner: (p: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null } | null) => void;
   setReceivedInvitations: (invites: CoupleInvitation[]) => void;
+  setSentInvitations: (invites: CoupleInvitation[]) => void;
   setMetaLoading: (s: LoadingState) => void;
   setMetaError: (e: string | null) => void;
 
@@ -87,6 +89,7 @@ const initial = {
   couple: null,
   partner: null,
   receivedInvitations: [],
+  sentInvitations: [],
   metaLoading: 'idle' as LoadingState,
   metaError: null,
 
@@ -117,6 +120,7 @@ export const useCoupleStore = create<CoupleState>((set) => ({
   setCouple: (c) => set({ couple: c }),
   setPartner: (p) => set({ partner: p }),
   setReceivedInvitations: (invites) => set({ receivedInvitations: invites }),
+  setSentInvitations: (invites) => set({ sentInvitations: invites }),
   setMetaLoading: (s) => set({ metaLoading: s }),
   setMetaError: (e) => set({ metaError: e }),
 

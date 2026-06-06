@@ -120,12 +120,58 @@ export async function fetchReceivedInvitations(): Promise<Result<CoupleInvitatio
   }
 }
 
+/** Fetch invitations sent by the current user */
+export async function fetchSentInvitations(): Promise<Result<CoupleInvitation[]>> {
+  try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+
+    const { data, error } = await supabase
+      .from('couple_invitations')
+      .select('*, profiles!couple_invitations_receiver_id_fkey(nickname, email)')
+      .eq('sender_id', userRes.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) return { success: false, error: friendly(error.message) };
+
+    const list = (data ?? []).map(r => ({
+      id: r.id,
+      senderId: r.sender_id,
+      receiverId: r.receiver_id,
+      status: r.status as any,
+      createdAt: r.created_at,
+      expiresAt: r.expires_at,
+      receiverNickname: r.profiles?.nickname || 'Partner',
+      receiverEmail: r.profiles?.email || '',
+    }));
+
+    return { success: true, data: list };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
 /** Decline or cancel a couple invitation */
 export async function updateInvitationStatus(invitationId: string, status: 'declined' | 'accepted'): Promise<Result<void>> {
   try {
     const { error } = await supabase
       .from('couple_invitations')
       .update({ status })
+      .eq('id', invitationId);
+
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+/** Permanently delete an invitation */
+export async function deleteInvitation(invitationId: string): Promise<Result<void>> {
+  try {
+    const { error } = await supabase
+      .from('couple_invitations')
+      .delete()
       .eq('id', invitationId);
 
     if (error) return { success: false, error: friendly(error.message) };

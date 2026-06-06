@@ -85,7 +85,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Couples policies
 DROP POLICY IF EXISTS "couples_select" ON public.couples;
-CREATE POLICY "couples_select" ON public.couples FOR SELECT USING (public.is_couple_member(id));
+CREATE POLICY "couples_select" ON public.couples FOR SELECT USING (public.is_couple_member(id) OR creator_id = auth.uid());
 
 DROP POLICY IF EXISTS "couples_update" ON public.couples;
 CREATE POLICY "couples_update" ON public.couples FOR UPDATE USING (public.is_couple_member(id));
@@ -96,19 +96,20 @@ CREATE POLICY "couples_insert" ON public.couples FOR INSERT WITH CHECK (auth.rol
 DROP POLICY IF EXISTS "couples_delete" ON public.couples;
 CREATE POLICY "couples_delete" ON public.couples FOR DELETE USING (public.is_couple_member(id));
 
--- Couple members policies
+-- Couple members policies (use a flat SELECT policy to avoid recursion loops)
 DROP POLICY IF EXISTS "couple_members_select" ON public.couple_members;
-CREATE POLICY "couple_members_select" ON public.couple_members FOR SELECT USING (user_id = auth.uid() OR public.is_couple_member(couple_id));
+CREATE POLICY "couple_members_select" ON public.couple_members FOR SELECT USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "couple_members_insert" ON public.couple_members;
-CREATE POLICY "couple_members_insert" ON public.couple_members FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "couple_members_insert" ON public.couple_members FOR INSERT WITH CHECK (user_id = auth.uid() OR EXISTS (SELECT 1 FROM public.couples WHERE couples.id = couple_id AND couples.creator_id = auth.uid()));
 
 DROP POLICY IF EXISTS "couple_members_delete" ON public.couple_members;
 CREATE POLICY "couple_members_delete" ON public.couple_members FOR DELETE USING (user_id = auth.uid());
 
--- Update profiles RLS to allow partner profile reads
+-- Update profiles RLS to allow authenticated profile reads
 DROP POLICY IF EXISTS "Users can view partner profile" ON public.profiles;
-CREATE POLICY "Users can view partner profile" ON public.profiles FOR SELECT USING (auth.uid() = id OR public.is_partner_of(id));
+DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
+CREATE POLICY "profiles_select" ON public.profiles FOR SELECT USING (auth.role() = 'authenticated');
 
 -- ─── 3. INVITATIONS SYSTEM ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.couple_invitations (

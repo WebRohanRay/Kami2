@@ -10,7 +10,7 @@
  *  - Account (email, sign out, delete account)
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import {
   Keyboard,
   Modal,
   Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   Share,
@@ -47,6 +48,8 @@ import * as Clipboard from 'expo-clipboard';
 import * as coupleService from '@infrastructure/couple/coupleService';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import type { CoupleInvitation } from '@features/couple/types';
+import { useFocusEffect } from '@react-navigation/native';
+import { supabase } from '@shared/lib/supabase';
 
 function getDaysRemaining(deleteAtStr: string | null): number {
   if (!deleteAtStr) return 7;
@@ -304,7 +307,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   // Couple Space State
   const { 
-    couple, partner, receivedInvitations, setCouple, setPartner, setReceivedInvitations 
+    couple, partner, receivedInvitations, sentInvitations, setCouple, setPartner, setReceivedInvitations, setSentInvitations 
   } = useCoupleStore();
 
   const [loadingCouple, setLoadingCouple] = useState(false);
@@ -315,6 +318,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [coupleNameInput, setCoupleNameInput] = useState('');
   const [coupleAnniversaryInput, setCoupleAnniversaryInput] = useState('');
   const [updatingCoupleDetailsState, setUpdatingCoupleDetailsState] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadCoupleInfo = async () => {
     if (!user?.id) return;
@@ -328,12 +332,52 @@ export function SettingsScreen({ navigation }: Props) {
     if (inv.success) {
       setReceivedInvitations(inv.data);
     }
+    const sentInv = await coupleService.fetchSentInvitations();
+    if (sentInv.success) {
+      setSentInvitations(sentInv.data);
+    }
     setLoadingCouple(false);
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshUser().catch(() => {});
+    await loadCoupleInfo();
+    setRefreshing(false);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser().catch(() => {});
+      loadCoupleInfo();
+    }, [user?.id])
+  );
+
   useEffect(() => {
-    refreshUser().catch(() => {});
-    loadCoupleInfo();
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`settings_realtime_${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couple_invitations', filter: `receiver_id=eq.${user.id}` },
+        () => { loadCoupleInfo(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couple_invitations', filter: `sender_id=eq.${user.id}` },
+        () => { loadCoupleInfo(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'couple_members', filter: `user_id=eq.${user.id}` },
+        () => { loadCoupleInfo(); }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -396,11 +440,35 @@ export function SettingsScreen({ navigation }: Props) {
             } else {
               Alert.alert('Kami', 'Invitation sent successfully! 💖');
               setPartnerIdInput('');
+              await loadCoupleInfo();
             }
           }
         }
       ]
     );
+  };
+
+  const handleCancelSentInvite = async (invite: CoupleInvitation) => {
+    setLoadingCouple(true);
+    const r = await coupleService.deleteInvitation(invite.id);
+    if (r.success) {
+      Alert.alert('Kami', 'Invitation cancelled.');
+      await loadCoupleInfo();
+    } else {
+      Alert.alert('Kami', r.error);
+    }
+    setLoadingCouple(false);
+  };
+
+  const handleDismissSentInvite = async (invite: CoupleInvitation) => {
+    setLoadingCouple(true);
+    const r = await coupleService.deleteInvitation(invite.id);
+    if (r.success) {
+      await loadCoupleInfo();
+    } else {
+      Alert.alert('Kami', r.error);
+    }
+    setLoadingCouple(false);
   };
 
   const handleAcceptInvite = async (invite: CoupleInvitation) => {
@@ -651,6 +719,14 @@ export function SettingsScreen({ navigation }: Props) {
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
       >
         {/* ── Profile Card ── */}
         <View style={styles.profileCard}>
@@ -774,6 +850,50 @@ export function SettingsScreen({ navigation }: Props) {
                         <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]} onPress={() => handleDeclineInvite(inv)}>
                           <KamiText variant="caption" color={Colors.error} bold>Decline</KamiText>
                         </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Sent Invitations list */}
+              {sentInvitations.length > 0 && (
+                <View style={styles.invitesSection}>
+                  <KamiText variant="overline" color={colors.primary} style={{ marginBottom: Space[2] }}>Sent Invitations</KamiText>
+                  {sentInvitations.map(inv => (
+                    <View key={inv.id} style={[styles.inviteCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}>
+                      <View style={{ flex: 1 }}>
+                        <KamiText variant="label" bold>{inv.receiverNickname || 'Partner'}</KamiText>
+                        <KamiText variant="caption" color={Colors.textMuted}>{inv.receiverEmail}</KamiText>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Space[1], gap: Space[1] }}>
+                          <KamiText variant="caption" color={
+                            inv.status === 'declined' ? Colors.error :
+                            inv.status === 'accepted' ? Colors.success :
+                            colors.primary
+                          } bold>
+                            {inv.status === 'pending' ? 'Pending ⏳' : 
+                             inv.status === 'declined' ? 'Rejected/Declined ❌' : 
+                             inv.status === 'accepted' ? 'Accepted 🎉' : 
+                             inv.status}
+                          </KamiText>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: Space[2] }}>
+                        {inv.status === 'pending' ? (
+                          <TouchableOpacity 
+                            style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]} 
+                            onPress={() => handleCancelSentInvite(inv)}
+                          >
+                            <KamiText variant="caption" color={Colors.error} bold>Cancel</KamiText>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity 
+                            style={[styles.inviteActionBtn, { backgroundColor: Colors.textMuted + '15' }]} 
+                            onPress={() => handleDismissSentInvite(inv)}
+                          >
+                            <KamiText variant="caption" color={Colors.textMuted} bold>Dismiss</KamiText>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
                   ))}

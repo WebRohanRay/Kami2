@@ -22,6 +22,8 @@ export interface CoupleInvitation {
   expiresAt: string;
   senderNickname?: string;
   senderEmail?: string;
+  receiverNickname?: string;
+  receiverEmail?: string;
 }
 
 export interface CoupleComment {
