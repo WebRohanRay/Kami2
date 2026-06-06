@@ -20,6 +20,7 @@ import type { MainTabScreenProps } from '@core/navigation/types';
 import type { Memory } from '@features/home/types';
 import * as memoryService from '@infrastructure/home/memoryService';
 import { pickImages, uploadImages } from '@shared/lib/storage';
+import { useTheme }     from '@shared/hooks';
 
 type Props = MainTabScreenProps<'Memories'>;
 
@@ -40,6 +41,7 @@ const MemoryModal: React.FC<{
   onSave: (title: string, body: string, emoji: string, mood: string | null, imageUris: string[]) => Promise<void>;
   saving: boolean;
 }> = ({ visible, memory, onClose, onSave, saving }) => {
+  const { colors } = useTheme();
   const [title, setTitle] = useState('');
   const [body,  setBody]  = useState('');
   const [emoji, setEmoji] = useState('🌸');
@@ -74,14 +76,14 @@ const MemoryModal: React.FC<{
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={mm.root}>
+      <SafeAreaView style={[mm.root, { backgroundColor: colors.pageBg }]}>
         <View style={wm.toolbar}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
           <KamiText variant="overline">{memory ? 'Edit memory' : 'New memory'}</KamiText>
           <TouchableOpacity onPress={() => { if (!title.trim()) return; Keyboard.dismiss(); onSave(title.trim(), body.trim(), emoji, mood, localUris); }} disabled={saving || !title.trim()} hitSlop={8}>
-            {saving ? <ActivityIndicator size="small" color={Colors.primary} /> : <KamiText variant="label" color={title.trim() ? Colors.primary : Colors.textMuted} bold>Save</KamiText>}
+            {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="label" color={title.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>}
           </TouchableOpacity>
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={mm.content}>
@@ -90,7 +92,7 @@ const MemoryModal: React.FC<{
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={mm.emojiRow}>
               {MEMORY_EMOJIS.map(e => (
-                <TouchableOpacity key={e} style={[mm.emojiBtn, emoji === e && mm.emojiBtnOn]} onPress={() => setEmoji(e)}>
+                <TouchableOpacity key={e} style={[mm.emojiBtn, emoji === e && [mm.emojiBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setEmoji(e)}>
                   <Text style={{ fontSize: 22 }}>{e}</Text>
                 </TouchableOpacity>
               ))}
@@ -109,7 +111,7 @@ const MemoryModal: React.FC<{
           <KamiText variant="overline" style={mm.label}>How did you feel?</KamiText>
           <View style={mm.moodRow}>
             {MOODS.map(m => (
-              <TouchableOpacity key={m} style={[mm.moodBtn, mood === m && mm.moodBtnOn]} onPress={() => setMood(mood === m ? null : m)}>
+              <TouchableOpacity key={m} style={[mm.moodBtn, mood === m && [mm.moodBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setMood(mood === m ? null : m)}>
                 <Text style={{ fontSize: 24 }}>{m}</Text>
               </TouchableOpacity>
             ))}
@@ -119,7 +121,7 @@ const MemoryModal: React.FC<{
           <View style={wm.photoHeader}>
             <KamiText variant="overline">Photos</KamiText>
             <TouchableOpacity onPress={handlePickPhotos} style={wm.addPhotoBtn} disabled={picking}>
-              {picking ? <ActivityIndicator size="small" color={Colors.primary} /> : <KamiText variant="caption" color={Colors.primary} bold>+ Add Photos</KamiText>}
+              {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>+ Add Photos</KamiText>}
             </TouchableOpacity>
           </View>
 
@@ -253,19 +255,21 @@ export function MemoriesScreen({ navigation }: Props) {
     grouped[key].push(m);
   });
 
+  const { colors } = useTheme();
+
   return (
-    <SafeAreaView style={s.root}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View style={{ flex: 1 }}>
           <KamiText variant="overline">Your vault</KamiText>
           <KamiText variant="title">Memories</KamiText>
         </View>
-        <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setModalOpen(true); }}>
-          <Text style={s.addPlus}>+</Text>
-          <KamiText variant="label" color={Colors.primary} bold>Add</KamiText>
+        <TouchableOpacity style={[s.addBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setEditing(null); setModalOpen(true); }}>
+          <Text style={[s.addPlus, { color: colors.primary }]}>+</Text>
+          <KamiText variant="label" color={colors.primary} bold>Add</KamiText>
         </TouchableOpacity>
       </View>
 
@@ -285,10 +289,10 @@ export function MemoriesScreen({ navigation }: Props) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         {loading && memories.length === 0 && (
-          <View style={s.center}><ActivityIndicator color={Colors.primary} /></View>
+          <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
         {!loading && memories.length === 0 && (
@@ -298,8 +302,8 @@ export function MemoriesScreen({ navigation }: Props) {
             <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
               {search ? 'Clear search filter to view your memories.' : 'Capture the moments worth remembering.'}
             </KamiText>
-            <View style={s.emptyBtn}>
-              <KamiText variant="label" color={Colors.primary} bold>Add your first memory ›</KamiText>
+            <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+              <KamiText variant="label" color={colors.primary} bold>Add your first memory ›</KamiText>
             </View>
           </TouchableOpacity>
         )}

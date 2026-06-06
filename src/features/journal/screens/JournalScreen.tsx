@@ -22,6 +22,7 @@ import { Colors, FontSize, FontWeight, Radii, Shadows, Space, FontFamily } from 
 import type { JournalEntry } from '@features/home/types';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
+import { useTheme }     from '@shared/hooks';
 
 type Props = MainTabScreenProps<'Journal'>;
 
@@ -103,75 +104,76 @@ const WriteModal: React.FC<{
     if (!selectedTags.includes(trimmed)) {
       setSelectedTags(prev => [...prev, trimmed]);
     }
-    setNewTag('');
   };
+
+  const { colors } = useTheme();
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={wm.root}>
-        <View style={wm.toolbar}>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
-            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
-          </TouchableOpacity>
-          <KamiText variant="overline">{entry ? 'Edit entry' : new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</KamiText>
-          <TouchableOpacity onPress={() => { if (!body.trim()) return; Keyboard.dismiss(); onSave(body.trim(), title.trim() || undefined, selectedTags, localUris); }} disabled={saving || !body.trim()} hitSlop={8}>
-            {saving
-              ? <ActivityIndicator size="small" color={Colors.primary} />
-              : <KamiText variant="label" color={body.trim() ? Colors.primary : Colors.textMuted} bold>Save</KamiText>
-            }
-          </TouchableOpacity>
-        </View>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={wm.content}>
-          <TextInput
-            style={wm.titleInput} placeholder="Title (optional)"
-            placeholderTextColor={Colors.textMuted} value={title}
-            onChangeText={setTitle} maxLength={120}
-          />
-          <View style={wm.rule} />
-          <TextInput
-            style={wm.bodyInput} placeholder="Write freely…"
-            placeholderTextColor={Colors.textMuted} value={body}
-            onChangeText={setBody} multiline autoFocus={!entry} textAlignVertical="top" maxLength={8000}
-          />
-
-          {/* Tag Selector */}
-          <KamiText variant="overline" style={wm.sectionLabel}>Tags</KamiText>
-          <View style={wm.tagContainer}>
-            {[...JOURNAL_TAGS, ...customTags].map(t => {
-              const active = selectedTags.includes(t);
-              return (
-                <TouchableOpacity key={t} style={[wm.tagChip, active && wm.tagChipActive]} onPress={() => toggleTag(t)}>
-                  <KamiText variant="caption" color={active ? Colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
-                </TouchableOpacity>
-              );
-            })}
+        <SafeAreaView style={[wm.root, { backgroundColor: colors.pageBg }]}>
+          <View style={wm.toolbar}>
+            <TouchableOpacity onPress={onClose} hitSlop={8}>
+              <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+            </TouchableOpacity>
+            <KamiText variant="overline">{entry ? 'Edit entry' : new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</KamiText>
+            <TouchableOpacity onPress={() => { if (!body.trim()) return; Keyboard.dismiss(); onSave(body.trim(), title.trim() || undefined, selectedTags, localUris); }} disabled={saving || !body.trim()} hitSlop={8}>
+              {saving
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <KamiText variant="label" color={body.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>
+              }
+            </TouchableOpacity>
           </View>
-
-          {/* Custom Tag Input */}
-          <View style={wm.customTagRow}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={wm.content}>
             <TextInput
-              style={wm.customTagInput}
-              placeholder="Add custom hashtag..."
-              placeholderTextColor={Colors.textMuted}
-              value={newTag}
-              onChangeText={setNewTag}
-              maxLength={25}
-              autoCapitalize="none"
-              autoCorrect={false}
-              onSubmitEditing={handleAddCustomTag}
+              style={wm.titleInput} placeholder="Title (optional)"
+              placeholderTextColor={Colors.textMuted} value={title}
+              onChangeText={setTitle} maxLength={120}
             />
-            <TouchableOpacity style={wm.customTagBtn} onPress={handleAddCustomTag} activeOpacity={0.75}>
-              <KamiText variant="caption" color={Colors.primary} bold>+ Add</KamiText>
-            </TouchableOpacity>
-          </View>
+            <View style={wm.rule} />
+            <TextInput
+              style={wm.bodyInput} placeholder="Write freely…"
+              placeholderTextColor={Colors.textMuted} value={body}
+              onChangeText={setBody} multiline autoFocus={!entry} textAlignVertical="top" maxLength={8000}
+            />
 
-          {/* Photo Attachments */}
-          <View style={wm.photoHeader}>
-            <KamiText variant="overline">Photos</KamiText>
-            <TouchableOpacity onPress={handlePickPhotos} style={wm.addPhotoBtn} disabled={picking}>
-              {picking ? <ActivityIndicator size="small" color={Colors.primary} /> : <KamiText variant="caption" color={Colors.primary} bold>+ Add Photos</KamiText>}
-            </TouchableOpacity>
-          </View>
+            {/* Tag Selector */}
+            <KamiText variant="overline" style={wm.sectionLabel}>Tags</KamiText>
+            <View style={wm.tagContainer}>
+              {[...JOURNAL_TAGS, ...customTags].map(t => {
+                const active = selectedTags.includes(t);
+                return (
+                  <TouchableOpacity key={t} style={[wm.tagChip, active && [wm.tagChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]} onPress={() => toggleTag(t)}>
+                    <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Custom Tag Input */}
+            <View style={wm.customTagRow}>
+              <TextInput
+                style={wm.customTagInput}
+                placeholder="Add custom hashtag..."
+                placeholderTextColor={Colors.textMuted}
+                value={newTag}
+                onChangeText={setNewTag}
+                maxLength={25}
+                autoCapitalize="none"
+                autoCorrect={false}
+                onSubmitEditing={handleAddCustomTag}
+              />
+              <TouchableOpacity style={[wm.customTagBtn, { backgroundColor: colors.primary + '11' }]} onPress={handleAddCustomTag} activeOpacity={0.75}>
+                <KamiText variant="caption" color={colors.primary} bold>+ Add</KamiText>
+              </TouchableOpacity>
+            </View>
+
+            {/* Photo Attachments */}
+            <View style={wm.photoHeader}>
+              <KamiText variant="overline">Photos</KamiText>
+              <TouchableOpacity onPress={handlePickPhotos} style={wm.addPhotoBtn} disabled={picking}>
+                {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>+ Add Photos</KamiText>}
+              </TouchableOpacity>
+            </View>
 
           {localUris.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={wm.photoScroll}>
@@ -197,7 +199,7 @@ const WriteModal: React.FC<{
 };
 const wm = StyleSheet.create({
   root:        { flex: 1, backgroundColor: Colors.pageBg },
-  toolbar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  toolbar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   content:     { padding: Space[5], gap: Space[4], paddingBottom: Space[10] },
   titleInput:  { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary },
   rule:        { height: 1, backgroundColor: Colors.border + '44' },
@@ -224,32 +226,44 @@ const PromptModal: React.FC<{
   visible: boolean; prompt: string; existing?: string;
   onClose: () => void; onSave: (r: string) => Promise<void>; saving: boolean;
 }> = ({ visible, prompt, existing, onClose, onSave, saving }) => {
+  const { colors } = useTheme();
   const [response, setResponse] = useState(existing ?? '');
+  const [focused, setFocused] = useState(false);
+
   useEffect(() => { if (visible) setResponse(existing ?? ''); }, [visible, existing]);
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={pm.root}>
+      <SafeAreaView style={[pm.root, { backgroundColor: colors.pageBg }]}>
         <View style={pm.toolbar}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <KamiText variant="label" color={Colors.textMuted}>Close</KamiText>
           </TouchableOpacity>
-          <KamiText variant="overline">Today's Prompt</KamiText>
+          <KamiText variant="overline">Today's Reflection</KamiText>
           <TouchableOpacity onPress={() => { if (response.trim()) { Keyboard.dismiss(); onSave(response.trim()); } }} disabled={saving || !response.trim()} hitSlop={8}>
             {saving
-              ? <ActivityIndicator size="small" color={Colors.primary} />
-              : <KamiText variant="label" color={response.trim() ? Colors.primary : Colors.textMuted} bold>Save</KamiText>
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <KamiText variant="label" color={response.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>
             }
           </TouchableOpacity>
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={pm.content}>
-          <View style={pm.promptBox}>
-            <Text style={pm.quoteMark}>"</Text>
+          <View style={[pm.promptBox, { backgroundColor: colors.primary + '11', borderLeftColor: colors.primary, borderColor: colors.primary + '33' }]}>
+            <Text style={[pm.quoteMark, { color: colors.primary + '44' }]}>"</Text>
             <KamiText variant="body" style={{ fontStyle: 'italic', lineHeight: 26 }}>{prompt}</KamiText>
           </View>
           <TextInput
-            style={pm.input} placeholder="Write your thoughts…"
-            placeholderTextColor={Colors.textMuted} value={response}
-            onChangeText={setResponse} multiline autoFocus textAlignVertical="top" maxLength={2000}
+            style={[pm.input, { borderColor: focused ? colors.primary : Colors.border }]}
+            placeholder="Write your thoughts…"
+            placeholderTextColor={Colors.textMuted}
+            value={response}
+            onChangeText={setResponse}
+            multiline
+            autoFocus
+            textAlignVertical="top"
+            maxLength={2000}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
           />
           <KamiText variant="caption" color={Colors.textMuted} align="right">{response.length} / 2000</KamiText>
         </ScrollView>
@@ -261,9 +275,9 @@ const pm = StyleSheet.create({
   root:      { flex: 1, backgroundColor: Colors.pageBg },
   toolbar:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   content:   { padding: Space[5], gap: Space[4] },
-  promptBox: { backgroundColor: Colors.rose100, borderRadius: Radii.card, padding: Space[5], borderLeftWidth: 3, borderLeftColor: Colors.primary },
-  quoteMark: { fontSize: 40, color: Colors.primary + '66', lineHeight: 40, fontFamily: FontFamily.display },
-  input:     { backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], fontSize: FontSize.base, color: Colors.textPrimary, minHeight: 220, borderWidth: 1.5, borderColor: Colors.border, lineHeight: 24 },
+  promptBox: { borderRadius: Radii.card, padding: Space[5], borderLeftWidth: 3, borderWidth: 1 },
+  quoteMark: { fontSize: 40, lineHeight: 40, fontFamily: FontFamily.display },
+  input:     { backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], fontSize: FontSize.base, color: Colors.textPrimary, minHeight: 220, borderWidth: 1.5, lineHeight: 24 },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
@@ -373,19 +387,21 @@ export function JournalScreen({ navigation }: Props) {
 
   const handleRefresh = async () => { setRefreshing(true); await refresh(); setRefreshing(false); };
 
+  const { colors } = useTheme();
+
   return (
-    <SafeAreaView style={s.root}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View>
           <KamiText variant="overline">Your thoughts</KamiText>
           <KamiText variant="title">Journal</KamiText>
         </View>
-        <TouchableOpacity style={s.writeBtn} onPress={() => { setEditing(null); setWriteVisible(true); }} accessibilityRole="button">
-          <Text style={s.writeBtnPlus}>+</Text>
-          <KamiText variant="label" color={Colors.primary} bold>New entry</KamiText>
+        <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setEditing(null); setWriteVisible(true); }} accessibilityRole="button">
+          <Text style={[s.writeBtnPlus, { color: colors.primary }]}>+</Text>
+          <KamiText variant="label" color={colors.primary} bold>New entry</KamiText>
         </TouchableOpacity>
       </View>
 
@@ -406,20 +422,20 @@ export function JournalScreen({ navigation }: Props) {
       <View style={s.tagsScrollWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tagsFilterRow}>
           <TouchableOpacity
-            style={[s.filterChip, selectedTag === null && s.filterChipActive]}
+            style={[s.filterChip, selectedTag === null && [s.filterChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]}
             onPress={() => setSelectedTag(null)}
           >
-            <KamiText variant="caption" color={selectedTag === null ? Colors.primary : Colors.textSecondary} bold={selectedTag === null}>All</KamiText>
+            <KamiText variant="caption" color={selectedTag === null ? colors.primary : Colors.textSecondary} bold={selectedTag === null}>All</KamiText>
           </TouchableOpacity>
           {availableTags.map(t => {
             const active = selectedTag === t;
             return (
               <TouchableOpacity
                 key={t}
-                style={[s.filterChip, active && s.filterChipActive]}
+                style={[s.filterChip, active && [s.filterChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]}
                 onPress={() => setSelectedTag(active ? null : t)}
               >
-                <KamiText variant="caption" color={active ? Colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
+                <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
               </TouchableOpacity>
             );
           })}
@@ -429,19 +445,23 @@ export function JournalScreen({ navigation }: Props) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         {/* Today's prompt card */}
         {todayPrompt && (
-          <TouchableOpacity style={s.promptCard} onPress={() => setPromptVisible(true)} activeOpacity={0.85}>
-            <View style={s.promptLeft}>
-              <Text style={{ fontSize: 22 }}>✎</Text>
+          <TouchableOpacity
+            style={[s.promptCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}
+            onPress={() => setPromptVisible(true)}
+            activeOpacity={0.85}
+          >
+            <View style={[s.promptIconWrap, { backgroundColor: colors.primary + '15' }]}>
+              <Text style={{ fontSize: 20, color: colors.primary }}>✍️</Text>
             </View>
             <View style={{ flex: 1, gap: 4 }}>
-              <KamiText variant="overline">Today's Prompt</KamiText>
-              <KamiText variant="body" style={{ fontStyle: 'italic' }} numberOfLines={2}>"{todayPrompt.content}"</KamiText>
-              <KamiText variant="caption" color={promptResponse ? Colors.primary : Colors.textMuted} bold>
-                {promptResponse ? '✓ Answered — tap to edit' : 'Tap to reflect ›'}
+              <KamiText variant="overline" color={colors.primary} bold>Daily Reflection</KamiText>
+              <KamiText variant="body" style={{ fontStyle: 'italic', fontWeight: '500', lineHeight: 22 }} numberOfLines={3}>"{todayPrompt.content}"</KamiText>
+              <KamiText variant="caption" color={promptResponse ? Colors.success : colors.primary} bold>
+                {promptResponse ? '✓ Answered — Tap to edit' : 'Tap to reflect ›'}
               </KamiText>
             </View>
           </TouchableOpacity>
@@ -449,7 +469,7 @@ export function JournalScreen({ navigation }: Props) {
 
         {/* Loading */}
         {journalLoading === 'loading' && journalEntries.length === 0 && (
-          <View style={s.centerState}><ActivityIndicator color={Colors.primary} /></View>
+          <View style={s.centerState}><ActivityIndicator color={colors.primary} /></View>
         )}
 
         {/* Empty state */}
@@ -460,8 +480,8 @@ export function JournalScreen({ navigation }: Props) {
             <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
               {search || selectedTag ? 'Clear filters to view your entries.' : 'Write your first entry. No rules, just you.'}
             </KamiText>
-            <View style={s.emptyBtn}>
-              <KamiText variant="label" color={Colors.primary} bold>Start writing ›</KamiText>
+            <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+              <KamiText variant="label" color={colors.primary} bold>Start writing ›</KamiText>
             </View>
           </TouchableOpacity>
         )}
@@ -496,6 +516,7 @@ export function JournalScreen({ navigation }: Props) {
 }
 
 const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: () => void; onTogglePin: () => void }> = ({ entry, onEdit, onDelete, onTogglePin }) => {
+  const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   return (
     <TouchableOpacity
@@ -503,7 +524,7 @@ const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: (
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
-      <Animated.View style={[s.entryCard, entry.isPinned && s.entryCardPinned, { transform: [{ scale: sc }] }]}>
+      <Animated.View style={[s.entryCard, entry.isPinned && [s.entryCardPinned, { borderColor: colors.primary + '55', backgroundColor: colors.creamMid + '22' }], { transform: [{ scale: sc }] }]}>
         <View style={s.entryHeader}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: Space[2] }}>
             {entry.isPinned && <Text style={{ fontSize: 13 }}>📌</Text>}
@@ -513,7 +534,7 @@ const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: (
           </View>
           <View style={s.entryActions}>
             <TouchableOpacity onPress={onTogglePin} hitSlop={8} style={s.cardBtn}>
-              <Text style={{ fontSize: 13, color: entry.isPinned ? Colors.primary : Colors.textMuted }}>📌</Text>
+              <Text style={{ fontSize: 13, color: entry.isPinned ? colors.primary : Colors.textMuted }}>📌</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onDelete} hitSlop={8} style={s.cardBtn}>
               <Text style={{ fontSize: 13, color: Colors.textMuted }}>✕</Text>
@@ -539,7 +560,7 @@ const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: (
         {entry.tags && entry.tags.length > 0 && (
           <View style={s.tagRow}>
             {entry.tags.map(t => (
-              <View key={t} style={s.tag}><KamiText variant="caption" color={Colors.primary}>#{t}</KamiText></View>
+              <View key={t} style={[s.tag, { backgroundColor: colors.primary + '15' }]}><KamiText variant="caption" color={colors.primary}>#{t}</KamiText></View>
             ))}
           </View>
         )}
@@ -569,8 +590,8 @@ const s = StyleSheet.create({
 
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[2], gap: Space[3] },
 
-  promptCard: { flexDirection: 'row', backgroundColor: Colors.cardBg, borderRadius: Radii.card, overflow: 'hidden', borderWidth: 1, borderColor: Colors.primaryLight, ...Shadows.card, gap: 0 },
-  promptLeft: { width: 50, backgroundColor: Colors.rose100, alignItems: 'center', justifyContent: 'center' },
+  promptCard: { flexDirection: 'row', alignItems: 'center', borderRadius: Radii.card, padding: Space[4], gap: Space[4], borderWidth: 1.5, ...Shadows.card },
+  promptIconWrap: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 
   dateLabel:  { marginTop: Space[2], marginBottom: -Space[1] },
 

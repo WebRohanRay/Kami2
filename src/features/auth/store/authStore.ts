@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AuthUser, AuthStatus } from '../types';
+import { applyTheme } from '../../../shared/constants/tokens';
 
 type AuthStore = {
   user:   AuthUser | null;
@@ -21,3 +22,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setError:  (error)  => set({ error }),
   reset:     ()       => set(initial),
 }));
+
+useAuthStore.subscribe((state) => {
+  if (state.user?.theme) {
+    applyTheme(state.user.theme);
+  }
+});

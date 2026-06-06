@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Colors, Radii, FontSize, FontWeight, Space } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 type BadgeVariant = 'primary' | 'success' | 'warning' | 'muted' | 'accent';
 
@@ -11,27 +12,31 @@ interface BadgeProps {
   style?: ViewStyle;
 }
 
-const BG: Record<BadgeVariant, string> = {
-  primary: Colors.primary + '22',
-  success: Colors.success + '22',
-  warning: Colors.warning + '22',
-  muted:   Colors.border + '55',
-  accent:  Colors.accent  + '22',
-};
-const TEXT: Record<BadgeVariant, string> = {
-  primary: Colors.primary,
-  success: Colors.success,
-  warning: Colors.warning,
-  muted:   Colors.textMuted,
-  accent:  Colors.accent,
-};
+const Badge: React.FC<BadgeProps> = ({ label, variant = 'primary', icon, style }) => {
+  const { colors } = useTheme();
 
-const Badge: React.FC<BadgeProps> = ({ label, variant = 'primary', icon, style }) => (
-  <View style={[styles.badge, { backgroundColor: BG[variant] }, style]}>
-    {icon ? <Text style={styles.icon}>{icon}</Text> : null}
-    <Text style={[styles.text, { color: TEXT[variant] }]}>{label}</Text>
-  </View>
-);
+  const bgColors: Record<BadgeVariant, string> = {
+    primary: colors.primary + '22',
+    success: Colors.success + '22',
+    warning: Colors.warning + '22',
+    muted:   Colors.border + '55',
+    accent:  colors.accent  + '22',
+  };
+  const textColors: Record<BadgeVariant, string> = {
+    primary: colors.primary,
+    success: Colors.success,
+    warning: Colors.warning,
+    muted:   Colors.textMuted,
+    accent:  colors.accent,
+  };
+
+  return (
+    <View style={[styles.badge, { backgroundColor: bgColors[variant] }, style]}>
+      {icon ? <Text style={styles.icon}>{icon}</Text> : null}
+      <Text style={[styles.text, { color: textColors[variant] }]}>{label}</Text>
+    </View>
+  );
+};
 
 export default Badge;
 

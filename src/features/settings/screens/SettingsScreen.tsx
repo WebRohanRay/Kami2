@@ -40,6 +40,7 @@ import {
 } from '@shared/constants';
 import { useAuth }      from '@features/auth';
 import { useAuthStore } from '@features/auth';
+import { useTheme }     from '@shared/hooks';
 import { pickAvatarImage, uploadAvatar } from '@shared/lib/storage';
 import type { MainTabScreenProps } from '@core/navigation/types';
 
@@ -80,6 +81,7 @@ const SettingRow: React.FC<{
   danger?: boolean;
   rightEl?: React.ReactNode;
 }> = ({ icon, label, value, onPress, showChevron = true, danger, rightEl }) => {
+  const { colors } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
 
   const onPressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
@@ -96,7 +98,7 @@ const SettingRow: React.FC<{
       accessibilityLabel={label}
     >
       <Animated.View style={[rowStyles.row, { transform: [{ scale }] }]}>
-        <View style={rowStyles.iconWrap}>
+        <View style={[rowStyles.iconWrap, { backgroundColor: colors.creamDeep }]}>
           <Text style={rowStyles.icon}>{icon}</Text>
         </View>
         <View style={rowStyles.middle}>
@@ -181,21 +183,24 @@ const InfoSheet: React.FC<{
   title: string;
   content: string;
   onClose: () => void;
-}> = ({ visible, title, content, onClose }) => (
-  <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <SafeAreaView style={sheetStyles.root}>
-      <View style={sheetStyles.header}>
-        <KamiText variant="title">{title}</KamiText>
-        <TouchableOpacity onPress={onClose} style={sheetStyles.closeBtn}>
-          <KamiText variant="label" color={Colors.primary} bold>Done</KamiText>
-        </TouchableOpacity>
-      </View>
-      <ScrollView contentContainerStyle={sheetStyles.scroll}>
-        <KamiText variant="body" style={sheetStyles.text}>{content}</KamiText>
-      </ScrollView>
-    </SafeAreaView>
-  </Modal>
-);
+}> = ({ visible, title, content, onClose }) => {
+  const { colors } = useTheme();
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[sheetStyles.root, { backgroundColor: colors.pageBg }]}>
+        <View style={sheetStyles.header}>
+          <KamiText variant="title">{title}</KamiText>
+          <TouchableOpacity onPress={onClose} style={sheetStyles.closeBtn}>
+            <KamiText variant="label" color={colors.primary} bold>Done</KamiText>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={sheetStyles.scroll}>
+          <KamiText variant="body" style={sheetStyles.text}>{content}</KamiText>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+};
 
 const sheetStyles = StyleSheet.create({
   root:     { flex: 1, backgroundColor: Colors.pageBg },
@@ -220,38 +225,41 @@ const SelectorSheet: React.FC<{
   selectedValue: string;
   onSelect: (id: string) => void;
   onClose: () => void;
-}> = ({ visible, title, options, selectedValue, onSelect, onClose }) => (
-  <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <SafeAreaView style={selectorStyles.root}>
-      <View style={selectorStyles.header}>
-        <KamiText variant="title">{title}</KamiText>
-        <TouchableOpacity onPress={onClose} style={selectorStyles.closeBtn}>
-          <KamiText variant="label" color={Colors.primary} bold>Cancel</KamiText>
-        </TouchableOpacity>
-      </View>
-      <ScrollView contentContainerStyle={selectorStyles.scroll}>
-        <View style={selectorStyles.list}>
-          {options.map((opt) => {
-            const active = opt.id === selectedValue;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                style={[selectorStyles.item, active && selectorStyles.itemActive]}
-                onPress={() => { onSelect(opt.id); onClose(); }}
-              >
-                <Text style={selectorStyles.emoji}>{opt.emoji}</Text>
-                <KamiText variant="body" style={{ flex: 1 }} bold={active} color={active ? Colors.primary : Colors.textPrimary}>
-                  {opt.label}
-                </KamiText>
-                {active && <KamiText variant="label" color={Colors.primary}>✓</KamiText>}
-              </TouchableOpacity>
-            );
-          })}
+}> = ({ visible, title, options, selectedValue, onSelect, onClose }) => {
+  const { colors } = useTheme();
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[selectorStyles.root, { backgroundColor: colors.pageBg }]}>
+        <View style={selectorStyles.header}>
+          <KamiText variant="title">{title}</KamiText>
+          <TouchableOpacity onPress={onClose} style={selectorStyles.closeBtn}>
+            <KamiText variant="label" color={colors.primary} bold>Cancel</KamiText>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
-    </SafeAreaView>
-  </Modal>
-);
+        <ScrollView contentContainerStyle={selectorStyles.scroll}>
+          <View style={selectorStyles.list}>
+            {options.map((opt) => {
+              const active = opt.id === selectedValue;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[selectorStyles.item, active && { backgroundColor: colors.primary + '0a' }]}
+                  onPress={() => { onSelect(opt.id); onClose(); }}
+                >
+                  <Text style={selectorStyles.emoji}>{opt.emoji}</Text>
+                  <KamiText variant="body" style={{ flex: 1 }} bold={active} color={active ? colors.primary : Colors.textPrimary}>
+                    {opt.label}
+                  </KamiText>
+                  {active && <KamiText variant="label" color={colors.primary}>✓</KamiText>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+};
 
 const selectorStyles = StyleSheet.create({
   root:     { flex: 1, backgroundColor: Colors.pageBg },
@@ -267,6 +275,7 @@ const selectorStyles = StyleSheet.create({
 // ─── Main Component ────────────────────────────────────────────────────────
 
 export function SettingsScreen({ navigation }: Props) {
+  const { colors } = useTheme();
   const user = useAuthStore((s) => s.user);
   const { signOut, deleteAccount, updateProfile, exportData } = useAuth();
 
@@ -333,7 +342,6 @@ export function SettingsScreen({ navigation }: Props) {
       Alert.alert('Kami', r.error);
     } else {
       applyTheme(themeId);
-      DevSettings.reload();
     }
   };
 
@@ -419,11 +427,11 @@ export function SettingsScreen({ navigation }: Props) {
   const sizeLabel  = TEXT_SIZES.find(t => t.id === (user?.textSize ?? 'medium'))?.label ?? 'Medium';
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
       {/* ── Top Bar ── */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { backgroundColor: colors.pageBg }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => { Keyboard.dismiss(); navigation.navigate('Home'); }}
@@ -447,7 +455,7 @@ export function SettingsScreen({ navigation }: Props) {
         {/* ── Profile Card ── */}
         <View style={styles.profileCard}>
           <TouchableOpacity
-            style={styles.avatarWrap}
+            style={[styles.avatarWrap, { borderColor: colors.primaryLight, backgroundColor: colors.creamDeep }]}
             onPress={handleAvatarPress}
             disabled={avatarLoading}
             accessibilityRole="button"
@@ -456,7 +464,7 @@ export function SettingsScreen({ navigation }: Props) {
             {user?.avatarUrl ? (
               <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
             ) : (
-              <Text style={styles.avatarInitial}>
+              <Text style={[styles.avatarInitial, { color: colors.primary }]}>
                 {initialsFor(user?.nickname, user?.email)}
               </Text>
             )}
@@ -475,11 +483,11 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
 
           <TouchableOpacity
-            style={styles.editChip}
+            style={[styles.editChip, { backgroundColor: colors.creamDeep }]}
             onPress={() => setEditingProfile((v) => !v)}
             accessibilityRole="button"
           >
-            <Text style={styles.editChipText}>
+            <Text style={[styles.editChipText, { color: colors.primary }]}>
               {editingProfile ? 'Cancel' : 'Edit'}
             </Text>
           </TouchableOpacity>
@@ -487,7 +495,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/* ── Nickname Editor ── */}
         {editingProfile && (
-          <View style={styles.editCard}>
+          <View style={[styles.editCard, { borderColor: colors.primaryLight }]}>
             <KamiText variant="subtitle">Edit display name</KamiText>
             <InputField
               icon="✦"
@@ -533,8 +541,8 @@ export function SettingsScreen({ navigation }: Props) {
               <Switch
                 value={user?.dailyReminder ?? true}
                 onValueChange={(val) => handleTogglePref('dailyReminder', val)}
-                trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-                thumbColor={Colors.primary}
+                trackColor={{ false: Colors.border, true: colors.primaryLight }}
+                thumbColor={colors.primary}
               />
             }
           />
@@ -547,8 +555,8 @@ export function SettingsScreen({ navigation }: Props) {
               <Switch
                 value={user?.weeklyDigest ?? false}
                 onValueChange={(val) => handleTogglePref('weeklyDigest', val)}
-                trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-                thumbColor={Colors.primary}
+                trackColor={{ false: Colors.border, true: colors.primaryLight }}
+                thumbColor={colors.primary}
               />
             }
           />
@@ -561,8 +569,8 @@ export function SettingsScreen({ navigation }: Props) {
               <Switch
                 value={user?.streakAlerts ?? true}
                 onValueChange={(val) => handleTogglePref('streakAlerts', val)}
-                trackColor={{ false: Colors.border, true: Colors.primaryLight }}
-                thumbColor={Colors.primary}
+                trackColor={{ false: Colors.border, true: colors.primaryLight }}
+                thumbColor={colors.primary}
               />
             }
           />
@@ -580,7 +588,7 @@ export function SettingsScreen({ navigation }: Props) {
             label={exporting ? "Preparing file..." : "Export My Data"}
             onPress={exporting ? undefined : handleExportData}
             showChevron={!exporting}
-            rightEl={exporting ? <ActivityIndicator size="small" color={Colors.primary} /> : undefined}
+            rightEl={exporting ? <ActivityIndicator size="small" color={colors.primary} /> : undefined}
           />
         </SettingGroup>
 

@@ -22,6 +22,7 @@ import type { MainTabScreenProps } from '@core/navigation/types';
 import type { Letter } from '@features/home/types';
 import * as futureService from '@infrastructure/home/futureService';
 import { pickImages, uploadImages } from '@shared/lib/storage';
+import { useTheme } from '@shared/hooks';
 
 type Props = MainTabScreenProps<'Future'>;
 
@@ -68,6 +69,7 @@ const WriteModal: React.FC<{
   const [isCustom, setIsCustom] = useState(false);
   const [localUris, setLocalUris] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
+  const { colors } = useTheme();
 
   const reset = () => {
     setSubject('');
@@ -123,7 +125,7 @@ const WriteModal: React.FC<{
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { reset(); onClose(); }}>
-      <SafeAreaView style={wm.root}>
+      <SafeAreaView style={[wm.root, { backgroundColor: colors.pageBg }]}>
         <View style={wm.toolbar}>
           <TouchableOpacity onPress={() => { reset(); onClose(); }} hitSlop={8}>
             <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
@@ -139,7 +141,14 @@ const WriteModal: React.FC<{
               {DELIVERY_OPTIONS.map(o => (
                 <TouchableOpacity
                   key={o.days}
-                  style={[wm.deliveryChip, !isCustom && delivery.days === o.days && wm.deliveryChipOn]}
+                  style={[
+                    wm.deliveryChip,
+                    { backgroundColor: colors.creamDeep },
+                    !isCustom && delivery.days === o.days && [
+                      wm.deliveryChipOn,
+                      { borderColor: colors.primary, backgroundColor: colors.primary + '18' }
+                    ]
+                  ]}
                   onPress={() => {
                     setIsCustom(false);
                     setDelivery(o);
@@ -147,7 +156,7 @@ const WriteModal: React.FC<{
                 >
                   <KamiText
                     variant="caption"
-                    color={!isCustom && delivery.days === o.days ? Colors.primary : Colors.textMuted}
+                    color={!isCustom && delivery.days === o.days ? colors.primary : Colors.textMuted}
                     bold={!isCustom && delivery.days === o.days}
                   >
                     {o.label}
@@ -155,7 +164,14 @@ const WriteModal: React.FC<{
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
-                style={[wm.deliveryChip, isCustom && wm.deliveryChipOn]}
+                style={[
+                  wm.deliveryChip,
+                  { backgroundColor: colors.creamDeep },
+                  isCustom && [
+                    wm.deliveryChipOn,
+                    { borderColor: colors.primary, backgroundColor: colors.primary + '18' }
+                  ]
+                ]}
                 onPress={() => {
                   setIsCustom(true);
                   handleCustomDateChange(customMonth, customDay, customYear);
@@ -163,7 +179,7 @@ const WriteModal: React.FC<{
               >
                 <KamiText
                   variant="caption"
-                  color={isCustom ? Colors.primary : Colors.textMuted}
+                  color={isCustom ? colors.primary : Colors.textMuted}
                   bold={isCustom}
                 >
                   Custom Date
@@ -177,7 +193,7 @@ const WriteModal: React.FC<{
               <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[1] }}>Unlock Date (MM / DD / YYYY)</KamiText>
               <View style={wm.customDateRow}>
                 <TextInput
-                  style={[wm.customInput, { flex: 1.5 }]}
+                  style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
                   placeholder="MM"
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="number-pad"
@@ -191,7 +207,7 @@ const WriteModal: React.FC<{
                 />
                 <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
                 <TextInput
-                  style={[wm.customInput, { flex: 1.5 }]}
+                  style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
                   placeholder="DD"
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="number-pad"
@@ -205,7 +221,7 @@ const WriteModal: React.FC<{
                 />
                 <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
                 <TextInput
-                  style={[wm.customInput, { flex: 2 }]}
+                  style={[wm.customInput, { flex: 2, backgroundColor: colors.creamDeep }]}
                   placeholder="YYYY"
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="number-pad"
@@ -222,9 +238,9 @@ const WriteModal: React.FC<{
           )}
 
           {/* Unlock date display */}
-          <View style={wm.unlockDate}>
+          <View style={[wm.unlockDate, { backgroundColor: colors.creamDeep }]}>
             <Text style={{ fontSize: 20 }}>🔒</Text>
-            <KamiText variant="body" color={Colors.primary} bold>
+            <KamiText variant="body" color={colors.primary} bold>
               {delivery.days > 0 ? (
                 `Unlocks on ${new Date(Date.now() + delivery.days * 86400000).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`
               ) : (
@@ -235,12 +251,12 @@ const WriteModal: React.FC<{
 
           {/* Subject */}
           <KamiText variant="overline" style={wm.label}>Subject</KamiText>
-          <TextInput style={wm.input} placeholder="To my future self…" placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
+          <TextInput style={[wm.input, { backgroundColor: colors.creamDeep }]} placeholder="To my future self…" placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
 
           {/* Body */}
           <KamiText variant="overline" style={wm.label}>Your letter *</KamiText>
           <TextInput
-            style={wm.bodyInput} placeholder="Dear future me,&#10;&#10;I hope you're well. Right now I'm thinking about…"
+            style={[wm.bodyInput, { backgroundColor: colors.creamDeep }]} placeholder="Dear future me,&#10;&#10;I hope you're well. Right now I'm thinking about…"
             placeholderTextColor={Colors.textMuted} value={body} onChangeText={setBody}
             multiline autoFocus textAlignVertical="top" maxLength={5000}
           />
@@ -250,7 +266,7 @@ const WriteModal: React.FC<{
           <View style={wm.photoHeader}>
             <KamiText variant="overline">Attach Photos</KamiText>
             <TouchableOpacity onPress={handlePickPhotos} style={wm.addPhotoBtn} disabled={picking}>
-              {picking ? <ActivityIndicator size="small" color={Colors.primary} /> : <KamiText variant="caption" color={Colors.primary} bold>+ Add Photos</KamiText>}
+              {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>+ Add Photos</KamiText>}
             </TouchableOpacity>
           </View>
 
@@ -317,6 +333,7 @@ const ReadModal: React.FC<{
 }> = ({ visible, letter, onClose }) => {
   const [content, setContent] = useState<{ body: string; imageUrls: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
+  const { colors } = useTheme();
 
   useEffect(() => {
     if (visible && letter) {
@@ -333,18 +350,18 @@ const ReadModal: React.FC<{
 
   return (
     <Modal visible={visible} animationType="fade" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={rm.root}>
+      <SafeAreaView style={[rm.root, { backgroundColor: colors.pageBg }]}>
         <View style={rm.toolbar}>
           <View />
           <KamiText variant="overline">Your letter</KamiText>
           <TouchableOpacity onPress={onClose} hitSlop={8}><KamiText variant="label" color={Colors.textMuted}>Close</KamiText></TouchableOpacity>
         </View>
         {loading && (
-          <View style={rm.center}><ActivityIndicator color={Colors.primary} /></View>
+          <View style={rm.center}><ActivityIndicator color={colors.primary} /></View>
         )}
         {!loading && letter && content && (
           <ScrollView contentContainerStyle={rm.content}>
-            <View style={rm.envelope}>
+            <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
               <Text style={rm.envelopeEmoji}>💌</Text>
               <KamiText variant="overline" align="center" style={{ marginTop: Space[2] }}>
                 Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -387,6 +404,7 @@ const rm = StyleSheet.create({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export function FutureScreen({ navigation }: Props) {
   const user = useAuthStore(s => s.user);
+  const { colors } = useTheme();
 
   const [letters,    setLetters]    = useState<Letter[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -461,28 +479,28 @@ export function FutureScreen({ navigation }: Props) {
   const sealed   = letters.filter(l => !l.isUnlocked);
 
   return (
-    <SafeAreaView style={s.root}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View>
           <KamiText variant="overline">Letters to yourself</KamiText>
           <KamiText variant="title">Future</KamiText>
         </View>
-        <TouchableOpacity style={s.writeBtn} onPress={() => setWriteOpen(true)}>
-          <Text style={s.writePlus}>+</Text>
-          <KamiText variant="label" color={Colors.primary} bold>Write</KamiText>
+        <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => setWriteOpen(true)}>
+          <Text style={[s.writePlus, { color: colors.primary }]}>+</Text>
+          <KamiText variant="label" color={colors.primary} bold>Write</KamiText>
         </TouchableOpacity>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         {loading && letters.length === 0 && (
-          <View style={s.center}><ActivityIndicator color={Colors.primary} /></View>
+          <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
         {!loading && letters.length === 0 && (
@@ -492,8 +510,8 @@ export function FutureScreen({ navigation }: Props) {
             <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
               Seal a letter. Open it months from now and see how much you've grown.
             </KamiText>
-            <View style={s.emptyBtn}>
-              <KamiText variant="label" color={Colors.primary} bold>Write your first letter ›</KamiText>
+            <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+              <KamiText variant="label" color={colors.primary} bold>Write your first letter ›</KamiText>
             </View>
           </TouchableOpacity>
         )}
@@ -503,7 +521,7 @@ export function FutureScreen({ navigation }: Props) {
           <View style={{ gap: Space[3] }}>
             <View style={s.sectionHeader}>
               <Text style={{ fontSize: 18 }}>✨</Text>
-              <KamiText variant="overline" style={{ color: Colors.primary }}>Ready to read · {unlocked.length}</KamiText>
+              <KamiText variant="overline" style={{ color: colors.primary }}>Ready to read · {unlocked.length}</KamiText>
             </View>
             {unlocked.map(l => <LetterCard key={l.id} letter={l} onOpen={() => handleOpen(l)} onDelete={() => handleDelete(l)} />)}
           </View>
@@ -530,13 +548,14 @@ export function FutureScreen({ navigation }: Props) {
 }
 
 const LetterCard: React.FC<{ letter: Letter; onOpen: () => void; onDelete: () => void }> = ({ letter, onOpen, onDelete }) => {
+  const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   return (
     <TouchableOpacity activeOpacity={1} onPress={onOpen}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
-      <Animated.View style={[s.card, letter.isUnlocked && s.cardOpen, { transform: [{ scale: sc }] }]}>
+      <Animated.View style={[s.card, letter.isUnlocked && [s.cardOpen, { borderColor: colors.primary + '55', backgroundColor: colors.creamDeep }], { transform: [{ scale: sc }] }]}>
         <View style={s.cardLeft}>
           <Text style={{ fontSize: 30 }}>{letter.isUnlocked ? '💌' : '🔒'}</Text>
         </View>
@@ -547,14 +566,14 @@ const LetterCard: React.FC<{ letter: Letter; onOpen: () => void; onDelete: () =>
               <Text style={{ fontSize: 12, color: Colors.textMuted }}>✕</Text>
             </TouchableOpacity>
           </View>
-          <KamiText variant="caption" color={letter.isUnlocked ? Colors.primary : Colors.textMuted} bold={letter.isUnlocked}>
+          <KamiText variant="caption" color={letter.isUnlocked ? colors.primary : Colors.textMuted} bold={letter.isUnlocked}>
             {daysUntil(letter.deliverAt)}
           </KamiText>
           <KamiText variant="caption" color={Colors.textMuted}>
             Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
           </KamiText>
           {letter.isUnlocked && (
-            <KamiText variant="caption" color={Colors.primary} bold>Tap to read ›</KamiText>
+            <KamiText variant="caption" color={colors.primary} bold>Tap to read ›</KamiText>
           )}
         </View>
       </Animated.View>

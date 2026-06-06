@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Colors, Radii, Shadows, Space, FontSize, FontWeight } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 export interface TabItem {
   id:    string;
@@ -28,28 +29,32 @@ interface TabBarProps {
   onPress:    (id: string) => void;
 }
 
-const TabBar: React.FC<TabBarProps> = ({ tabs = DEFAULT_TABS, active, onPress }) => (
-  <View style={styles.bar}>
-    {tabs.map(tab => {
-      const isActive = tab.id === active;
-      return (
-        <TouchableOpacity
-          key={tab.id}
-          style={styles.item}
-          onPress={() => onPress(tab.id)}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel={tab.label}
-          accessibilityState={{ selected: isActive }}
-        >
-          {isActive && <View style={styles.pill} />}
-          <Text style={[styles.icon, isActive && styles.iconActive]}>{tab.icon}</Text>
-          <Text style={[styles.label, isActive && styles.labelActive]}>{tab.label}</Text>
-        </TouchableOpacity>
-      );
-    })}
-  </View>
-);
+const TabBar: React.FC<TabBarProps> = ({ tabs = DEFAULT_TABS, active, onPress }) => {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.bar}>
+      {tabs.map(tab => {
+        const isActive = tab.id === active;
+        return (
+          <TouchableOpacity
+            key={tab.id}
+            style={styles.item}
+            onPress={() => onPress(tab.id)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={tab.label}
+            accessibilityState={{ selected: isActive }}
+          >
+            {isActive && <View style={[styles.pill, { backgroundColor: colors.primary }]} />}
+            <Text style={[styles.icon, isActive && styles.iconActive]}>{tab.icon}</Text>
+            <Text style={[styles.label, isActive && [styles.labelActive, { color: colors.primary }]]}>{tab.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
 
 export default TabBar;
 

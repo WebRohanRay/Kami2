@@ -9,6 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import { Colors, Radii, Sizing, FontSize, Space } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 interface InputFieldProps extends TextInputProps {
   icon?: string;
@@ -27,6 +28,7 @@ const InputField: React.FC<InputFieldProps> = ({
   style,
   ...rest
 }) => {
+  const { colors } = useTheme();
   const [visible,  setVisible]  = useState(false);
   const [focused,  setFocused]  = useState(false);
 
@@ -34,7 +36,7 @@ const InputField: React.FC<InputFieldProps> = ({
   const borderColor = hasError
     ? Colors.error
     : focused
-    ? Colors.primary
+    ? colors.primary
     : Colors.border;
 
   return (

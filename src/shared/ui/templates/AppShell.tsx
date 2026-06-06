@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { SafeAreaView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import TabBar from '../organisms/TabBar';
-import { Colors } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -21,6 +21,7 @@ const AppShell: React.FC<AppShellProps> = ({
   onTabChange,
 }) => {
   const [tab, setTab] = useState(activeTab);
+  const { colors } = useTheme();
 
   const handleTab = (id: string) => {
     setTab(id);
@@ -28,7 +29,7 @@ const AppShell: React.FC<AppShellProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
       <View style={styles.content}>{children}</View>
       <TabBar active={tab} onPress={handleTab} />
@@ -41,7 +42,6 @@ export default AppShell;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.pageBg,
   },
   content: {
     flex: 1,

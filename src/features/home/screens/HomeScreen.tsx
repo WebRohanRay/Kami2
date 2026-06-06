@@ -33,6 +33,7 @@ import {
   Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Sizing, Space,
 } from '@shared/constants';
 import type { MainTabScreenProps } from '@core/navigation/types';
+import { useTheme }      from '@shared/hooks';
 
 type Props = MainTabScreenProps<'Home'>;
 
@@ -89,11 +90,12 @@ const MoodModal: React.FC<{
   visible: boolean; mood: typeof MOODS[0] | null;
   onClose: () => void; onSave: (note: string) => Promise<void>; saving: boolean;
 }> = ({ visible, mood, onClose, onSave, saving }) => {
+  const { colors } = useTheme();
   const [note, setNote] = useState('');
   if (!mood) return null;
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
-      <SafeAreaView style={mm.root}>
+      <SafeAreaView style={[mm.root, { backgroundColor: colors.pageBg }]}>
         <View style={mm.handle} />
         <View style={mm.top}>
           <Text style={mm.emoji}>{mood.emoji}</Text>
@@ -112,7 +114,7 @@ const MoodModal: React.FC<{
             <KamiText variant="label" color={Colors.textMuted}>Skip</KamiText>
           </TouchableOpacity>
           <TouchableOpacity
-            style={mm.save} disabled={saving}
+            style={[mm.save, { backgroundColor: colors.primary }]} disabled={saving}
             onPress={() => { Keyboard.dismiss(); onSave(note.trim()).then(() => setNote('')); }}
           >
             {saving
@@ -174,23 +176,25 @@ export function HomeScreen({ navigation }: Props) {
   const activeGoals    = goals.filter(g => g.status === 'active');
   const completedToday = goals.filter(g => g.progress === 100).length;
 
+  const { colors } = useTheme();
+
   return (
-    <SafeAreaView style={s.root}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
       {/* ── TOP HEADER ───────────────────────────────────── */}
-      <View style={s.topBar}>
+      <View style={[s.topBar, { backgroundColor: colors.pageBg }]}>
         <View style={{ flex: 1 }}>
-          <KamiText style={s.kamiLogo}>Kami</KamiText>
+          <KamiText style={[s.kamiLogo, { color: colors.primary }]}>Kami</KamiText>
           <KamiText variant="caption" color={Colors.textMuted} style={s.greeting}>
             {greetingTime()}, {name} 🌸
           </KamiText>
         </View>
         <View style={s.topBarRight}>
-          <TouchableOpacity style={s.avatarWrap} onPress={() => navigation.navigate('Settings')}>
+          <TouchableOpacity style={[s.avatarWrap, { borderColor: colors.primary, backgroundColor: colors.creamDeep }]} onPress={() => navigation.navigate('Settings')}>
             {user?.avatarUrl
               ? <Image source={{ uri: user.avatarUrl }} style={s.avatarImg} />
-              : <Text style={s.avatarLetter}>{initial(name)}</Text>
+              : <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -199,13 +203,13 @@ export function HomeScreen({ navigation }: Props) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
 
         {/* ── STREAK BANNER ────────────────────────────── */}
         <View style={s.streakBanner}>
           <View style={s.streakItem}>
-            <View style={s.streakIconContainer}>
+            <View style={[s.streakIconContainer, { backgroundColor: colors.creamDeep }]}>
               <Text style={s.streakEmoji}>🔥</Text>
             </View>
             <View>
@@ -215,7 +219,7 @@ export function HomeScreen({ navigation }: Props) {
           </View>
           <View style={s.streakDivider} />
           <View style={s.streakItem}>
-            <View style={s.streakIconContainer}>
+            <View style={[s.streakIconContainer, { backgroundColor: colors.creamDeep }]}>
               <Text style={s.streakEmoji}>🌸</Text>
             </View>
             <View>
@@ -229,26 +233,26 @@ export function HomeScreen({ navigation }: Props) {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <View style={s.cardTitleRow}>
-              <Text style={s.cardIcon}>✦</Text>
+              <Text style={[s.cardIcon, { color: colors.primary }]}>✦</Text>
               <KamiText variant="subtitle" bold>How are you feeling today?</KamiText>
             </View>
             {todayMood && (
-              <View style={s.donePill}>
-                <Text style={{ fontSize: 11, color: Colors.primary }}>✓</Text>
-                <KamiText variant="caption" color={Colors.primary} bold>Done</KamiText>
+              <View style={[s.donePill, { backgroundColor: colors.primary + '18' }]}>
+                <Text style={{ fontSize: 11, color: colors.primary }}>✓</Text>
+                <KamiText variant="caption" color={colors.primary} bold>Done</KamiText>
               </View>
             )}
           </View>
 
           {todayMood ? (
-            <Tap onPress={() => handleMoodPick(MOODS.find(m => m.id === todayMood.moodId) ?? MOODS[0])} style={s.moodDone}>
-              <View style={s.moodDoneEmojiWrap}>
+            <Tap onPress={() => handleMoodPick(MOODS.find(m => m.id === todayMood.moodId) ?? MOODS[0])} style={[s.moodDone, { borderColor: colors.primary + '33', backgroundColor: colors.creamDeep + '22' }]}>
+              <View style={[s.moodDoneEmojiWrap, { borderColor: colors.primary + '18' }]}>
                 <Text style={{ fontSize: 36 }}>{todayMood.moodEmoji}</Text>
               </View>
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={s.moodBadgeRow}>
-                  <View style={s.moodBadge}>
-                    <KamiText variant="caption" color={Colors.primary} bold>{todayMood.moodLabel}</KamiText>
+                  <View style={[s.moodBadge, { backgroundColor: colors.primary + '15' }]}>
+                    <KamiText variant="caption" color={colors.primary} bold>{todayMood.moodLabel}</KamiText>
                   </View>
                   <KamiText variant="caption" color={Colors.textMuted}>Logged today</KamiText>
                 </View>
@@ -262,7 +266,7 @@ export function HomeScreen({ navigation }: Props) {
               <View style={s.moodRow}>
                 {MOODS.map(m => (
                   <Tap key={m.id} onPress={() => handleMoodPick(m)} style={s.moodCircle}>
-                    <View style={s.moodCircleEmojiWrap}>
+                    <View style={[s.moodCircleEmojiWrap, { backgroundColor: colors.creamDeep }]}>
                       <Text style={{ fontSize: 24 }}>{m.emoji}</Text>
                     </View>
                     <KamiText variant="caption" color={Colors.textSecondary} bold>{m.label}</KamiText>
@@ -288,23 +292,19 @@ export function HomeScreen({ navigation }: Props) {
 
         {/* ── TODAY'S PROMPT ───────────────────────────── */}
         {todayPrompt && (
-          <Tap onPress={() => navigation.navigate('Journal')} style={s.promptCard}>
-            <View style={s.promptBody}>
-              <View style={s.cardTitleRow}>
-                <Text style={s.cardIcon}>✏️</Text>
-                <KamiText variant="overline" color={Colors.primary} bold>Daily Reflection</KamiText>
-              </View>
-              <KamiText variant="body" style={s.promptText}>“{todayPrompt.content}”</KamiText>
-              <View style={s.promptFooter}>
-                {promptResponse ? (
-                  <View style={s.promptAnsweredPill}>
-                    <Text style={{ fontSize: 11, color: Colors.success }}>✓</Text>
-                    <KamiText variant="caption" color={Colors.success} bold>Answered</KamiText>
-                  </View>
-                ) : (
-                  <KamiText variant="caption" color={Colors.primary} bold>Reflect now ›</KamiText>
-                )}
-              </View>
+          <Tap
+            onPress={() => navigation.navigate('Journal')}
+            style={[s.promptCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}
+          >
+            <View style={[s.promptIconWrap, { backgroundColor: colors.primary + '15' }]}>
+              <Text style={{ fontSize: 20, color: colors.primary }}>✍️</Text>
+            </View>
+            <View style={{ flex: 1, gap: 4 }}>
+              <KamiText variant="overline" color={colors.primary} bold>Daily Reflection</KamiText>
+              <KamiText variant="body" style={s.promptText} numberOfLines={3}>"{todayPrompt.content}"</KamiText>
+              <KamiText variant="caption" color={promptResponse ? Colors.success : colors.primary} bold>
+                {promptResponse ? '✓ Answered — Tap to edit' : 'Tap to reflect ›'}
+              </KamiText>
             </View>
           </Tap>
         )}
@@ -313,11 +313,11 @@ export function HomeScreen({ navigation }: Props) {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <View style={s.cardTitleRow}>
-              <Text style={s.cardIcon}>📓</Text>
+              <Text style={[s.cardIcon, { color: colors.primary }]}>📓</Text>
               <KamiText variant="subtitle" bold>Journal</KamiText>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Journal')} hitSlop={8}>
-              <KamiText variant="caption" color={Colors.primary} bold>View all ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
             </TouchableOpacity>
           </View>
           {journalEntries.length === 0 ? (
@@ -325,13 +325,13 @@ export function HomeScreen({ navigation }: Props) {
               <KamiText variant="caption" color={Colors.textMuted} align="center">
                 No entries yet.{'\n'}Your first thought matters.
               </KamiText>
-              <KamiText variant="caption" color={Colors.primary} bold style={{ marginTop: Space[2] }}>Start writing ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Start writing ›</KamiText>
             </Tap>
           ) : (
             <View style={{ gap: Space[2] }}>
-              {journalEntries.slice(0, 2).map(e => (
-                <Tap key={e.id} onPress={() => navigation.navigate('Journal')} style={s.journalPreview}>
-                  <View style={s.journalPreviewDot} />
+              {journalEntries.slice(0, 1).map(e => (
+                <Tap key={e.id} onPress={() => navigation.navigate('Journal')} style={[s.journalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
+                  <View style={[s.journalPreviewDot, { backgroundColor: colors.primary }]} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <KamiText variant="label" numberOfLines={1} bold>
                       {e.title || 'Untitled entry'}
@@ -351,30 +351,30 @@ export function HomeScreen({ navigation }: Props) {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <View style={s.cardTitleRow}>
-              <Text style={s.cardIcon}>🌱</Text>
+              <Text style={[s.cardIcon, { color: colors.primary }]}>🌱</Text>
               <KamiText variant="subtitle" bold>Goals</KamiText>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Goals')} hitSlop={8}>
-              <KamiText variant="caption" color={Colors.primary} bold>View all ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
             </TouchableOpacity>
           </View>
           {activeGoals.length === 0 ? (
             <Tap onPress={() => navigation.navigate('Goals')} style={s.emptyInner}>
               <KamiText variant="caption" color={Colors.textMuted} align="center">No active goals.</KamiText>
-              <KamiText variant="caption" color={Colors.primary} bold style={{ marginTop: Space[2] }}>Set your first goal ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Set your first goal ›</KamiText>
             </Tap>
           ) : (
             <View style={{ gap: Space[3] }}>
               {activeGoals.slice(0, 3).map(g => (
-                <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={s.goalPreview}>
+                <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={[s.goalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
                   <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
                   <View style={{ flex: 1, gap: 4 }}>
                     <KamiText variant="label" numberOfLines={1} bold>{g.title}</KamiText>
-                    <View style={s.miniBar}>
-                      <View style={[s.miniFill, { width: `${g.progress}%` as any }]} />
+                    <View style={[s.miniBar, { backgroundColor: colors.creamDeep }]}>
+                      <View style={[s.miniFill, { width: `${g.progress}%` as any, backgroundColor: colors.primary }]} />
                     </View>
                   </View>
-                  <KamiText variant="caption" color={Colors.primary} bold>{g.progress}%</KamiText>
+                  <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
                 </Tap>
               ))}
               {activeGoals.length > 3 && (
@@ -540,14 +540,30 @@ const s = StyleSheet.create({
 
   // Prompt
   promptCard: {
-    backgroundColor: Colors.rose100 + '22',
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: Radii.card,
-    borderWidth: 1.5, borderColor: Colors.primary + '22', ...Shadows.card,
+    padding: Space[4],
+    gap: Space[4],
+    borderWidth: 1.5,
+    borderColor: Colors.border + '44',
+    ...Shadows.card,
   },
-  promptBody:   { padding: Space[4], gap: Space[3] },
-  promptText:   { fontStyle: 'italic', lineHeight: 22, color: Colors.textSecondary, fontFamily: FontFamily.display, fontSize: FontSize.md },
-  promptFooter: { flexDirection: 'row', alignItems: 'center', gap: Space[1] },
-  promptAnsweredPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.success + '15', paddingHorizontal: Space[3], paddingVertical: 2, borderRadius: Radii.full },
+  promptIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptText: {
+    fontStyle: 'italic',
+    fontWeight: '500',
+    lineHeight: 22,
+    color: Colors.textSecondary,
+    fontFamily: FontFamily.display,
+    fontSize: FontSize.base,
+  },
 
   // Journal preview
   emptyInner: { alignItems: 'center', paddingVertical: Space[5] },

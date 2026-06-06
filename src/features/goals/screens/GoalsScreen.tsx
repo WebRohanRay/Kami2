@@ -22,6 +22,7 @@ import { Colors, FontSize, FontWeight, Radii, Shadows, Space, FontFamily } from 
 import type { Goal, GoalCategory } from '@features/home/types';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
+import { useTheme }     from '@shared/hooks';
 
 type Props = MainTabScreenProps<'Goals'>;
 
@@ -63,6 +64,7 @@ const GoalModal: React.FC<{
   onSave:  (title: string, cat: GoalCategory, emoji: string, desc: string | undefined, coverUri: string | null) => Promise<void>;
   saving:  boolean;
 }> = ({ visible, goal, onClose, onSave, saving }) => {
+  const { colors } = useTheme();
   const [title,    setTitle]    = useState('');
   const [desc,     setDesc]     = useState('');
   const [category, setCategory] = useState<GoalCategory>('personal');
@@ -93,7 +95,7 @@ const GoalModal: React.FC<{
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={gm.root}>
+      <SafeAreaView style={[gm.root, { backgroundColor: colors.pageBg }]}>
         <View style={gm.toolbar}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
@@ -101,8 +103,8 @@ const GoalModal: React.FC<{
           <KamiText variant="overline">{goal ? 'Edit goal' : 'New goal'}</KamiText>
           <TouchableOpacity onPress={() => { if (!title.trim()) return; Keyboard.dismiss(); onSave(title.trim(), category, emoji, desc.trim() || undefined, coverUri); }} disabled={saving || !title.trim()} hitSlop={8}>
             {saving
-              ? <ActivityIndicator size="small" color={Colors.primary} />
-              : <KamiText variant="label" color={title.trim() ? Colors.primary : Colors.textMuted} bold>Save</KamiText>
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <KamiText variant="label" color={title.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>
             }
           </TouchableOpacity>
         </View>
@@ -112,7 +114,7 @@ const GoalModal: React.FC<{
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={gm.emojiRow}>
               {EMOJIS.map(e => (
-                <TouchableOpacity key={e} style={[gm.emojiBtn, emoji === e && gm.emojiBtnOn]} onPress={() => setEmoji(e)}>
+                <TouchableOpacity key={e} style={[gm.emojiBtn, emoji === e && [gm.emojiBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setEmoji(e)}>
                   <Text style={{ fontSize: 22 }}>{e}</Text>
                 </TouchableOpacity>
               ))}
@@ -131,9 +133,9 @@ const GoalModal: React.FC<{
           <KamiText variant="overline" style={gm.sectionLabel}>Category</KamiText>
           <View style={gm.catGrid}>
             {CATEGORIES.map(c => (
-              <TouchableOpacity key={c.id} style={[gm.catChip, category === c.id && gm.catChipOn]} onPress={() => setCategory(c.id)}>
+              <TouchableOpacity key={c.id} style={[gm.catChip, category === c.id && [gm.catChipOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setCategory(c.id)}>
                 <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
-                <KamiText variant="caption" color={category === c.id ? Colors.primary : Colors.textMuted} bold={category === c.id}>{c.label}</KamiText>
+                <KamiText variant="caption" color={category === c.id ? colors.primary : Colors.textMuted} bold={category === c.id}>{c.label}</KamiText>
               </TouchableOpacity>
             ))}
           </View>
@@ -142,7 +144,7 @@ const GoalModal: React.FC<{
           <View style={gm.coverHeader}>
             <KamiText variant="overline">Cover Photo (optional)</KamiText>
             <TouchableOpacity onPress={handlePickCover} style={gm.addCoverBtn} disabled={picking}>
-              {picking ? <ActivityIndicator size="small" color={Colors.primary} /> : <KamiText variant="caption" color={Colors.primary} bold>{coverUri ? 'Change Photo' : '+ Choose Cover'}</KamiText>}
+              {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>{coverUri ? 'Change Photo' : '+ Choose Cover'}</KamiText>}
             </TouchableOpacity>
           </View>
 
@@ -249,26 +251,28 @@ export function GoalsScreen({ navigation }: Props) {
 
   const handleRefresh = async () => { setRefreshing(true); await refresh(); setRefreshing(false); };
 
+  const { colors } = useTheme();
+
   return (
-    <SafeAreaView style={s.root}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View>
           <KamiText variant="overline">Your progress</KamiText>
           <KamiText variant="title">Goals</KamiText>
         </View>
-        <TouchableOpacity style={s.addBtn} onPress={() => { setEditing(null); setModalVisible(true); }}>
-          <Text style={s.addBtnPlus}>+</Text>
-          <KamiText variant="label" color={Colors.primary} bold>Add goal</KamiText>
+        <TouchableOpacity style={[s.addBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setEditing(null); setModalVisible(true); }}>
+          <Text style={[s.addBtnPlus, { color: colors.primary }]}>+</Text>
+          <KamiText variant="label" color={colors.primary} bold>Add goal</KamiText>
         </TouchableOpacity>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         {/* Summary */}
         {goals.length > 0 && (
@@ -297,9 +301,9 @@ export function GoalsScreen({ navigation }: Props) {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Space[5] }}>
             <View style={s.filterRow}>
               {[{ id: 'all', emoji: '✦', label: 'All' }, ...CATEGORIES].map(c => (
-                <TouchableOpacity key={c.id} style={[s.filterChip, filter === c.id && s.filterChipOn]} onPress={() => setFilter(c.id as any)}>
+                <TouchableOpacity key={c.id} style={[s.filterChip, filter === c.id && [s.filterChipOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setFilter(c.id as any)}>
                   <Text style={{ fontSize: 14 }}>{c.emoji}</Text>
-                  <KamiText variant="caption" color={filter === c.id ? Colors.primary : Colors.textMuted} bold={filter === c.id}>{c.label}</KamiText>
+                  <KamiText variant="caption" color={filter === c.id ? colors.primary : Colors.textMuted} bold={filter === c.id}>{c.label}</KamiText>
                 </TouchableOpacity>
               ))}
             </View>
@@ -307,7 +311,7 @@ export function GoalsScreen({ navigation }: Props) {
         )}
 
         {goalsLoading === 'loading' && goals.length === 0 && (
-          <View style={s.center}><ActivityIndicator color={Colors.primary} /></View>
+          <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
         {goalsLoading !== 'loading' && goals.length === 0 && (
@@ -317,8 +321,8 @@ export function GoalsScreen({ navigation }: Props) {
             <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
               Every big achievement starts with a single goal.
             </KamiText>
-            <View style={s.emptyBtn}>
-              <KamiText variant="label" color={Colors.primary} bold>Set your first goal ›</KamiText>
+            <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+              <KamiText variant="label" color={colors.primary} bold>Set your first goal ›</KamiText>
             </View>
           </TouchableOpacity>
         )}
@@ -344,6 +348,7 @@ export function GoalsScreen({ navigation }: Props) {
 }
 
 const GoalCard: React.FC<{ goal: Goal; onEdit: () => void; onDelete: () => void; onProgress: (g: Goal, d: number) => void; completed?: boolean }> = ({ goal, onEdit, onDelete, onProgress, completed }) => {
+  const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   const cat = CATEGORIES.find(c => c.id === goal.category);
   return (
@@ -384,9 +389,9 @@ const GoalCard: React.FC<{ goal: Goal; onEdit: () => void; onDelete: () => void;
 
         <View style={s.progRow}>
           <View style={s.progTrack}>
-            <View style={[s.progFill, { width: `${goal.progress}%` as any }, completed && { backgroundColor: Colors.success }]} />
+            <View style={[s.progFill, { width: `${goal.progress}%` as any, backgroundColor: completed ? Colors.success : colors.primary }]} />
           </View>
-          <KamiText variant="caption" color={completed ? Colors.success : Colors.primary} bold style={{ minWidth: 36, ...Platform.select({ web: { textAlign: 'right' } }) }}>
+          <KamiText variant="caption" color={completed ? Colors.success : colors.primary} bold style={{ minWidth: 36, ...Platform.select({ web: { textAlign: 'right' } }) }}>
             {goal.progress}%
           </KamiText>
         </View>
@@ -402,7 +407,7 @@ const GoalCard: React.FC<{ goal: Goal; onEdit: () => void; onDelete: () => void;
                 : <KamiText variant="caption" color={Colors.textMuted}>{STATUS_LABELS[goal.status]}</KamiText>
               }
             </View>
-            <TouchableOpacity style={s.ctrlBtnPlus} onPress={() => onProgress(goal, 10)} disabled={goal.progress === 100}>
+            <TouchableOpacity style={[s.ctrlBtnPlus, { backgroundColor: colors.primary }]} onPress={() => onProgress(goal, 10)} disabled={goal.progress === 100}>
               <KamiText variant="caption" color="#fff" bold>+10%</KamiText>
             </TouchableOpacity>
           </View>

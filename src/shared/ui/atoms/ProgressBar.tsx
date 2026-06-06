@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View, ViewStyle } from 'react-native';
 import { Colors, Radii } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 interface ProgressBarProps {
   progress: number;       // 0–1
@@ -14,11 +15,13 @@ interface ProgressBarProps {
 const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   height = 6,
-  color = Colors.primary,
+  color,
   trackColor = Colors.border + '55',
   animated = true,
   style,
 }) => {
+  const { colors } = useTheme();
+  const activeColor = color ?? colors.primary;
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -40,7 +43,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
       <Animated.View
         style={[
           styles.fill,
-          { width, height, backgroundColor: color, borderRadius: height },
+          { width, height, backgroundColor: activeColor, borderRadius: height },
         ]}
       />
     </View>

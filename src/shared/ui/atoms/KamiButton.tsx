@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Colors, Radii, Sizing, FontSize, FontWeight, Space } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize    = 'sm' | 'md' | 'lg';
@@ -35,6 +36,7 @@ const KamiButton: React.FC<KamiButtonProps> = ({
   disabled,
   ...rest
 }) => {
+  const { colors } = useTheme();
   const h  = HEIGHT[size];
   const fs = FONT[size];
   const w  = fullWidth ? '100%' : undefined;
@@ -44,7 +46,7 @@ const KamiButton: React.FC<KamiButtonProps> = ({
       <TouchableOpacity
         activeOpacity={0.82}
         disabled={disabled || loading}
-        style={[styles.base, styles.primary, { height: h, width: w }, disabled && styles.primaryDisabled, style]}
+        style={[styles.base, { backgroundColor: colors.primary }, { height: h, width: w }, disabled && styles.primaryDisabled, style]}
         accessibilityRole="button"
         {...rest}
       >
@@ -66,16 +68,16 @@ const KamiButton: React.FC<KamiButtonProps> = ({
       <TouchableOpacity
         activeOpacity={0.78}
         disabled={disabled || loading}
-        style={[styles.base, styles.secondary, { height: h, width: w }, style]}
+        style={[styles.base, { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: 'transparent' }, { height: h, width: w }, style]}
         accessibilityRole="button"
         {...rest}
       >
         {loading ? (
-          <ActivityIndicator color={Colors.primary} size="small" />
+          <ActivityIndicator color={colors.primary} size="small" />
         ) : (
           <View style={styles.row}>
-            {icon ? <Text style={[styles.secondaryLabel, { fontSize: fs + 2 }]}>{icon}</Text> : null}
-            <Text style={[styles.secondaryLabel, { fontSize: fs }]}>{label}</Text>
+            {icon ? <Text style={[styles.secondaryLabel, { color: colors.primary }, { fontSize: fs + 2 }]}>{icon}</Text> : null}
+            <Text style={[styles.secondaryLabel, { color: colors.primary }, { fontSize: fs }]}>{label}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -92,8 +94,8 @@ const KamiButton: React.FC<KamiButtonProps> = ({
         {...rest}
       >
         <View style={styles.row}>
-          {icon ? <Text style={[styles.ghostLabel, { fontSize: fs + 2 }]}>{icon}</Text> : null}
-          <Text style={[styles.ghostLabel, { fontSize: fs }]}>{label}</Text>
+          {icon ? <Text style={[styles.ghostLabel, { color: colors.primary }, { fontSize: fs + 2 }]}>{icon}</Text> : null}
+          <Text style={[styles.ghostLabel, { color: colors.primary }, { fontSize: fs }]}>{label}</Text>
         </View>
       </TouchableOpacity>
     );
