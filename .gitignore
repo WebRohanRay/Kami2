@@ -1,4 +1,17 @@
-node_modules
+# Expo
 .expo/
+
+# Gradle
+.gradle/
+android/.gradle/
+
+# Build outputs
+android/build/
+android/app/build/
+
+# Node
+node_modules/
+
+# Environment variables
 .env
-google-services.json
+.env.local
