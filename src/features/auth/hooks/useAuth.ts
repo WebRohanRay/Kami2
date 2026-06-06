@@ -158,6 +158,10 @@ export function useAuth() {
 
   async function signOut(): Promise<Result<void>> {
     const { reset, setStatus } = store();
+    if (user?.id) {
+      // Mark user offline immediately in the database before signing out
+      await profileRepo.updateProfile(user.id, { lastSeenAt: '1970-01-01T00:00:00.000Z' }).catch(() => {});
+    }
     const r = await authService.signOut();
     if (!r.success) return r;
     reset();

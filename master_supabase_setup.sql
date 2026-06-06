@@ -677,6 +677,10 @@ CREATE INDEX IF NOT EXISTS idx_mood_logs_user_date ON mood_logs(user_id, logged_
 DO $$
 BEGIN
   BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+  EXCEPTION WHEN duplicate_object THEN NULL; END;
+
+  BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE mood_logs;
   EXCEPTION WHEN duplicate_object THEN NULL; END;
   

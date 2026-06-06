@@ -38,6 +38,7 @@ import { useTheme }      from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple }      from '@features/couple/hooks/useCouple';
+import { supabase }       from '@shared/lib/supabase';
 
 function getRelationshipDuration(anniversaryDate: string | null): string {
   if (!anniversaryDate) return 'Connected';
@@ -198,18 +199,55 @@ export function HomeScreen({ navigation }: Props) {
 
   // Couple Space Hooks & State
   const { 
-    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories 
+    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories, setPartner 
   } = useCoupleStore();
   const { loadAll: loadCoupleAll, submitAnswer } = useCouple();
 
   const [answerInput, setAnswerInput] = useState('');
   const [submittingAnswerState, setSubmittingAnswerState] = useState(false);
 
+  // Trigger periodic tick to refresh online status calculations locally
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (user?.activeSpace !== 'couple') return;
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000); // tick every 30s
+    return () => clearInterval(interval);
+  }, [user?.activeSpace]);
+
   useEffect(() => {
     if (user?.activeSpace === 'couple') {
       loadCoupleAll();
     }
   }, [user?.activeSpace, user?.id, loadCoupleAll]);
+
+  // Realtime subscription for partner's lastSeenAt updates
+  useEffect(() => {
+    if (user?.activeSpace !== 'couple' || !partner?.id) return;
+
+    const channel = supabase
+      .channel(`partner_profile_realtime_${partner.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${partner.id}` },
+        (payload) => {
+          const p = payload.new as any;
+          setPartner({
+            id: p.id,
+            nickname: p.nickname || 'Partner',
+            email: p.email || '',
+            avatarUrl: p.avatar_url,
+            lastSeenAt: p.last_seen_at,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.activeSpace, partner?.id]);
 
   const handleMoodPick = (m: typeof MOODS[0]) => { setPending(m); setMoodModal(true); };
   const handleMoodSave = async (note: string) => {
@@ -240,9 +278,15 @@ export function HomeScreen({ navigation }: Props) {
 
   if (user?.activeSpace === 'couple' && couple) {
     const partnerName = partner?.nickname || partner?.email?.split('@')[0] || 'Partner';
-    const isPartnerOnline = partner?.lastSeenAt
-      ? (Date.now() - new Date(partner.lastSeenAt).getTime() < 5 * 60 * 1000)
-      : false;
+    const isPartnerOnline = (() => {
+      if (!partner?.lastSeenAt) return false;
+      const parsedTime = new Date(partner.lastSeenAt).getTime();
+      if (isNaN(parsedTime)) return false;
+      const diffMs = Date.now() - parsedTime;
+      // Allow minor clock skew in the future (up to 5 minutes) and up to 5 minutes in the past.
+      // This protects against emulator timezone discrepancies where partner.lastSeenAt is in the future.
+      return diffMs >= -5 * 60 * 1000 && diffMs < 5 * 60 * 1000;
+    })();
     const myAnswer = dailyAnswers.find(a => a.userId === user?.id);
     const partnerAnswer = dailyAnswers.find(a => a.userId === partner?.id);
     const bothAnswered = myAnswer && partnerAnswer;
@@ -263,27 +307,41 @@ export function HomeScreen({ navigation }: Props) {
             <KamiText style={[s.kamiLogo, { color: colors.primary }]}>Kami</KamiText>
             <View style={s.onlineContainer}>
               <KamiText variant="caption" color={Colors.textMuted} style={s.greeting}>
-                {couple.name || `${name} & ${partnerName}`} ❤️
+                {couple.name || `${name} & ${partnerName}`}
               </KamiText>
-              {partner && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 }}>
-                  <View style={[s.onlineDot, { backgroundColor: isPartnerOnline ? Colors.success : Colors.textMuted + '66' }]} />
-                  <KamiText variant="caption" color={isPartnerOnline ? Colors.success : Colors.textMuted} style={{ fontSize: 11 }}>
-                    {isPartnerOnline ? 'online' : 'offline'}
-                  </KamiText>
-                </View>
-              )}
+              <Text style={{ fontSize: 11, color: Colors.textMuted + '88', marginHorizontal: 2 }}>•</Text>
+              <KamiText variant="caption" color={isPartnerOnline ? Colors.success : Colors.textMuted} bold={isPartnerOnline} style={{ fontSize: 11 }}>
+                {isPartnerOnline ? 'online' : 'offline'}
+              </KamiText>
             </View>
           </View>
           <View style={s.topBarRight}>
             <TouchableOpacity 
-              style={[s.avatarWrap, { borderColor: colors.primary, backgroundColor: colors.creamDeep }]} 
+              style={[s.avatarWrap, { borderColor: isPartnerOnline ? Colors.success : colors.primaryLight, backgroundColor: colors.creamDeep }]} 
               onPress={() => navigation.navigate('Settings')}
             >
-              {user?.avatarUrl
-                ? <Image source={{ uri: user.avatarUrl }} style={s.avatarImg} />
-                : <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
-              }
+              {partner?.avatarUrl ? (
+                <Image source={{ uri: partner.avatarUrl }} style={s.avatarImg} />
+              ) : (
+                <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(partnerName)}</Text>
+              )}
+              {/* Online/Offline status dot on partner's avatar */}
+              <View 
+                style={[
+                  s.heroOnlineBadge, 
+                  { 
+                    position: 'absolute',
+                    bottom: -1, 
+                    right: -1, 
+                    width: 14, 
+                    height: 14, 
+                    borderRadius: 7, 
+                    borderWidth: 2.5, 
+                    borderColor: colors.pageBg, 
+                    backgroundColor: isPartnerOnline ? Colors.success : '#CBD5E1' 
+                  }
+                ]} 
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -795,7 +853,7 @@ export default HomeScreen;
 
 const s = StyleSheet.create({
   root:  { flex: 1, backgroundColor: Colors.pageBg },
-  scroll:{ paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[4] },
+  scroll:{ paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[5] },
 
   // Top bar
   topBar: {
@@ -818,20 +876,21 @@ const s = StyleSheet.create({
     gap: Space[2],
   },
   avatarWrap: {
-    width: Sizing.avatarMd, height: Sizing.avatarMd,
-    borderRadius: Sizing.avatarMd / 2,
+    width: Sizing.avatarSm, height: Sizing.avatarSm,
+    borderRadius: Sizing.avatarSm / 2,
     backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden', borderWidth: 2, borderColor: Colors.primary,
     ...Shadows.sm,
   },
   avatarImg:    { width: '100%', height: '100%' },
-  avatarLetter: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: FontWeight.extrabold },
-  greeting:     { marginTop: 0, lineHeight: 18 },
+  avatarLetter: { color: Colors.primary, fontSize: FontSize.md, fontWeight: FontWeight.extrabold },
+  greeting:     { marginTop: 2, lineHeight: 18 },
   onlineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: Space[1],
+    marginTop: 2,
   },
   onlineDot: {
     width: 8,
@@ -839,39 +898,109 @@ const s = StyleSheet.create({
     borderRadius: 4,
   },
 
-  // Streak banner
-  streakBanner: {
-    flexDirection: 'row', backgroundColor: Colors.cardBg,
-    borderRadius: Radii.card, padding: Space[4],
-    borderWidth: 1.5, borderColor: Colors.border + '44',
-    ...Shadows.card,
+  // Premium Hero Banner
+  heroGradient: {
+    borderRadius: Radii.card,
+    overflow: 'hidden',
+    ...Shadows.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  heroContent: {
+    padding: Space[5],
     gap: Space[4],
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  streakItem:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Space[3] },
-  streakIconContainer: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Colors.creamDeep,
+  dualAvatarsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroAvatarWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    ...Shadows.sm,
   },
-  streakDivider:{ width: 1.5, height: 32, backgroundColor: Colors.border + '55' },
-  streakEmoji:  { fontSize: 20 },
-  streakNum:    { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: Colors.textPrimary, lineHeight: 22 },
-  streakLabel:  { fontSize: 10, marginTop: -2 },
+  heroAvatarOverlap: {
+    marginLeft: -16,
+  },
+  heroAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  heroAvatarLetter: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.extrabold,
+    fontFamily: FontFamily.display,
+  },
+  heroOnlineBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  dayCountBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: Space[3],
+    paddingVertical: Space[1] + 1,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  dayCountText: {
+    fontSize: FontSize.xs,
+    color: '#fff',
+    fontWeight: FontWeight.semibold,
+  },
+  heroTextSection: {
+    gap: Space[1],
+    marginVertical: Space[1],
+  },
+  heroTitle: {
+    fontSize: FontSize.xl + 2,
+    fontWeight: FontWeight.extrabold,
+    fontFamily: FontFamily.display,
+    letterSpacing: -0.5,
+  },
+  heroDuration: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.medium,
+  },
+  heroFooter: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingTop: Space[3],
+    marginTop: Space[1],
+  },
+  heroFooterText: {
+    fontSize: FontSize.sm,
+    color: '#ffffffdd',
+    fontWeight: FontWeight.medium,
+  },
 
   // Generic card
   card: {
     backgroundColor: Colors.cardBg, borderRadius: Radii.card,
-    padding: Space[4], gap: Space[4],
-    borderWidth: 1.5, borderColor: Colors.border + '44',
+    padding: Space[5], gap: Space[4],
+    borderWidth: 1, borderColor: Colors.border + '55',
     ...Shadows.card,
   },
   cardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitleRow:{ flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  cardIcon:    { fontSize: FontSize.md, color: Colors.primary },
+  cardIcon:    { fontSize: FontSize.lg },
   donePill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.primary + '18', borderRadius: Radii.full,
@@ -922,15 +1051,15 @@ const s = StyleSheet.create({
   weekRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingTop: Space[3], borderTopWidth: 1, borderTopColor: Colors.border + '33', marginTop: Space[1] },
   weekDot:    { alignItems: 'center', gap: 3 },
 
-  // Prompt
+  // Prompt / Daily Question
   promptCard: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: Radii.card,
     padding: Space[4],
     gap: Space[4],
-    borderWidth: 1.5,
-    borderColor: Colors.border + '44',
+    borderWidth: 1,
+    borderColor: Colors.border + '55',
     ...Shadows.card,
   },
   promptIconWrap: {
@@ -949,43 +1078,99 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
   },
 
+  // Dialogue styling for answers
+  bubbleMine: {
+    padding: Space[4],
+    borderRadius: Radii.card,
+    borderBottomRightRadius: 4,
+    borderWidth: 1,
+    alignSelf: 'flex-end',
+    maxWidth: '85%',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  bubblePartner: {
+    padding: Space[4],
+    borderRadius: Radii.card,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    maxWidth: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+
   // Journal preview
   emptyInner: { alignItems: 'center', paddingVertical: Space[5] },
   journalPreview: {
-    flexDirection: 'row', alignItems: 'center', gap: Space[3],
-    paddingVertical: Space[3], paddingHorizontal: Space[3],
-    backgroundColor: Colors.creamDeep + '33', borderRadius: Radii.md,
-    borderWidth: 1, borderColor: Colors.border + '22',
+    flexDirection: 'row', alignItems: 'center', gap: Space[4],
+    paddingVertical: Space[4], paddingHorizontal: Space[4],
+    borderRadius: Radii.card,
+    borderWidth: 1,
   },
-  journalPreviewDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary },
+  journalPreviewDot: { width: 8, height: 8, borderRadius: 4 },
+  journalPreviewThumb: {
+    width: 55,
+    height: 55,
+    borderRadius: Radii.sm,
+    backgroundColor: '#eee',
+  },
 
   // Goals preview
   goalPreview: {
-    flexDirection: 'row', alignItems: 'center', gap: Space[3],
-    paddingVertical: Space[3], paddingHorizontal: Space[3],
-    backgroundColor: Colors.creamDeep + '33', borderRadius: Radii.md,
-    borderWidth: 1, borderColor: Colors.border + '22',
+    flexDirection: 'row', alignItems: 'center', gap: Space[4],
+    paddingVertical: Space[3] + 2, paddingHorizontal: Space[4],
+    borderRadius: Radii.md,
+    borderWidth: 1,
   },
   miniBar: {
-    height: 6, backgroundColor: Colors.creamDeep, borderRadius: 3, overflow: 'hidden', flex: 1,
+    height: 8, borderRadius: 4, overflow: 'hidden', flex: 1,
   },
-  miniFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 3 },
+  miniFill: { height: '100%', borderRadius: 4 },
 
   // Quick actions
-  quickRow: { flexDirection: 'row', gap: Space[3] },
+  quickRow: { flexDirection: 'row', gap: Space[4] },
   quickCard: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: Space[3],
     paddingVertical: Space[4], paddingHorizontal: Space[4], backgroundColor: Colors.cardBg,
-    borderRadius: Radii.card, borderWidth: 1.5, borderColor: Colors.border + '44',
-    ...Shadows.sm,
+    borderRadius: Radii.card, borderWidth: 1, borderColor: Colors.border + '55',
+    ...Shadows.card,
   },
   quickEmoji: { fontSize: 26 },
 
   // Couple specific styles
-  answersRow: { gap: Space[2], marginTop: Space[1] },
-  answerBubble: { padding: Space[3], borderRadius: Radii.md, borderWidth: 1, borderColor: Colors.border + '44', backgroundColor: Colors.cardBg },
-  answerInput: { minHeight: 60, borderWidth: 1.5, borderRadius: Radii.input, padding: Space[3], color: Colors.textPrimary, textAlignVertical: 'top', fontSize: FontSize.base },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[3], justifyContent: 'space-between' },
-  statsCard: { width: '47%', padding: Space[4], borderRadius: Radii.card, gap: Space[1], alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '22' },
-  statsNum: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary, fontFamily: FontFamily.display },
+  answersRow: { gap: Space[3], marginTop: Space[2] },
+  answerInput: { minHeight: 72, borderWidth: 1, borderRadius: Radii.input, padding: Space[4], color: Colors.textPrimary, textAlignVertical: 'top', fontSize: FontSize.base },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[4], justifyContent: 'space-between' },
+  statsCard: { width: '47%', paddingVertical: Space[5], paddingHorizontal: Space[4], borderRadius: Radii.card, gap: Space[2], alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '33', ...Shadows.sm },
+  statsNum: { fontSize: FontSize.xl + 4, fontWeight: FontWeight.bold, color: Colors.textPrimary, fontFamily: FontFamily.display },
+
+  // Streak styles for personal space
+  streakBanner: {
+    flexDirection: 'row', backgroundColor: Colors.cardBg,
+    borderRadius: Radii.card, padding: Space[4],
+    borderWidth: 1, borderColor: Colors.border + '55',
+    ...Shadows.card,
+    gap: Space[4],
+    alignItems: 'center',
+  },
+  streakItem:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Space[3] },
+  streakIconContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.creamDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakDivider:{ width: 1, height: 32, backgroundColor: Colors.border + '33' },
+  streakEmoji:  { fontSize: 20 },
+  streakNum:    { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: Colors.textPrimary, lineHeight: 22 },
+  streakLabel:  { fontSize: 10, marginTop: -2 },
 });
