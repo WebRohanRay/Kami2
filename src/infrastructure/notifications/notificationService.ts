@@ -87,3 +87,30 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     return null;
   }
 }
+
+/**
+ * Triggers a local native notification immediately.
+ */
+export async function triggerLocalNotificationAsync(
+  title: string,
+  body: string,
+  data?: any
+): Promise<void> {
+  if (!Notifications) {
+    console.warn('Push notification native module is not available.');
+    return;
+  }
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: data || {},
+        sound: true,
+      },
+      trigger: null, // null trigger means show immediately
+    });
+  } catch (error) {
+    console.error('Error scheduling local notification:', error);
+  }
+}

@@ -533,6 +533,86 @@ export function HomeScreen({ navigation }: Props) {
       }
     };
 
+    const getHeroContent = () => {
+      // 1. Unlocked & Unread letters from partner
+      const unreadLetter = coupleLetters
+        .filter(l => l.senderId !== user?.id && l.isUnlocked && !l.isRead && !l.isDraft && !l.isArchived)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (unreadLetter) {
+        return {
+          title: 'A new letter',
+          script: 'arrived ❤️',
+          time: `Written ${getTimeAgo(unreadLetter.createdAt)}`,
+          cta: 'Open Letter →',
+        };
+      }
+
+      // 2. Unlocked & Read letters from partner
+      const readLetter = coupleLetters
+        .filter(l => l.senderId !== user?.id && l.isUnlocked && l.isRead && !l.isDraft && !l.isArchived)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (readLetter) {
+        return {
+          title: 'Latest Letter',
+          script: 'opened ✉️',
+          time: `Opened ${getTimeAgo(readLetter.createdAt)}`,
+          cta: 'Read Letters →',
+        };
+      }
+
+      // 3. Locked letters from partner
+      const lockedLetter = coupleLetters
+        .filter(l => l.senderId !== user?.id && !l.isUnlocked && !l.isDraft && !l.isArchived)
+        .sort((a, b) => new Date(a.deliverAt).getTime() - new Date(b.deliverAt).getTime())[0];
+      if (lockedLetter) {
+        return {
+          title: 'Future Letter',
+          script: 'is locked 🔒',
+          time: `Unlocks on ${new Date(lockedLetter.deliverAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+          cta: 'View Scheduled →',
+        };
+      }
+
+      // 4. Any letter by current user (drafts, scheduled, unlocked)
+      const myLetter = coupleLetters
+        .filter(l => l.senderId === user?.id && !l.isArchived)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (myLetter) {
+        if (myLetter.isDraft) {
+          return {
+            title: 'Your Draft',
+            script: 'in progress 📝',
+            time: `Last saved ${getTimeAgo(myLetter.createdAt)}`,
+            cta: 'Edit Draft →',
+          };
+        } else if (myLetter.isUnlocked) {
+          return {
+            title: 'Your letter',
+            script: 'is unlocked ✉️',
+            time: `Written ${getTimeAgo(myLetter.createdAt)}`,
+            cta: 'Read Letters →',
+          };
+        } else {
+          return {
+            title: 'Letter Sealed',
+            script: 'scheduled 🔒',
+            time: `Unlocks on ${new Date(myLetter.deliverAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+            cta: 'View Scheduled →',
+          };
+        }
+      }
+
+      // 5. Default empty state
+      return {
+        title: 'Seal a memory',
+        script: 'for the future ✨',
+        time: 'No letters written yet',
+        cta: 'Write Letter →',
+      };
+    };
+
+    const heroContent = getHeroContent();
+
     const handleSendLove = async () => {
       if (user?.id && couple?.id) {
         setLoveSending(true);
@@ -549,43 +629,53 @@ export function HomeScreen({ navigation }: Props) {
       <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
         <StatusBar style="dark" />
 
-        {/* ── 1. HEADER SECTION ──────────────────────── */}
-        <View style={hsStyles.premiumHeader}>
-          <View style={hsStyles.headerLeft}>
-            <TouchableOpacity 
-              activeOpacity={0.9}
-              onPress={() => navigation.navigate('Settings')}
-              style={hsStyles.couplePhotoFrame}
-            >
-              {partner?.avatarUrl ? (
-                <Image 
-                  source={{ uri: partner.avatarUrl }} 
-                  style={hsStyles.couplePhoto} 
-                />
-              ) : (
-                <View style={[hsStyles.couplePhotoPlaceholder, { backgroundColor: colors.creamDeep }]}>
-                  <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(partnerName)}</Text>
-                </View>
-              )}
-              <View style={[hsStyles.onlineStatusBadge, { backgroundColor: isPartnerOnline ? '#22c55e' : '#94a3b8' }]} />
-            </TouchableOpacity>
+        {/* ── 1. FLOATING ISLAND HEADER ──────────────── */}
+        <View style={hsStyles.floatingHeader}>
+          <TouchableOpacity 
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('Settings')}
+            style={hsStyles.headerAvatarGroup}
+          >
+            {/* User Avatar */}
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={hsStyles.headerUserAvatar} />
+            ) : (
+              <View style={[hsStyles.headerUserAvatarPlaceholder, { backgroundColor: colors.creamDeep }]}>
+                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>{initial(name)}</Text>
+              </View>
+            )}
 
-            <View style={hsStyles.appIdentity}>
-              <KamiText style={[hsStyles.appName, { color: colors.primary }]} bold>Kami ✨</KamiText>
-              <KamiText style={hsStyles.coupleName} bold>{name} & {partnerName} ❤️</KamiText>
-              <KamiText style={hsStyles.daysCount}>{relationshipDays} Days Together</KamiText>
+            {/* Partner Avatar overlapping */}
+            {partner?.avatarUrl ? (
+              <Image source={{ uri: partner.avatarUrl }} style={hsStyles.headerPartnerAvatar} />
+            ) : (
+              <View style={[hsStyles.headerPartnerAvatarPlaceholder, { backgroundColor: colors.creamDeep }]}>
+                <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>{initial(partnerName)}</Text>
+              </View>
+            )}
+            
+            {/* Status dot on the partner avatar */}
+            <View style={[hsStyles.headerOnlineBadge, { backgroundColor: isPartnerOnline ? '#22c55e' : '#94a3b8' }]} />
+          </TouchableOpacity>
+
+          <View style={hsStyles.headerBrand}>
+            <KamiText style={[hsStyles.headerBrandLogo, { color: colors.primary }]} bold>Kami</KamiText>
+            <View style={hsStyles.headerMetaRow}>
+              <Text style={[hsStyles.headerMetaText, { color: colors.primaryDark }]}>{relationshipDays} days together</Text>
+              <Text style={{ fontSize: 10 }}>❤️</Text>
             </View>
           </View>
 
-          <View style={hsStyles.headerActions}>
+          <View style={hsStyles.headerActionsRow}>
             <TouchableOpacity 
-              style={hsStyles.headerGlassBtn}
+              style={hsStyles.headerActionCircle}
               onPress={() => Alert.alert('Search', 'Search couple space...')}
             >
-              <Text style={{ fontSize: 16 }}>🔍</Text>
+              <Text style={{ fontSize: 15 }}>🔍</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity 
-              style={hsStyles.headerGlassBtn}
+              style={hsStyles.headerActionCircle}
               onPress={() => {
                 if (homeAlerts.length > 0) {
                   Alert.alert('Notifications', homeAlerts.map(a => `${a.title}: ${a.message}`).join('\n'));
@@ -594,9 +684,9 @@ export function HomeScreen({ navigation }: Props) {
                 }
               }}
             >
-              <Text style={{ fontSize: 16 }}>🔔</Text>
+              <Text style={{ fontSize: 15 }}>🔔</Text>
               {homeAlerts.length > 0 && (
-                <View style={[hsStyles.notifBadgeDot, { backgroundColor: colors.primary }]} />
+                <View style={[hsStyles.headerActionBadgeDot, { backgroundColor: colors.primary }]} />
               )}
             </TouchableOpacity>
           </View>
@@ -650,12 +740,12 @@ export function HomeScreen({ navigation }: Props) {
 
           {/* ── 3. TODAY'S MOMENT CARD (HERO) ─────────── */}
           <ImageBackground
-            source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBVo5UBqhIVeM-wgfjIejlBbswrZ05C-eYLadYjh1b8FAIKxQO7JOD6W4xVfcCCaybhJAn-GTQnLBoS018YtDfZQsE2cddHAlvpWyfVaFLFjP7rIwQHz7b49ghMNHHfZQvi0QpyKjjep46d2XdMAlRqCDjFDEo9HUcOSTBeDpNISsT0lVgcg4lRgMu4LjLzCJtyYq3kGj5VXXEAVHskJgHUeCxvm_VB_UWwsHMIN_nATl_tycmNYFt8zJBbHuDSe8ji2YGEu-yd' }}
+            source={{ uri: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?q=80&w=600&auto=format&fit=crop' }}
             style={hsStyles.heroCardImage}
             imageStyle={{ borderRadius: 24 }}
           >
             <LinearGradient
-              colors={['transparent', 'rgba(109, 17, 41, 0.92)']}
+              colors={['transparent', 'rgba(109, 17, 41, 0.95)']}
               style={hsStyles.heroOverlay}
             >
               <View style={hsStyles.heroTopRow}>
@@ -673,16 +763,14 @@ export function HomeScreen({ navigation }: Props) {
               </View>
 
               <View style={hsStyles.heroContentBottom}>
-                <KamiText style={hsStyles.heroTitleText}>A new letter</KamiText>
-                <KamiText style={[hsStyles.heroTitleScript, { color: colors.primaryLight }]}>arrived ❤️</KamiText>
-                <KamiText style={hsStyles.heroTimeText}>
-                  {coupleLetters.length > 0 ? `Written ${getTimeAgo(coupleLetters[0].createdAt)}` : 'Written 2 hours ago'}
-                </KamiText>
+                <KamiText style={hsStyles.heroTitleText}>{heroContent.title}</KamiText>
+                <KamiText style={[hsStyles.heroTitleScript, { color: colors.primaryLight }]}>{heroContent.script}</KamiText>
+                <KamiText style={hsStyles.heroTimeText}>{heroContent.time}</KamiText>
                 <TouchableOpacity 
                   style={hsStyles.heroCtaBtn}
                   onPress={() => navigation.navigate('Future')}
                 >
-                  <KamiText bold style={{ color: colors.primary }}>Open Letter →</KamiText>
+                  <KamiText bold style={{ color: colors.primary }}>{heroContent.cta}</KamiText>
                 </TouchableOpacity>
               </View>
             </LinearGradient>
@@ -1570,95 +1658,132 @@ const hsStyles = StyleSheet.create({
     padding: Space[1],
   },
 
-  // 1. Premium Header Styles
-  premiumHeader: {
+  // 1. Floating Island Header Styles
+  floatingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Space[5],
-    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2],
-    paddingBottom: Space[4],
-    backgroundColor: Colors.pageBg,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space[3],
-  },
-  couplePhotoFrame: {
-    position: 'relative',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    marginHorizontal: Space[5],
+    marginTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[3],
+    marginBottom: Space[3],
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[4],
     backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#fff',
-    ...Shadows.sm,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+    ...Shadows.md,
     elevation: 3,
   },
-  couplePhoto: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 25,
-    objectFit: 'cover',
+  headerAvatarGroup: {
+    flexDirection: 'row',
+    position: 'relative',
+    width: 58,
+    height: 38,
+    alignItems: 'center',
   },
-  heartBadge: {
+  headerUserAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#fff',
     position: 'absolute',
-    bottom: -3,
-    right: -3,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
+    left: 0,
+    zIndex: 1,
+  },
+  headerUserAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    ...Shadows.sm,
+    position: 'absolute',
+    left: 0,
+    zIndex: 1,
   },
-  heartBadgeText: {
-    fontSize: 10,
+  headerPartnerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    position: 'absolute',
+    left: 18,
+    zIndex: 2,
   },
-  appIdentity: {
-    gap: 1,
+  headerPartnerAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    left: 18,
+    zIndex: 2,
   },
-  appName: {
-    fontSize: FontSize.md,
+  headerOnlineBadge: {
+    position: 'absolute',
+    bottom: 1,
+    right: 5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    zIndex: 3,
+  },
+  headerBrand: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBrandLogo: {
+    fontSize: 16,
     fontWeight: 'bold',
     fontFamily: FontFamily.display,
+    letterSpacing: 1,
   },
-  coupleName: {
-    fontSize: FontSize.sm,
-    color: Colors.textPrimary,
+  headerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 1,
   },
-  daysCount: {
-    fontSize: 10,
-    color: Colors.textMuted,
+  headerMetaText: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
-  headerActions: {
+  headerActionsRow: {
     flexDirection: 'row',
     gap: Space[2],
   },
-  headerGlassBtn: {
+  headerActionCircle: {
     position: 'relative',
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.45)',
+    borderColor: 'rgba(201, 104, 130, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.sm,
     elevation: 2,
   },
-  notifBadgeDot: {
+  headerActionBadgeDot: {
     position: 'absolute',
-    top: 2,
-    right: 2,
+    top: -1,
+    right: -1,
     width: 8,
     height: 8,
     borderRadius: 4,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#fff',
   },
 

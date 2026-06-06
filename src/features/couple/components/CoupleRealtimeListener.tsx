@@ -6,6 +6,7 @@ import { useCouple } from '../hooks/useCouple';
 import { supabase } from '@shared/lib/supabase';
 import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { navigationRef } from '@core/navigation';
+import { triggerLocalNotificationAsync } from '@infrastructure/notifications/notificationService';
 
 export function CoupleRealtimeListener() {
   const user = useAuthStore(s => s.user);
@@ -60,6 +61,11 @@ export function CoupleRealtimeListener() {
             message: `${partnerName} just sent you a letter!`,
             targetScreen: 'Future'
           });
+          triggerLocalNotificationAsync(
+            'A secret letter arrived! 💌',
+            `"${partnerName} sealed a new time capsule for you. Open it to feel all the butterflies! 🦋"`,
+            { screen: 'Future' }
+          );
           Alert.alert(
             'New Love Letter! ✉️',
             `${partnerName} just sealed a new love letter for you.`,
@@ -86,6 +92,11 @@ export function CoupleRealtimeListener() {
             message: `${partnerName} opened your letter!`,
             targetScreen: 'Future'
           });
+          triggerLocalNotificationAsync(
+            'Letter read! ❤️',
+            `"${partnerName} just opened your love letter! They are probably smiling right now. 🥰"`,
+            { screen: 'Future' }
+          );
         }
       })
       // 2. Couple Journals
@@ -104,6 +115,11 @@ export function CoupleRealtimeListener() {
             icon: '📓',
             targetScreen: 'Journal'
           });
+          triggerLocalNotificationAsync(
+            'Our story grows! 📓',
+            `"${partnerName} wrote a new entry in our journal: go read what they shared! ✨"`,
+            { screen: 'Journal' }
+          );
         }
       })
       // 3. Couple Comments
@@ -122,6 +138,11 @@ export function CoupleRealtimeListener() {
               icon: '💬',
               targetScreen: 'Journal'
             });
+            triggerLocalNotificationAsync(
+              'A sweet whisper! 💬',
+              `"${partnerName} left a comment on your journal entry. Go check it out! 😘"`,
+              { screen: 'Journal' }
+            );
           }
         }
       })
@@ -147,6 +168,11 @@ export function CoupleRealtimeListener() {
               message: `${partnerName} left a reaction in the journal.`,
               targetScreen: 'Journal'
             });
+            triggerLocalNotificationAsync(
+              'Love is in the air! ❤️',
+              `"${partnerName} reacted to your journal page. Sending you extra hugs! 🥰"`,
+              { screen: 'Journal' }
+            );
           }
         }
       })
@@ -173,6 +199,11 @@ export function CoupleRealtimeListener() {
             message: `A new shared goal has been created!`,
             targetScreen: 'Goals'
           });
+          triggerLocalNotificationAsync(
+            'New dream unlocked! 🎯',
+            `"We just added a new shared goal: let's conquer the world together, one step at a time! 🌱"`,
+            { screen: 'Goals' }
+          );
         } else if (payload.eventType === 'UPDATE') {
           if (oldRow && oldRow.progress !== newRow.progress) {
             setToast({
@@ -188,6 +219,17 @@ export function CoupleRealtimeListener() {
                 message: `"${newRow.title}" is fully completed!`,
                 targetScreen: 'Goals'
               });
+              triggerLocalNotificationAsync(
+                'Goal Completed! 🎉',
+                `"We did it! We finished '${newRow.title}'. Time to celebrate with a big kiss! 😘"`,
+                { screen: 'Goals' }
+              );
+            } else {
+              triggerLocalNotificationAsync(
+                "We're getting closer! 📈",
+                `"Teamwork makes the dream work! Progress on '${newRow.title}' is now ${newRow.progress}%! 🌸"`,
+                { screen: 'Goals' }
+              );
             }
           }
         }
@@ -200,6 +242,7 @@ export function CoupleRealtimeListener() {
         filter: `couple_id=eq.${coupleId}` 
       }, (payload) => {
         loadMemories();
+        const newRow = payload.new as any;
         if (payload.eventType === 'INSERT') {
           setToast({
             title: 'New Memory Card! 📸',
@@ -213,6 +256,11 @@ export function CoupleRealtimeListener() {
             message: `${partnerName} added a new memory to your timeline.`,
             targetScreen: 'Memories'
           });
+          triggerLocalNotificationAsync(
+            'Look at us being cute! 📸',
+            `"${partnerName} added a new memory to our wall: '${newRow.title}'. Let's keep making milestones! 🥰"`,
+            { screen: 'Memories' }
+          );
         }
       })
       // 7. Couple Answers
@@ -231,6 +279,11 @@ export function CoupleRealtimeListener() {
             icon: '💭',
             targetScreen: 'Home'
           });
+          triggerLocalNotificationAsync(
+            'A secret revealed! 💭',
+            `"${partnerName} answered today's question! Type your answer to unlock theirs! 😉"`,
+            { screen: 'Home' }
+          );
         }
       })
       // 8. Relationship Events (Calendar)
@@ -249,6 +302,11 @@ export function CoupleRealtimeListener() {
             icon: '📅',
             targetScreen: 'Home'
           });
+          triggerLocalNotificationAsync(
+            'Date Night scheduled? 📅',
+            `"New countdown: '${newRow.title}' has been added to our calendar! Can't wait! 🥰"`,
+            { screen: 'Home' }
+          );
         }
       })
       .subscribe();
