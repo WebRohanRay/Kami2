@@ -47,11 +47,30 @@ async function hydrateUser(
 }
 
 export function useAuth() {
+  const user = useAuthStore(s => s.user);
+
   // Stable references from getState — avoids infinite effect loops
   const store = useAuthStore.getState;
 
   // Keep infra refs stable across renders
   const hydrateRef = useRef(hydrateUser);
+
+  // Heartbeat to update last_seen_at when user is active
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const runHeartbeat = () => {
+      profileRepo.updateProfile(user.id, { lastSeenAt: new Date().toISOString() }).catch(() => {});
+    };
+
+    // Run immediately on active user session
+    runHeartbeat();
+
+    // Set interval for every 30 seconds
+    const interval = setInterval(runHeartbeat, 30 * 1000);
+
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -165,6 +184,9 @@ export function useAuth() {
       dailyReminder?: boolean;
       weeklyDigest?: boolean;
       streakAlerts?: boolean;
+      activeSpace?: 'personal' | 'couple';
+      currentMoodLabel?: string;
+      currentMoodEmoji?: string;
     }
   ): Promise<Result<void>> {
     const { setUser } = store();

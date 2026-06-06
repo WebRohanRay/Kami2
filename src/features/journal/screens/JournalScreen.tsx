@@ -23,6 +23,9 @@ import type { JournalEntry } from '@features/home/types';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
+import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCouple }      from '@features/couple/hooks/useCouple';
+import { supabase }       from '@shared/lib/supabase';
 
 type Props = MainTabScreenProps<'Journal'>;
 
@@ -304,35 +307,51 @@ export function JournalScreen({ navigation }: Props) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [availableTags, setAvailableTags] = useState<string[]>(JOURNAL_TAGS);
 
+  // Couple Space state
+  const { couple, coupleJournals } = useCoupleStore();
+  const { 
+    loadJournals: loadCoupleJournals, 
+    addJournal: addCoupleJournal, 
+    addComment: addCoupleComment, 
+    toggleReaction 
+  } = useCouple();
+
+  const [selectedCommentsEntry, setSelectedCommentsEntry] = useState<any>(null);
+  const [commentsVisible, setCommentsVisible] = useState(false);
+
+  useEffect(() => {
+    if (user?.activeSpace === 'couple') {
+      loadCoupleJournals();
+    }
+  }, [user?.activeSpace, loadCoupleJournals]);
+
   // Sync available unique tags (including custom ones) from unfiltered database state
   useEffect(() => {
-    if (!search && !selectedTag && journalEntries.length > 0) {
-      const unique = Array.from(new Set([...JOURNAL_TAGS, ...journalEntries.flatMap(e => e.tags || [])]));
+    const activeList = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
+    if (!search && !selectedTag && activeList.length > 0) {
+      const unique = Array.from(new Set([...JOURNAL_TAGS, ...activeList.flatMap(e => e.tags || [])]));
       setAvailableTags(unique);
     }
-  }, [journalEntries, search, selectedTag]);
+  }, [journalEntries, coupleJournals, search, selectedTag, user?.activeSpace]);
 
   // Filter local lists
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && user?.activeSpace !== 'couple') {
       loadJournal(search.trim() || undefined, selectedTag || undefined);
     }
-  }, [search, selectedTag, user?.id]);
+  }, [search, selectedTag, user?.id, user?.activeSpace, loadJournal]);
 
   const handleSave = async (body: string, title?: string, tags: string[] = [], localUris: string[] = []) => {
     if (!user?.id) return;
     setWriteSaving(true);
     try {
       let relativePaths: string[] = [];
-
-      // Determine the target ID (use editing ID or generate a new one)
       const targetId = editing ? editing.id : uuid();
 
       // Separate existing remote signed URLs from new local picker URIs
       const localPickerUris = localUris.filter(u => u.startsWith('file://') || u.startsWith('content://'));
       const existingPaths = (editing?.imageUrls ?? [])
         .filter(url => localUris.includes(url))
-        // Map back to relative storage paths if possible, or extract path
         .map(url => {
           const match = url.match(/\/journal_images\/(.+?)\?/);
           return match ? decodeURIComponent(match[1]) : null;
@@ -351,12 +370,27 @@ export function JournalScreen({ navigation }: Props) {
         relativePaths = existingPaths;
       }
 
-      const r = editing
-        ? await editJournalEntry(editing.id, { body, title, tags, imageUrls: relativePaths })
-        : await addJournalEntry({ body, title, tags, imageUrls: relativePaths });
+      if (user.activeSpace === 'couple' && couple) {
+        if (editing) {
+          const { error } = await supabase
+            .from('couple_journals')
+            .update({ body, title, tags, image_urls: relativePaths, updated_at: new Date().toISOString() })
+            .eq('id', editing.id);
+          if (error) Alert.alert('Kami', error.message);
+          else { setWriteVisible(false); setEditing(null); loadCoupleJournals(); }
+        } else {
+          const r = await addCoupleJournal(couple.id, body, title, tags, relativePaths);
+          if (!r.success) Alert.alert('Kami', r.error);
+          else { setWriteVisible(false); setEditing(null); }
+        }
+      } else {
+        const r = editing
+          ? await editJournalEntry(editing.id, { body, title, tags, imageUrls: relativePaths })
+          : await addJournalEntry({ body, title, tags, imageUrls: relativePaths });
 
-      if (!r.success) { Alert.alert('Kami', r.error); }
-      else { setWriteVisible(false); setEditing(null); }
+        if (!r.success) { Alert.alert('Kami', r.error); }
+        else { setWriteVisible(false); setEditing(null); }
+      }
     } catch (e) {
       Alert.alert('Kami', 'Error saving your entry.');
     } finally {
@@ -366,7 +400,16 @@ export function JournalScreen({ navigation }: Props) {
 
   const handleDelete = (e: JournalEntry) => Alert.alert('Delete entry?', 'This cannot be undone and will delete all attachments.', [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: async () => { const r = await removeJournalEntry(e.id); if (!r.success) Alert.alert('Kami', r.error); } },
+    { text: 'Delete', style: 'destructive', onPress: async () => { 
+      if (user?.activeSpace === 'couple') {
+        const { error } = await supabase.from('couple_journals').delete().eq('id', e.id).eq('user_id', user.id);
+        if (error) Alert.alert('Kami', error.message);
+        else loadCoupleJournals();
+      } else {
+        const r = await removeJournalEntry(e.id); 
+        if (!r.success) Alert.alert('Kami', r.error); 
+      }
+    } },
   ]);
 
   const handlePromptSave = async (resp: string) => {
@@ -385,7 +428,15 @@ export function JournalScreen({ navigation }: Props) {
     }
   };
 
-  const handleRefresh = async () => { setRefreshing(true); await refresh(); setRefreshing(false); };
+  const handleRefresh = async () => { 
+    setRefreshing(true); 
+    if (user?.activeSpace === 'couple') {
+      await loadCoupleJournals();
+    } else {
+      await refresh(); 
+    }
+    setRefreshing(false); 
+  };
 
   const { colors } = useTheme();
 
@@ -473,7 +524,7 @@ export function JournalScreen({ navigation }: Props) {
         )}
 
         {/* Empty state */}
-        {journalLoading !== 'loading' && journalEntries.length === 0 && (
+        {((user?.activeSpace === 'couple' ? coupleJournals : journalEntries).length === 0) && (
           <TouchableOpacity style={s.emptyState} onPress={() => { setEditing(null); setWriteVisible(true); }} activeOpacity={0.85}>
             <Text style={{ fontSize: 48, marginBottom: Space[3] }}>📓</Text>
             <KamiText variant="subtitle" align="center">No entries found</KamiText>
@@ -487,8 +538,9 @@ export function JournalScreen({ navigation }: Props) {
         )}
 
         {/* Entries */}
-        {journalEntries.map((e, idx) => {
-          const showDate = idx === 0 || new Date(e.entryDate).toDateString() !== new Date(journalEntries[idx - 1].entryDate).toDateString();
+        {(user?.activeSpace === 'couple' ? coupleJournals : journalEntries).map((e, idx) => {
+          const list = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
+          const showDate = idx === 0 || new Date(e.entryDate).toDateString() !== new Date(list[idx - 1].entryDate).toDateString();
           return (
             <React.Fragment key={e.id}>
               {showDate && (
@@ -496,9 +548,22 @@ export function JournalScreen({ navigation }: Props) {
               )}
               <EntryCard
                 entry={e}
-                onEdit={() => { setEditing(e); setWriteVisible(true); }}
+                onEdit={() => {
+                  if (user?.activeSpace === 'couple' && e.userId !== user?.id) {
+                    Alert.alert('Kami', 'You can only edit entries you wrote.');
+                    return;
+                  }
+                  setEditing(e); setWriteVisible(true);
+                }}
                 onDelete={() => handleDelete(e)}
                 onTogglePin={() => togglePin(e)}
+                activeSpace={user?.activeSpace}
+                user={user}
+                onReact={toggleReaction}
+                onOpenComments={(item) => {
+                  setSelectedCommentsEntry(item);
+                  setCommentsVisible(true);
+                }}
               />
             </React.Fragment>
           );
@@ -511,11 +576,36 @@ export function JournalScreen({ navigation }: Props) {
       {todayPrompt && (
         <PromptModal visible={promptVisible} prompt={todayPrompt.content} existing={promptResponse?.response} onClose={() => setPromptVisible(false)} onSave={handlePromptSave} saving={promptSaving} />
       )}
+      <CommentsModal 
+        visible={commentsVisible} 
+        entry={selectedCommentsEntry} 
+        onClose={() => { setCommentsVisible(false); setSelectedCommentsEntry(null); }} 
+        onAddComment={async (id, text) => {
+          const r = await addCoupleComment(id, text);
+          if (r.success) {
+            // Find updated entry in coupleJournals and update comments modal
+            const freshList = useCoupleStore.getState().coupleJournals;
+            const updated = freshList.find(x => x.id === id);
+            if (updated) setSelectedCommentsEntry(updated);
+          } else {
+            Alert.alert('Kami', r.error);
+          }
+        }} 
+      />
     </SafeAreaView>
   );
 }
 
-const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: () => void; onTogglePin: () => void }> = ({ entry, onEdit, onDelete, onTogglePin }) => {
+const EntryCard: React.FC<{
+  entry: any;
+  onEdit: () => void;
+  onDelete: () => void;
+  onTogglePin: () => void;
+  activeSpace?: 'personal' | 'couple';
+  user?: any;
+  onReact?: (entryId: string, emoji: string) => void;
+  onOpenComments?: (entry: any) => void;
+}> = ({ entry, onEdit, onDelete, onTogglePin, activeSpace, user, onReact, onOpenComments }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   return (
@@ -536,9 +626,11 @@ const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: (
             <TouchableOpacity onPress={onTogglePin} hitSlop={8} style={s.cardBtn}>
               <Text style={{ fontSize: 13, color: entry.isPinned ? colors.primary : Colors.textMuted }}>📌</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onDelete} hitSlop={8} style={s.cardBtn}>
-              <Text style={{ fontSize: 13, color: Colors.textMuted }}>✕</Text>
-            </TouchableOpacity>
+            {(!activeSpace || activeSpace === 'personal' || entry.userId === user?.id) && (
+              <TouchableOpacity onPress={onDelete} hitSlop={8} style={s.cardBtn}>
+                <Text style={{ fontSize: 13, color: Colors.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -550,7 +642,7 @@ const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: (
         {entry.imageUrls && entry.imageUrls.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.imageRowScroll}>
             <View style={s.imageRow}>
-              {entry.imageUrls.map((url, i) => (
+              {entry.imageUrls.map((url: string, i: number) => (
                 <Image key={i} source={{ uri: url }} style={s.cardImage} />
               ))}
             </View>
@@ -559,15 +651,130 @@ const EntryCard: React.FC<{ entry: JournalEntry; onEdit: () => void; onDelete: (
 
         {entry.tags && entry.tags.length > 0 && (
           <View style={s.tagRow}>
-            {entry.tags.map(t => (
+            {entry.tags.map((t: string) => (
               <View key={t} style={[s.tag, { backgroundColor: colors.primary + '15' }]}><KamiText variant="caption" color={colors.primary}>#{t}</KamiText></View>
             ))}
+          </View>
+        )}
+
+        {activeSpace === 'couple' && (
+          <View style={[s.coupleActionsRow, { borderTopColor: Colors.border + '22' }]}>
+            <KamiText variant="caption" color={Colors.textMuted} style={{ flex: 1 }} bold>
+              By {entry.userNickname || 'Partner'}
+            </KamiText>
+            
+            <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
+              {['❤️', '😊', '🥰'].map(emoji => {
+                const count = (entry.reactions ?? []).filter((r: any) => r.emoji === emoji).length;
+                const active = (entry.reactions ?? []).some((r: any) => r.emoji === emoji && r.userId === user?.id);
+                return (
+                  <TouchableOpacity 
+                    key={emoji} 
+                    style={[s.reactionBtn, active && { backgroundColor: colors.primary + '22', borderColor: colors.primary }]}
+                    onPress={() => onReact?.(entry.id, emoji)}
+                  >
+                    <Text style={{ fontSize: 11 }}>{emoji} {count > 0 ? count : ''}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              
+              <TouchableOpacity style={[s.reactionBtn, { paddingHorizontal: Space[3] }]} onPress={() => onOpenComments?.(entry)}>
+                <Text style={{ fontSize: 11 }}>💬 {(entry.comments ?? []).length}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </Animated.View>
     </TouchableOpacity>
   );
 };
+
+const CommentsModal: React.FC<{
+  visible: boolean;
+  entry: any;
+  onClose: () => void;
+  onAddComment: (entryId: string, text: string) => Promise<void>;
+}> = ({ visible, entry, onClose, onAddComment }) => {
+  const { colors } = useTheme();
+  const [commentText, setCommentText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!entry) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[cm.root, { backgroundColor: colors.pageBg }]}>
+        <View style={cm.header}>
+          <KamiText variant="title">Comments</KamiText>
+          <TouchableOpacity onPress={onClose} style={cm.closeBtn}>
+            <KamiText variant="label" color={colors.primary} bold>Close</KamiText>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={cm.scroll} keyboardShouldPersistTaps="handled">
+          <View style={[cm.entrySummary, { backgroundColor: colors.creamDeep + '15' }]}>
+            <KamiText variant="label" bold>{entry.title || 'Shared Entry'}</KamiText>
+            <KamiText variant="caption" color={Colors.textSecondary} numberOfLines={3}>{entry.body}</KamiText>
+          </View>
+          <View style={cm.commentsList}>
+            {(entry.comments ?? []).length === 0 ? (
+              <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginVertical: Space[4] }}>
+                No comments yet. Leave a sweet note!
+              </KamiText>
+            ) : (
+              (entry.comments ?? []).map((c: any) => (
+                <View key={c.id} style={cm.commentCard}>
+                  <View style={cm.commentMeta}>
+                    <KamiText variant="label" bold>{c.userNickname}</KamiText>
+                    <KamiText variant="caption" color={Colors.textMuted}>
+                      {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </KamiText>
+                  </View>
+                  <KamiText variant="body" color={Colors.textSecondary} style={{ marginTop: 2 }}>{c.body}</KamiText>
+                </View>
+              ))
+            )}
+          </View>
+        </ScrollView>
+        <View style={[cm.inputRow, { borderTopColor: Colors.border + '44' }]}>
+          <TextInput
+            style={[cm.input, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11' }]}
+            placeholder="Write a comment..."
+            placeholderTextColor={Colors.textMuted}
+            value={commentText}
+            onChangeText={setCommentText}
+            maxLength={250}
+          />
+          <TouchableOpacity 
+            style={[cm.sendBtn, { backgroundColor: colors.primary }]}
+            disabled={!commentText.trim() || submitting}
+            onPress={async () => {
+              setSubmitting(true);
+              await onAddComment(entry.id, commentText.trim());
+              setCommentText('');
+              setSubmitting(false);
+            }}
+          >
+            <KamiText variant="caption" color="#fff" bold>Send</KamiText>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+};
+
+const cm = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  closeBtn: { padding: Space[2] },
+  scroll: { padding: Space[5] },
+  entrySummary: { padding: Space[4], borderRadius: Radii.card, gap: Space[1], marginBottom: Space[4], borderWidth: 1, borderColor: Colors.border + '22' },
+  commentsList: { gap: Space[3] },
+  commentCard: { padding: Space[3], backgroundColor: Colors.cardBg, borderRadius: Radii.md, borderWidth: 1, borderColor: Colors.border + '11', gap: 2 },
+  commentMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', padding: Space[3], gap: Space[2], borderTopWidth: 1 },
+  input: { flex: 1, height: 42, borderRadius: Radii.input, borderWidth: 1, paddingHorizontal: Space[3], color: Colors.textPrimary, fontSize: FontSize.sm },
+  sendBtn: { paddingVertical: Space[2] + 2, paddingHorizontal: Space[4], borderRadius: Radii.full },
+});
 
 export default JournalScreen;
 
@@ -613,4 +820,8 @@ const s = StyleSheet.create({
 
   tagRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: Space[1] },
   tag:        { backgroundColor: Colors.primary + '15', borderRadius: Radii.full, paddingHorizontal: Space[2], paddingVertical: 2 },
+
+  // Couple Space journal card styles
+  coupleActionsRow: { flexDirection: 'row', alignItems: 'center', paddingTop: Space[3], borderTopWidth: 1, marginTop: Space[2] },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 6, borderRadius: Radii.sm, borderWidth: 1, borderColor: Colors.border + '44', backgroundColor: Colors.creamDeep + '11' },
 });

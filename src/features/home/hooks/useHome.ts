@@ -17,6 +17,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useAuthStore } from '@features/auth';
 import { supabase } from '@shared/lib/supabase';
 import * as homeService from '@infrastructure/home';
+import * as profileRepo from '@infrastructure/profile';
 import { useHomeStore } from '../store';
 import type {
   CreateMoodLogInput,
@@ -173,6 +174,16 @@ export function useHome() {
       s.setTodayMood(result.data);
       // Reload streak — triggered by DB but pull fresh immediately for UI
       loadStreak();
+      if (user?.id) {
+        profileRepo.updateProfile(user.id, {
+          currentMoodEmoji: result.data.moodEmoji,
+          currentMoodLabel: result.data.moodLabel
+        }).then((res) => {
+          if (res.success) {
+            useAuthStore.getState().setUser(res.data);
+          }
+        }).catch(err => console.error('Failed to sync mood to profile:', err));
+      }
     } else {
       s.setMoodError(result.error);
     }

@@ -43,6 +43,17 @@ import { useAuthStore } from '@features/auth';
 import { useTheme }     from '@shared/hooks';
 import { pickAvatarImage, uploadAvatar } from '@shared/lib/storage';
 import type { MainTabScreenProps } from '@core/navigation/types';
+import * as Clipboard from 'expo-clipboard';
+import * as coupleService from '@infrastructure/couple/coupleService';
+import { useCoupleStore } from '@features/couple/store/coupleStore';
+import type { CoupleInvitation } from '@features/couple/types';
+
+function getDaysRemaining(deleteAtStr: string | null): number {
+  if (!deleteAtStr) return 7;
+  const diffTime = new Date(deleteAtStr).getTime() - Date.now();
+  const diffDays = Math.ceil(diffTime / 86400000);
+  return Math.max(0, diffDays);
+}
 
 type Props = MainTabScreenProps<'Settings'>;
 
@@ -277,7 +288,7 @@ const selectorStyles = StyleSheet.create({
 export function SettingsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const { signOut, deleteAccount, updateProfile, exportData } = useAuth();
+  const { signOut, deleteAccount, updateProfile, exportData, refreshUser } = useAuth();
 
   const [nickname,       setNickname]       = useState(user?.nickname ?? '');
   const [editingProfile, setEditingProfile] = useState(false);
@@ -290,6 +301,47 @@ export function SettingsScreen({ navigation }: Props) {
   // Selector & Info Sheets
   const [activeSelector, setActiveSelector] = useState<'theme' | 'textSize' | null>(null);
   const [activeInfo,     setActiveInfo]     = useState<'privacy' | 'terms' | null>(null);
+
+  // Couple Space State
+  const { 
+    couple, partner, receivedInvitations, setCouple, setPartner, setReceivedInvitations 
+  } = useCoupleStore();
+
+  const [loadingCouple, setLoadingCouple] = useState(false);
+  const [partnerIdInput, setPartnerIdInput] = useState('');
+  const [searchingPartner, setSearchingPartner] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [editingCouple, setEditingCouple] = useState(false);
+  const [coupleNameInput, setCoupleNameInput] = useState('');
+  const [coupleAnniversaryInput, setCoupleAnniversaryInput] = useState('');
+  const [updatingCoupleDetailsState, setUpdatingCoupleDetailsState] = useState(false);
+
+  const loadCoupleInfo = async () => {
+    if (!user?.id) return;
+    setLoadingCouple(true);
+    const r = await coupleService.fetchActiveCouple();
+    if (r.success) {
+      setCouple(r.data.couple);
+      setPartner(r.data.partner);
+    }
+    const inv = await coupleService.fetchReceivedInvitations();
+    if (inv.success) {
+      setReceivedInvitations(inv.data);
+    }
+    setLoadingCouple(false);
+  };
+
+  useEffect(() => {
+    refreshUser().catch(() => {});
+    loadCoupleInfo();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (couple) {
+      setCoupleNameInput(couple.name ?? '');
+      setCoupleAnniversaryInput(couple.anniversaryDate ?? '');
+    }
+  }, [couple]);
 
   useEffect(() => { setNickname(user?.nickname ?? ''); }, [user?.nickname]);
 
@@ -307,6 +359,154 @@ export function SettingsScreen({ navigation }: Props) {
     if (!result.success) { Alert.alert('Kami', result.error); return; }
     setEditingProfile(false);
     Alert.alert('Kami', 'Display name updated! 🌸');
+  };
+
+  const handleInvitePartner = async () => {
+    Keyboard.dismiss();
+    const cleanId = partnerIdInput.trim();
+    if (!cleanId) return;
+    if (cleanId === user?.kamiId) {
+      Alert.alert('Kami', 'You cannot invite yourself.');
+      return;
+    }
+    setSearchingPartner(true);
+    const searchRes = await coupleService.searchPartnerByShortId(cleanId);
+    if (!searchRes.success) {
+      setSearchingPartner(false);
+      Alert.alert('Kami', searchRes.error);
+      return;
+    }
+    
+    const partnerInfo = searchRes.data;
+    setSearchingPartner(false);
+    
+    Alert.alert(
+      'Invite Partner',
+      `Would you like to invite ${partnerInfo.nickname || partnerInfo.email} to create a private Couple Space?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Invite',
+          onPress: async () => {
+            setSendingInvite(true);
+            const inviteRes = await coupleService.sendCoupleInvitation(partnerInfo.id);
+            setSendingInvite(false);
+            if (!inviteRes.success) {
+              Alert.alert('Kami', inviteRes.error);
+            } else {
+              Alert.alert('Kami', 'Invitation sent successfully! 💖');
+              setPartnerIdInput('');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleAcceptInvite = async (invite: CoupleInvitation) => {
+    if (!user?.id) return;
+    setLoadingCouple(true);
+    const myNickname = user.nickname || user.email.split('@')[0];
+    const r = await coupleService.acceptInvitation(
+      invite.id,
+      invite.senderId,
+      invite.receiverId,
+      myNickname,
+      invite.senderNickname || 'Partner'
+    );
+    if (r.success) {
+      Alert.alert('Kami', 'Couple Space created! Welcome to your shared space. ❤️');
+      await loadCoupleInfo();
+      await updateProfile(user.id, { activeSpace: 'couple' });
+    } else {
+      Alert.alert('Kami', r.error);
+    }
+    setLoadingCouple(false);
+  };
+
+  const handleDeclineInvite = async (invite: CoupleInvitation) => {
+    setLoadingCouple(true);
+    const r = await coupleService.updateInvitationStatus(invite.id, 'declined');
+    if (r.success) {
+      Alert.alert('Kami', 'Invitation declined.');
+      await loadCoupleInfo();
+    } else {
+      Alert.alert('Kami', r.error);
+    }
+    setLoadingCouple(false);
+  };
+
+  const handleSwitchSpace = async (space: 'personal' | 'couple') => {
+    if (!user?.id) return;
+    if (space === 'couple' && !couple) {
+      Alert.alert('Kami', 'Please connect with a partner first.');
+      return;
+    }
+    setLoadingCouple(true);
+    const r = await updateProfile(user.id, { activeSpace: space });
+    setLoadingCouple(false);
+    if (!r.success) {
+      Alert.alert('Kami', r.error);
+    }
+  };
+
+  const handleSaveCoupleDetails = async () => {
+    if (!couple) return;
+    Keyboard.dismiss();
+    setUpdatingCoupleDetailsState(true);
+    const r = await coupleService.updateCoupleDetails(
+      couple.id,
+      coupleNameInput,
+      coupleAnniversaryInput || null
+    );
+    setUpdatingCoupleDetailsState(false);
+    if (r.success) {
+      Alert.alert('Kami', 'Couple details saved!');
+      setEditingCouple(false);
+      await loadCoupleInfo();
+    } else {
+      Alert.alert('Kami', r.error);
+    }
+  };
+
+  const handleDeleteCoupleSpace = () => {
+    if (!couple) return;
+    Alert.alert(
+      'Delete Couple Space ⚠️',
+      'This will schedule your Couple Space for permanent deletion in 7 days. All shared journals, comments, timeline memories, shared goals, and calendar events will be wiped. This action can be cancelled by visiting Settings at any time within the next 7 days.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Schedule Deletion',
+          style: 'destructive',
+          onPress: async () => {
+            setLoadingCouple(true);
+            const r = await coupleService.scheduleCoupleDeletion(couple.id);
+            setLoadingCouple(false);
+            if (r.success) {
+              Alert.alert('Kami', 'Couple Space deletion scheduled. You have 7 days to restore it.');
+              await loadCoupleInfo();
+              await updateProfile(user!.id, { activeSpace: 'personal' });
+            } else {
+              Alert.alert('Kami', r.error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleRestoreCoupleSpace = async () => {
+    if (!couple) return;
+    setLoadingCouple(true);
+    const r = await coupleService.cancelCoupleDeletion(couple.id);
+    setLoadingCouple(false);
+    if (r.success) {
+      Alert.alert('Kami', 'Couple Space restored successfully! ❤️');
+      await loadCoupleInfo();
+    } else {
+      Alert.alert('Kami', r.error);
+    }
   };
 
   const handleAvatarPress = async () => {
@@ -514,6 +714,131 @@ export function SettingsScreen({ navigation }: Props) {
           </View>
         )}
 
+        {/* ── Couple Space Connection / Switcher ── */}
+        <SettingGroup title="Couple Space">
+          {!couple ? (
+            <>
+              {/* Short ID Card */}
+              <View style={[styles.kamiIdCard, { backgroundColor: colors.creamDeep }]}>
+                <KamiText variant="caption" color={Colors.textMuted}>My Couple ID (share with partner):</KamiText>
+                <View style={styles.kamiIdRow}>
+                  <KamiText variant="subtitle" bold style={{ color: colors.primary }}>
+                    {user?.kamiId ?? 'KAMI-XXXXXX'}
+                  </KamiText>
+                  <TouchableOpacity 
+                    style={[styles.copyBtn, { backgroundColor: colors.primary + '18' }]}
+                    onPress={async () => {
+                      if (user?.kamiId) {
+                        await Clipboard.setStringAsync(user.kamiId);
+                        Alert.alert('Kami', 'Couple ID copied to clipboard! 📋');
+                      }
+                    }}
+                  >
+                    <KamiText variant="caption" color={colors.primary} bold>Copy</KamiText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Send Invitation input */}
+              <View style={styles.inviteForm}>
+                <InputField
+                  icon="❤️"
+                  placeholder="Enter Partner's Couple ID"
+                  value={partnerIdInput}
+                  onChangeText={setPartnerIdInput}
+                  autoCapitalize="characters"
+                  maxLength={11}
+                />
+                <KamiButton
+                  label="Invite Partner"
+                  loading={searchingPartner || sendingInvite}
+                  disabled={!partnerIdInput.trim() || searchingPartner || sendingInvite}
+                  onPress={handleInvitePartner}
+                />
+              </View>
+
+              {/* Received Invitations list */}
+              {receivedInvitations.length > 0 && (
+                <View style={styles.invitesSection}>
+                  <KamiText variant="overline" color={colors.primary} style={{ marginBottom: Space[2] }}>Received Invitations</KamiText>
+                  {receivedInvitations.map(inv => (
+                    <View key={inv.id} style={[styles.inviteCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}>
+                      <View style={{ flex: 1 }}>
+                        <KamiText variant="label" bold>{inv.senderNickname}</KamiText>
+                        <KamiText variant="caption" color={Colors.textMuted}>{inv.senderEmail}</KamiText>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: Space[2] }}>
+                        <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: Colors.success + '15' }]} onPress={() => handleAcceptInvite(inv)}>
+                          <KamiText variant="caption" color={Colors.success} bold>Accept</KamiText>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]} onPress={() => handleDeclineInvite(inv)}>
+                          <KamiText variant="caption" color={Colors.error} bold>Decline</KamiText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Connected Status */}
+              <SettingRow
+                icon="❤️"
+                label="Connected partner"
+                value={partner?.nickname || partner?.email?.split('@')[0] || 'Connected'}
+                showChevron={false}
+              />
+              
+              {/* Space Switcher */}
+              <SettingRow
+                icon="🌱"
+                label="Active Space"
+                value={user?.activeSpace === 'couple' ? 'Couple Space ❤️' : 'Personal Space 🌱'}
+                onPress={() => {
+                  const nextSpace = user?.activeSpace === 'couple' ? 'personal' : 'couple';
+                  handleSwitchSpace(nextSpace);
+                }}
+              />
+
+              {/* Couple Profile details */}
+              <SettingRow
+                icon="📅"
+                label="Couple Settings"
+                value={couple.anniversaryDate ? `Anniversary: ${new Date(couple.anniversaryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Set anniversary date'}
+                onPress={() => setEditingCouple(v => !v)}
+              />
+            </>
+          )}
+        </SettingGroup>
+
+        {/* ── Couple Details Editor ── */}
+        {editingCouple && couple && (
+          <View style={[styles.editCard, { borderColor: colors.primaryLight }]}>
+            <KamiText variant="subtitle">Edit Couple Details</KamiText>
+            <InputField
+              icon="💑"
+              placeholder="Couple Name (e.g. Rohan & Priya)"
+              value={coupleNameInput}
+              onChangeText={setCoupleNameInput}
+              autoCapitalize="words"
+            />
+            <InputField
+              icon="📅"
+              placeholder="Anniversary Date (YYYY-MM-DD)"
+              value={coupleAnniversaryInput}
+              onChangeText={setCoupleAnniversaryInput}
+              hint="Format: YYYY-MM-DD (e.g. 2024-02-14)"
+            />
+            <KamiButton
+              label="Save Details"
+              loading={updatingCoupleDetailsState}
+              disabled={updatingCoupleDetailsState}
+              onPress={handleSaveCoupleDetails}
+            />
+          </View>
+        )}
+
         {/* ── Appearance ── */}
         <SettingGroup title="Appearance">
           <SettingRow
@@ -619,6 +944,26 @@ export function SettingsScreen({ navigation }: Props) {
             label={signingOut ? 'Signing out…' : 'Sign Out'}
             onPress={signingOut ? undefined : handleSignOut}
           />
+          {couple && couple.pendingDeletion ? (
+            <View style={[styles.deleteAlertCard, { borderColor: Colors.warning, backgroundColor: Colors.warning + '11' }]}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <KamiText variant="label" color={Colors.warning} bold>Deletion scheduled</KamiText>
+                <KamiText variant="caption" color={Colors.textSecondary}>
+                  {getDaysRemaining(couple.deleteAt)} days remaining.
+                </KamiText>
+              </View>
+              <TouchableOpacity style={[styles.restoreBtn, { backgroundColor: colors.primary }]} onPress={handleRestoreCoupleSpace}>
+                <KamiText variant="caption" color="#fff" bold>Restore</KamiText>
+              </TouchableOpacity>
+            </View>
+          ) : couple ? (
+            <SettingRow
+              icon="💔"
+              label="Delete Couple Space"
+              danger
+              onPress={handleDeleteCoupleSpace}
+            />
+          ) : null}
           <SettingRow
             icon="🗑️"
             label={deleting ? 'Deleting account...' : 'Delete Account'}
@@ -775,4 +1120,63 @@ const styles = StyleSheet.create({
   // Footer
   footer:      { alignItems: 'center', gap: Space[2], paddingTop: Space[4] },
   footerHeart: { fontSize: FontSize.xl },
+
+  // Couple ID Card
+  kamiIdCard: {
+    padding: Space[4],
+    marginHorizontal: Space[4],
+    marginVertical: Space[2],
+    borderRadius: Radii.md,
+    gap: Space[1],
+  },
+  kamiIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Space[2],
+  },
+  copyBtn: {
+    paddingVertical: Space[1] + 2,
+    paddingHorizontal: Space[3],
+    borderRadius: Radii.full,
+  },
+  inviteForm: {
+    paddingHorizontal: Space[4],
+    paddingVertical: Space[2],
+    gap: Space[3],
+  },
+  invitesSection: {
+    paddingHorizontal: Space[4],
+    paddingVertical: Space[2],
+  },
+  inviteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Space[3],
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    marginTop: Space[2],
+  },
+  inviteActionBtn: {
+    paddingVertical: Space[2],
+    paddingHorizontal: Space[3],
+    borderRadius: Radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteAlertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Space[3],
+    marginHorizontal: Space[4],
+    marginVertical: Space[2],
+    borderRadius: Radii.md,
+    borderWidth: 1.5,
+  },
+  restoreBtn: {
+    paddingVertical: Space[2],
+    paddingHorizontal: Space[3],
+    borderRadius: Radii.sm,
+  },
 });

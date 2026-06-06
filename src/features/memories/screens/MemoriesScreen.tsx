@@ -18,6 +18,9 @@ import { Colors, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/con
 import { useAuthStore } from '@features/auth';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import type { Memory } from '@features/home/types';
+import type { CoupleMemory } from '@features/couple/types';
+import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCouple } from '@features/couple/hooks/useCouple';
 import * as memoryService from '@infrastructure/home/memoryService';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
@@ -36,11 +39,12 @@ const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) =
 // ─── Memory modal ─────────────────────────────────────────────────────────────
 const MemoryModal: React.FC<{
   visible: boolean;
-  memory: Memory | null;
+  memory: Memory | CoupleMemory | null;
   onClose: () => void;
   onSave: (title: string, body: string, emoji: string, mood: string | null, imageUris: string[]) => Promise<void>;
   saving: boolean;
-}> = ({ visible, memory, onClose, onSave, saving }) => {
+  activeSpace: 'personal' | 'couple';
+}> = ({ visible, memory, onClose, onSave, saving, activeSpace }) => {
   const { colors } = useTheme();
   const [title, setTitle] = useState('');
   const [body,  setBody]  = useState('');
@@ -52,9 +56,10 @@ const MemoryModal: React.FC<{
   useEffect(() => {
     if (visible) {
       setTitle(memory?.title ?? '');
-      setBody(memory?.body ?? '');
-      setEmoji(memory?.emoji ?? '🌸');
-      setMood(memory?.mood ?? null);
+      const mBody = memory ? ('description' in memory ? memory.description : (memory as any).body) : '';
+      setBody(mBody ?? '');
+      setEmoji(memory && 'emoji' in memory ? (memory as any).emoji : '🌸');
+      setMood(memory && 'mood' in memory ? (memory as any).mood : null);
       setLocalUris(memory?.imageUrls ?? []);
     }
   }, [visible, memory]);
@@ -88,16 +93,20 @@ const MemoryModal: React.FC<{
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={mm.content}>
           {/* Emoji */}
-          <KamiText variant="overline" style={mm.label}>Emoji</KamiText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={mm.emojiRow}>
-              {MEMORY_EMOJIS.map(e => (
-                <TouchableOpacity key={e} style={[mm.emojiBtn, emoji === e && [mm.emojiBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setEmoji(e)}>
-                  <Text style={{ fontSize: 22 }}>{e}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
+          {activeSpace === 'personal' && (
+            <>
+              <KamiText variant="overline" style={mm.label}>Emoji</KamiText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={mm.emojiRow}>
+                  {MEMORY_EMOJIS.map(e => (
+                    <TouchableOpacity key={e} style={[mm.emojiBtn, emoji === e && [mm.emojiBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setEmoji(e)}>
+                      <Text style={{ fontSize: 22 }}>{e}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
 
           {/* Title */}
           <KamiText variant="overline" style={mm.label}>Title *</KamiText>
@@ -108,14 +117,18 @@ const MemoryModal: React.FC<{
           <TextInput style={[mm.input, { height: 100, textAlignVertical: 'top' }]} placeholder="What made this moment special…" placeholderTextColor={Colors.textMuted} value={body} onChangeText={setBody} multiline maxLength={1000} />
 
           {/* Mood */}
-          <KamiText variant="overline" style={mm.label}>How did you feel?</KamiText>
-          <View style={mm.moodRow}>
-            {MOODS.map(m => (
-              <TouchableOpacity key={m} style={[mm.moodBtn, mood === m && [mm.moodBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setMood(mood === m ? null : m)}>
-                <Text style={{ fontSize: 24 }}>{m}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {activeSpace === 'personal' && (
+            <>
+              <KamiText variant="overline" style={mm.label}>How did you feel?</KamiText>
+              <View style={mm.moodRow}>
+                {MOODS.map(m => (
+                  <TouchableOpacity key={m} style={[mm.moodBtn, mood === m && [mm.moodBtnOn, { borderColor: colors.primary, backgroundColor: colors.primary + '18' }]]} onPress={() => setMood(mood === m ? null : m)}>
+                    <Text style={{ fontSize: 24 }}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
           {/* Photos */}
           <View style={wm.photoHeader}>
@@ -170,18 +183,28 @@ const mm = StyleSheet.create({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export function MemoriesScreen({ navigation }: Props) {
   const user = useAuthStore(s => s.user);
-  
+  const activeSpace = user?.activeSpace ?? 'personal';
+  const coupleStore = useCoupleStore();
+  const coupleActions = useCouple();
+  const couple = coupleStore.couple;
+
   const [memories,   setMemories]   = useState<Memory[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalOpen,  setModalOpen]  = useState(false);
-  const [editing,    setEditing]    = useState<Memory | null>(null);
+  const [editing,    setEditing]    = useState<Memory | CoupleMemory | null>(null);
   const [saving,     setSaving]     = useState(false);
   const [search,     setSearch]     = useState('');
 
   useEffect(() => {
-    if (user?.id) loadMemories(search.trim() || undefined);
-  }, [search, user?.id]);
+    if (activeSpace === 'couple') {
+      if (couple?.id) {
+        coupleActions.loadMemories();
+      }
+    } else {
+      if (user?.id) loadMemories(search.trim() || undefined);
+    }
+  }, [search, user?.id, activeSpace, couple?.id]);
 
   async function loadMemories(searchQuery?: string) {
     setLoading(true);
@@ -200,7 +223,8 @@ export function MemoriesScreen({ navigation }: Props) {
 
       // Separate local picker files from remote signed URLs
       const localPickerUris = localUris.filter(u => u.startsWith('file://') || u.startsWith('content://'));
-      const existingPaths = (editing?.imageUrls ?? [])
+      const imageUrlsToFilter = editing ? editing.imageUrls : [];
+      const existingPaths = (imageUrlsToFilter ?? [])
         .filter(url => localUris.includes(url))
         .map(url => {
           const match = url.match(/\/memory_images\/(.+?)\?/);
@@ -220,14 +244,32 @@ export function MemoriesScreen({ navigation }: Props) {
         relativePaths = existingPaths;
       }
 
-      const r = editing
-        ? await memoryService.updateMemory(editing.id, { title, body, emoji, mood, imageUrls: relativePaths })
-        : await memoryService.createMemory(targetId, { title, body, emoji, mood, imageUrls: relativePaths });
+      if (activeSpace === 'couple') {
+        if (!couple?.id) {
+          Alert.alert('Kami', 'No couple space connected.');
+          setSaving(false);
+          return;
+        }
+        const r = editing
+          ? await coupleActions.updateMemory(editing.id, title, body, relativePaths)
+          : await coupleActions.addMemory(couple.id, title, body, relativePaths);
 
-      if (!r.success) { Alert.alert('Kami', r.error); }
-      else {
-        setModalOpen(false); setEditing(null);
-        loadMemories(search.trim() || undefined);
+        if (!r.success) {
+          Alert.alert('Kami', r.error);
+        } else {
+          setModalOpen(false);
+          setEditing(null);
+        }
+      } else {
+        const r = editing
+          ? await memoryService.updateMemory(editing.id, { title, body, emoji, mood, imageUrls: relativePaths })
+          : await memoryService.createMemory(targetId, { title, body, emoji, mood, imageUrls: relativePaths });
+
+        if (!r.success) { Alert.alert('Kami', r.error); }
+        else {
+          setModalOpen(false); setEditing(null);
+          loadMemories(search.trim() || undefined);
+        }
       }
     } catch (e) {
       Alert.alert('Kami', 'Error saving memory.');
@@ -236,24 +278,55 @@ export function MemoriesScreen({ navigation }: Props) {
     }
   };
 
-  const handleDelete = (m: Memory) => Alert.alert('Delete memory?', `"${m.title}"`, [
+  const handleDelete = (m: Memory | CoupleMemory) => Alert.alert('Delete memory?', `"${m.title}"`, [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => {
-      const r = await memoryService.deleteMemory(m.id);
-      if (!r.success) { Alert.alert('Kami', r.error); return; }
-      setMemories(prev => prev.filter(x => x.id !== m.id));
+      if (activeSpace === 'couple') {
+        const r = await coupleActions.deleteMemory(m.id);
+        if (!r.success) { Alert.alert('Kami', r.error); }
+      } else {
+        const r = await memoryService.deleteMemory(m.id);
+        if (!r.success) { Alert.alert('Kami', r.error); return; }
+        setMemories(prev => prev.filter(x => x.id !== m.id));
+      }
     }},
   ]);
 
-  const handleRefresh = async () => { setRefreshing(true); await loadMemories(search.trim() || undefined); setRefreshing(false); };
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (activeSpace === 'couple') {
+      await coupleActions.loadMemories();
+    } else {
+      await loadMemories(search.trim() || undefined);
+    }
+    setRefreshing(false);
+  };
 
   // Group memories by month
-  const grouped: Record<string, Memory[]> = {};
-  memories.forEach(m => {
-    const key = new Date(m.memoryDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(m);
+  const groupedPersonal: Record<string, Memory[]> = {};
+  if (activeSpace === 'personal') {
+    memories.forEach(m => {
+      const key = new Date(m.memoryDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      if (!groupedPersonal[key]) groupedPersonal[key] = [];
+      groupedPersonal[key].push(m);
+    });
+  }
+
+  const coupleMemories = coupleStore.coupleMemories;
+  const filteredCoupleMemories = coupleMemories.filter(m => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return m.title.toLowerCase().includes(q) || (m.description && m.description.toLowerCase().includes(q));
   });
+
+  const groupedCouple: Record<string, CoupleMemory[]> = {};
+  if (activeSpace === 'couple') {
+    filteredCoupleMemories.forEach(m => {
+      const key = new Date(m.memoryDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      if (!groupedCouple[key]) groupedCouple[key] = [];
+      groupedCouple[key].push(m);
+    });
+  }
 
   const { colors } = useTheme();
 
@@ -264,8 +337,8 @@ export function MemoriesScreen({ navigation }: Props) {
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View style={{ flex: 1 }}>
-          <KamiText variant="overline">Your vault</KamiText>
-          <KamiText variant="title">Memories</KamiText>
+          <KamiText variant="overline">{activeSpace === 'couple' ? 'Relationship timeline' : 'Your vault'}</KamiText>
+          <KamiText variant="title">{activeSpace === 'couple' ? 'Couple Memories' : 'Memories'}</KamiText>
         </View>
         <TouchableOpacity style={[s.addBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setEditing(null); setModalOpen(true); }}>
           <Text style={[s.addPlus, { color: colors.primary }]}>+</Text>
@@ -291,11 +364,14 @@ export function MemoriesScreen({ navigation }: Props) {
         contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        {loading && memories.length === 0 && (
+        {loading && activeSpace === 'personal' && memories.length === 0 && (
+          <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
+        )}
+        {coupleStore.memoriesLoading === 'loading' && activeSpace === 'couple' && coupleMemories.length === 0 && (
           <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
-        {!loading && memories.length === 0 && (
+        {activeSpace === 'personal' && !loading && memories.length === 0 && (
           <TouchableOpacity style={s.emptyState} onPress={() => setModalOpen(true)} activeOpacity={0.85}>
             <Text style={{ fontSize: 56, marginBottom: Space[3] }}>📸</Text>
             <KamiText variant="subtitle" align="center">Your vault is empty</KamiText>
@@ -308,20 +384,153 @@ export function MemoriesScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
 
-        {Object.entries(grouped).map(([month, items]) => (
+        {activeSpace === 'couple' && coupleStore.memoriesLoading !== 'loading' && coupleMemories.length === 0 && (
+          <TouchableOpacity style={s.emptyState} onPress={() => setModalOpen(true)} activeOpacity={0.85}>
+            <Text style={{ fontSize: 56, marginBottom: Space[3] }}>💑</Text>
+            <KamiText variant="subtitle" align="center">No shared memories yet</KamiText>
+            <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
+              {search ? 'Clear search filter to view couple memories.' : 'Start capturing your beautiful relationship milestones.'}
+            </KamiText>
+            <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+              <KamiText variant="label" color={colors.primary} bold>Add your first shared memory ›</KamiText>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {activeSpace === 'personal' && Object.entries(groupedPersonal).map(([month, items]) => (
           <View key={month} style={{ gap: Space[3] }}>
             <KamiText variant="overline">{month} · {items.length}</KamiText>
             {items.map(m => <MemoryCard key={m.id} memory={m} onEdit={() => { setEditing(m); setModalOpen(true); }} onDelete={() => handleDelete(m)} />)}
           </View>
         ))}
 
+        {activeSpace === 'couple' && Object.entries(groupedCouple).map(([month, items]) => (
+          <View key={month} style={{ gap: Space[4] }}>
+            <KamiText variant="overline" style={{ color: colors.primary }}>❤️ {month} · {items.length}</KamiText>
+            <View style={s.timelineContainer}>
+              {items.map((m, idx) => (
+                <CoupleMemoryTimelineCard
+                  key={m.id}
+                  memory={m}
+                  isLast={idx === items.length - 1}
+                  onEdit={() => { setEditing(m); setModalOpen(true); }}
+                  onDelete={() => handleDelete(m)}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
+
         <View style={{ height: Space[8] }} />
       </ScrollView>
 
-      <MemoryModal visible={modalOpen} memory={editing} onClose={() => { setModalOpen(false); setEditing(null); }} onSave={handleSave} saving={saving} />
+      <MemoryModal visible={modalOpen} memory={editing} onClose={() => { setModalOpen(false); setEditing(null); }} onSave={handleSave} saving={saving} activeSpace={activeSpace} />
     </SafeAreaView>
   );
-}
+};
+
+const CoupleMemoryTimelineCard: React.FC<{
+  memory: CoupleMemory;
+  isLast: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}> = ({ memory, isLast, onEdit, onDelete }) => {
+  const { colors } = useTheme();
+  const sc = useRef(new Animated.Value(1)).current;
+
+  return (
+    <View style={s.timelineRow}>
+      {/* Left Timeline Guide */}
+      <View style={s.timelineLeft}>
+        <View style={[s.timelineDot, { backgroundColor: colors.primary }]} />
+        {!isLast && <View style={[s.timelineLine, { backgroundColor: Colors.border }]} />}
+      </View>
+
+      {/* Card Content */}
+      <View style={{ flex: 1, paddingBottom: Space[4] }}>
+        <TouchableOpacity activeOpacity={1} onPress={onEdit}
+          onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
+          onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
+        >
+          <Animated.View style={[s.card, { transform: [{ scale: sc }] }]}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={s.cardTop}>
+                <KamiText variant="label" numberOfLines={1} style={{ flex: 1 }}>{memory.title}</KamiText>
+                <TouchableOpacity onPress={onDelete} hitSlop={8} style={s.delBtn}>
+                  <Text style={{ fontSize: 12, color: Colors.textMuted }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              {memory.description ? <KamiText variant="body" color={Colors.textSecondary} numberOfLines={3} style={{ lineHeight: 20 }}>{memory.description}</KamiText> : null}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Space[1] }}>
+                <KamiText variant="caption" color={Colors.textMuted}>
+                  {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                </KamiText>
+                {memory.tags && memory.tags.length > 0 && (
+                  <View style={s.tagRow}>
+                    {memory.tags.map(tag => (
+                      <View key={tag} style={[s.tagBadge, { backgroundColor: colors.primary + '11' }]}>
+                        <KamiText variant="caption" color={colors.primary} style={{ fontSize: 10 }}>#{tag}</KamiText>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Photos */}
+            {memory.imageUrls && memory.imageUrls.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.imageScroll}>
+                <View style={s.imageRow}>
+                  {memory.imageUrls.map((url, i) => (
+                    <Image key={i} source={{ uri: url }} style={s.photo} />
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+export default MemoriesScreen;
+
+const s = StyleSheet.create({
+  root:   { flex: 1, backgroundColor: Colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
+  addPlus:{ fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
+
+  // Search
+  searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Space[5], marginTop: Space[4], paddingHorizontal: Space[3], backgroundColor: Colors.cardBg, borderRadius: Radii.input, borderWidth: 1, borderColor: Colors.border + '88', ...Shadows.sm },
+  searchIcon:{ fontSize: FontSize.sm, marginRight: Space[2] },
+  searchInput:{ flex: 1, height: 44, fontSize: FontSize.base, color: Colors.textPrimary },
+
+  scroll: { paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[4] },
+  center: { paddingVertical: Space[10], alignItems: 'center' },
+  emptyState: { alignItems: 'center', paddingVertical: Space[10] },
+  emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
+  
+  card:    { flexDirection: 'column', gap: Space[3], backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], borderWidth: 1, borderColor: Colors.border + '44', ...Shadows.sm },
+  cardLeft:{ alignItems: 'center', width: 44 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
+  delBtn:  { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+
+  // Horizontal photos list
+  imageScroll: { marginHorizontal: -Space[4], paddingHorizontal: Space[4], marginTop: Space[1] },
+  imageRow:    { flexDirection: 'row', gap: Space[2] },
+  photo:       { width: 200, height: 130, borderRadius: Radii.sm },
+
+  // Timeline UI styling
+  timelineContainer: { paddingLeft: Space[1] },
+  timelineRow: { flexDirection: 'row' },
+  timelineLeft: { alignItems: 'center', width: 24, marginRight: Space[2] },
+  timelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 18, zIndex: 2 },
+  timelineLine: { width: 2, flex: 1, marginTop: 4, marginBottom: -18 },
+  tagRow: { flexDirection: 'row', gap: Space[1] },
+  tagBadge: { paddingHorizontal: Space[2], paddingVertical: 2, borderRadius: Radii.full },
+});
 
 const MemoryCard: React.FC<{ memory: Memory; onEdit: () => void; onDelete: () => void }> = ({ memory, onEdit, onDelete }) => {
   const sc = useRef(new Animated.Value(1)).current;
@@ -364,32 +573,3 @@ const MemoryCard: React.FC<{ memory: Memory; onEdit: () => void; onDelete: () =>
     </TouchableOpacity>
   );
 };
-
-export default MemoriesScreen;
-
-const s = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
-  addBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
-  addPlus:{ fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
-
-  // Search
-  searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Space[5], marginTop: Space[4], paddingHorizontal: Space[3], backgroundColor: Colors.cardBg, borderRadius: Radii.input, borderWidth: 1, borderColor: Colors.border + '88', ...Shadows.sm },
-  searchIcon:{ fontSize: FontSize.sm, marginRight: Space[2] },
-  searchInput:{ flex: 1, height: 44, fontSize: FontSize.base, color: Colors.textPrimary },
-
-  scroll: { paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[4] },
-  center: { paddingVertical: Space[10], alignItems: 'center' },
-  emptyState: { alignItems: 'center', paddingVertical: Space[10] },
-  emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
-  
-  card:    { flexDirection: 'column', gap: Space[3], backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], borderWidth: 1, borderColor: Colors.border + '44', ...Shadows.sm },
-  cardLeft:{ alignItems: 'center', width: 44 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  delBtn:  { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
-
-  // Horizontal photos list
-  imageScroll: { marginHorizontal: -Space[4], paddingHorizontal: Space[4], marginTop: Space[1] },
-  imageRow:    { flexDirection: 'row', gap: Space[2] },
-  photo:       { width: 200, height: 130, borderRadius: Radii.sm },
-});

@@ -20,6 +20,9 @@ import { useShallow }   from 'zustand/react/shallow';
 import KamiText         from '@shared/ui/atoms/KamiText';
 import { Colors, FontSize, FontWeight, Radii, Shadows, Space, FontFamily } from '@shared/constants';
 import type { Goal, GoalCategory } from '@features/home/types';
+import type { CoupleGoal } from '@features/couple/types';
+import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCouple } from '@features/couple/hooks/useCouple';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
@@ -59,11 +62,12 @@ function daysLeft(iso: string) {
 // ─── Add/Edit goal modal ──────────────────────────────────────────────────────
 const GoalModal: React.FC<{
   visible: boolean;
-  goal: Goal | null;
+  goal: Goal | CoupleGoal | null;
   onClose: () => void;
   onSave:  (title: string, cat: GoalCategory, emoji: string, desc: string | undefined, coverUri: string | null) => Promise<void>;
   saving:  boolean;
-}> = ({ visible, goal, onClose, onSave, saving }) => {
+  activeSpace: 'personal' | 'couple';
+}> = ({ visible, goal, onClose, onSave, saving, activeSpace }) => {
   const { colors } = useTheme();
   const [title,    setTitle]    = useState('');
   const [desc,     setDesc]     = useState('');
@@ -76,9 +80,9 @@ const GoalModal: React.FC<{
     if (visible) {
       setTitle(goal?.title ?? '');
       setDesc(goal?.description ?? '');
-      setCategory(goal?.category ?? 'personal');
+      setCategory((goal?.category as GoalCategory) ?? 'personal');
       setEmoji(goal?.emoji ?? '🌱');
-      setCoverUri(goal?.imageUrl ?? null);
+      setCoverUri(goal && 'imageUrl' in goal ? (goal as any).imageUrl : null);
     }
   }, [visible, goal]);
 
@@ -141,20 +145,24 @@ const GoalModal: React.FC<{
           </View>
 
           {/* Cover Image */}
-          <View style={gm.coverHeader}>
-            <KamiText variant="overline">Cover Photo (optional)</KamiText>
-            <TouchableOpacity onPress={handlePickCover} style={gm.addCoverBtn} disabled={picking}>
-              {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>{coverUri ? 'Change Photo' : '+ Choose Cover'}</KamiText>}
-            </TouchableOpacity>
-          </View>
+          {activeSpace === 'personal' && (
+            <>
+              <View style={gm.coverHeader}>
+                <KamiText variant="overline">Cover Photo (optional)</KamiText>
+                <TouchableOpacity onPress={handlePickCover} style={gm.addCoverBtn} disabled={picking}>
+                  {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>{coverUri ? 'Change Photo' : '+ Choose Cover'}</KamiText>}
+                </TouchableOpacity>
+              </View>
 
-          {coverUri && (
-            <View style={gm.coverPreviewWrap}>
-              <Image source={{ uri: coverUri }} style={gm.coverPreview} />
-              <TouchableOpacity style={gm.removeCoverBadge} onPress={() => setCoverUri(null)}>
-                <Text style={{ color: '#fff', fontSize: 11 }}>✕</Text>
-              </TouchableOpacity>
-            </View>
+              {coverUri && (
+                <View style={gm.coverPreviewWrap}>
+                  <Image source={{ uri: coverUri }} style={gm.coverPreview} />
+                  <TouchableOpacity style={gm.removeCoverBadge} onPress={() => setCoverUri(null)}>
+                    <Text style={{ color: '#fff', fontSize: 11 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -183,49 +191,79 @@ const gm = StyleSheet.create({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export function GoalsScreen({ navigation }: Props) {
   const user = useAuthStore(s => s.user);
+  const activeSpace = user?.activeSpace ?? 'personal';
+  const coupleStore = useCoupleStore();
+  const coupleActions = useCouple();
+  const couple = coupleStore.couple;
+
   const { goals, goalsLoading } = useHomeStore(useShallow(s => ({ goals: s.goals, goalsLoading: s.goalsLoading })));
   const { addGoal, editGoal, removeGoal, refresh } = useHome();
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [editing,      setEditing]      = useState<Goal | null>(null);
+  const [editing,      setEditing]      = useState<Goal | CoupleGoal | null>(null);
   const [saving,       setSaving]       = useState(false);
   const [refreshing,   setRefreshing]   = useState(false);
   const [filter,       setFilter]       = useState<'all' | GoalCategory>('all');
 
-  const active    = goals.filter(g => g.status === 'active');
-  const completed = goals.filter(g => g.status === 'completed');
+  // Dual-mode loaders
+  useEffect(() => {
+    if (activeSpace === 'couple') {
+      if (couple?.id) {
+        coupleActions.loadGoals();
+      }
+    }
+  }, [activeSpace, couple?.id]);
+
+  const currentGoals = activeSpace === 'couple' ? coupleStore.coupleGoals : goals;
+
+  const active    = currentGoals.filter(g => g.status === 'active');
+  const completed = currentGoals.filter(g => g.status === 'completed');
   const filtered  = filter === 'all' ? active : active.filter(g => g.category === filter);
 
   const handleSave = async (title: string, cat: GoalCategory, emoji: string, desc?: string, coverUri: string | null = null) => {
     if (!user?.id) return;
     setSaving(true);
     try {
-      let relativePath: string | null = null;
-      const targetId = editing ? editing.id : uuid();
-
-      if (coverUri && (coverUri.startsWith('file://') || coverUri.startsWith('content://'))) {
-        const uploadRes = await uploadImages('goal_images', user.id, targetId, [coverUri]);
-        if (!uploadRes.success) {
-          Alert.alert('Kami', uploadRes.error);
+      if (activeSpace === 'couple') {
+        if (!couple?.id) {
+          Alert.alert('Kami', 'No couple space connected.');
           setSaving(false);
           return;
         }
-        relativePath = uploadRes.paths[0];
+        const r = editing
+          ? await coupleActions.updateGoal(editing.id, { title, category: cat, emoji, description: desc })
+          : await coupleActions.addGoal(couple.id, title, desc, emoji);
+
+        if (!r.success) { Alert.alert('Kami', r.error); }
+        else { setModalVisible(false); setEditing(null); }
       } else {
-        relativePath = coverUri ? (editing?.imageUrl === coverUri ? coverUri : null) : null;
-        // Map back to relative path if it's a resolved signed URL
-        if (relativePath && relativePath.startsWith('http')) {
-          const match = relativePath.match(/\/goal_images\/(.+?)\?/);
-          if (match) relativePath = decodeURIComponent(match[1]);
+        let relativePath: string | null = null;
+        const targetId = editing ? editing.id : uuid();
+
+        if (coverUri && (coverUri.startsWith('file://') || coverUri.startsWith('content://'))) {
+          const uploadRes = await uploadImages('goal_images', user.id, targetId, [coverUri]);
+          if (!uploadRes.success) {
+            Alert.alert('Kami', uploadRes.error);
+            setSaving(false);
+            return;
+          }
+          relativePath = uploadRes.paths[0];
+        } else {
+          relativePath = coverUri ? (editing && 'imageUrl' in editing ? (editing as any).imageUrl : null) : null;
+          // Map back to relative path if it's a resolved signed URL
+          if (relativePath && relativePath.startsWith('http')) {
+            const match = relativePath.match(/\/goal_images\/(.+?)\?/);
+            if (match) relativePath = decodeURIComponent(match[1]);
+          }
         }
+
+        const r = editing
+          ? await editGoal(editing.id, { title, category: cat, emoji, description: desc, imageUrl: relativePath })
+          : await addGoal({ title, category: cat, emoji, description: desc, imageUrl: relativePath });
+
+        if (!r.success) { Alert.alert('Kami', r.error); }
+        else { setModalVisible(false); setEditing(null); }
       }
-
-      const r = editing
-        ? await editGoal(editing.id, { title, category: cat, emoji, description: desc, imageUrl: relativePath })
-        : await addGoal({ title, category: cat, emoji, description: desc, imageUrl: relativePath });
-
-      if (!r.success) { Alert.alert('Kami', r.error); }
-      else { setModalVisible(false); setEditing(null); }
     } catch (e) {
       Alert.alert('Kami', 'Error saving your goal.');
     } finally {
@@ -233,23 +271,48 @@ export function GoalsScreen({ navigation }: Props) {
     }
   };
 
-  const handleProgress = (g: Goal, delta: number) => {
+  const handleProgress = async (g: Goal | CoupleGoal, delta: number) => {
     const next = Math.min(100, Math.max(0, g.progress + delta));
-    editGoal(g.id, { progress: next });
-    if (next === 100) {
-      setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
-        { text: 'Mark complete', onPress: () => editGoal(g.id, { status: 'completed' }) },
-        { text: 'Keep active', style: 'cancel' },
-      ]), 400);
+    if (activeSpace === 'couple') {
+      await coupleActions.updateGoalProgress(g.id, next);
+      if (next === 100) {
+        setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
+          { text: 'Mark complete', onPress: () => coupleActions.updateGoal(g.id, { status: 'completed' }) },
+          { text: 'Keep active', style: 'cancel' },
+        ]), 400);
+      }
+    } else {
+      editGoal(g.id, { progress: next });
+      if (next === 100) {
+        setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
+          { text: 'Mark complete', onPress: () => editGoal(g.id, { status: 'completed' }) },
+          { text: 'Keep active', style: 'cancel' },
+        ]), 400);
+      }
     }
   };
 
-  const handleDelete = (g: Goal) => Alert.alert('Remove goal?', `"${g.title}"`, [
+  const handleDelete = (g: Goal | CoupleGoal) => Alert.alert('Remove goal?', `"${g.title}"`, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Remove', style: 'destructive', onPress: () => removeGoal(g.id) },
+    { text: 'Remove', style: 'destructive', onPress: async () => {
+      if (activeSpace === 'couple') {
+        const r = await coupleActions.deleteGoal(g.id);
+        if (!r.success) Alert.alert('Kami', r.error);
+      } else {
+        removeGoal(g.id);
+      }
+    }},
   ]);
 
-  const handleRefresh = async () => { setRefreshing(true); await refresh(); setRefreshing(false); };
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (activeSpace === 'couple') {
+      await coupleActions.loadGoals();
+    } else {
+      await refresh();
+    }
+    setRefreshing(false);
+  };
 
   const { colors } = useTheme();
 
@@ -260,12 +323,12 @@ export function GoalsScreen({ navigation }: Props) {
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View>
-          <KamiText variant="overline">Your progress</KamiText>
-          <KamiText variant="title">Goals</KamiText>
+          <KamiText variant="overline">{activeSpace === 'couple' ? 'Together' : 'Your progress'}</KamiText>
+          <KamiText variant="title">{activeSpace === 'couple' ? 'Couple Goals' : 'Goals'}</KamiText>
         </View>
         <TouchableOpacity style={[s.addBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setEditing(null); setModalVisible(true); }}>
           <Text style={[s.addBtnPlus, { color: colors.primary }]}>+</Text>
-          <KamiText variant="label" color={colors.primary} bold>Add goal</KamiText>
+          <KamiText variant="label" color={colors.primary} bold>{activeSpace === 'couple' ? 'Add shared' : 'Add goal'}</KamiText>
         </TouchableOpacity>
       </View>
 
@@ -275,7 +338,7 @@ export function GoalsScreen({ navigation }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         {/* Summary */}
-        {goals.length > 0 && (
+        {currentGoals.length > 0 && (
           <View style={s.summary}>
             <View style={s.summaryItem}>
               <KamiText style={s.summaryNum}>{active.length}</KamiText>
@@ -310,19 +373,21 @@ export function GoalsScreen({ navigation }: Props) {
           </ScrollView>
         )}
 
-        {goalsLoading === 'loading' && goals.length === 0 && (
+        {((goalsLoading === 'loading' && activeSpace === 'personal') ||
+          (coupleStore.goalsLoading === 'loading' && activeSpace === 'couple')) && currentGoals.length === 0 && (
           <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
-        {goalsLoading !== 'loading' && goals.length === 0 && (
+        {((goalsLoading !== 'loading' && activeSpace === 'personal') ||
+          (coupleStore.goalsLoading !== 'loading' && activeSpace === 'couple')) && currentGoals.length === 0 && (
           <TouchableOpacity style={s.emptyState} onPress={() => { setEditing(null); setModalVisible(true); }} activeOpacity={0.85}>
-            <Text style={{ fontSize: 48, marginBottom: Space[3] }}>🌱</Text>
-            <KamiText variant="subtitle" align="center">No goals yet</KamiText>
+            <Text style={{ fontSize: 48, marginBottom: Space[3] }}>{activeSpace === 'couple' ? '💑' : '🌱'}</Text>
+            <KamiText variant="subtitle" align="center">{activeSpace === 'couple' ? 'No shared goals yet' : 'No goals yet'}</KamiText>
             <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-              Every big achievement starts with a single goal.
+              {activeSpace === 'couple' ? 'Milestones to build a beautiful life together.' : 'Every big achievement starts with a single goal.'}
             </KamiText>
             <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
-              <KamiText variant="label" color={colors.primary} bold>Set your first goal ›</KamiText>
+              <KamiText variant="label" color={colors.primary} bold>{activeSpace === 'couple' ? 'Set shared goal ›' : 'Set your first goal ›'}</KamiText>
             </View>
           </TouchableOpacity>
         )}
@@ -342,15 +407,16 @@ export function GoalsScreen({ navigation }: Props) {
         <View style={{ height: Space[8] }} />
       </ScrollView>
 
-      <GoalModal visible={modalVisible} goal={editing} onClose={() => { setModalVisible(false); setEditing(null); }} onSave={handleSave} saving={saving} />
+      <GoalModal visible={modalVisible} goal={editing} onClose={() => { setModalVisible(false); setEditing(null); }} onSave={handleSave} saving={saving} activeSpace={activeSpace} />
     </SafeAreaView>
   );
 }
 
-const GoalCard: React.FC<{ goal: Goal; onEdit: () => void; onDelete: () => void; onProgress: (g: Goal, d: number) => void; completed?: boolean }> = ({ goal, onEdit, onDelete, onProgress, completed }) => {
+const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete: () => void; onProgress: (g: Goal | CoupleGoal, d: number) => void; completed?: boolean }> = ({ goal, onEdit, onDelete, onProgress, completed }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   const cat = CATEGORIES.find(c => c.id === goal.category);
+  const imageUrl = 'imageUrl' in goal ? (goal as any).imageUrl : null;
   return (
     <TouchableOpacity activeOpacity={1} onPress={onEdit}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
@@ -359,9 +425,9 @@ const GoalCard: React.FC<{ goal: Goal; onEdit: () => void; onDelete: () => void;
       <Animated.View style={[s.card, completed && s.cardDone, { transform: [{ scale: sc }] }]}>
         
         {/* Cover Photo */}
-        {goal.imageUrl && (
+        {imageUrl && (
           <View style={s.cardCoverWrap}>
-            <Image source={{ uri: goal.imageUrl }} style={s.cardCover} />
+            <Image source={{ uri: imageUrl }} style={s.cardCover} />
             <View style={s.cardCoverOverlay} />
           </View>
         )}
@@ -369,15 +435,15 @@ const GoalCard: React.FC<{ goal: Goal; onEdit: () => void; onDelete: () => void;
         <View style={s.cardTop}>
           <Text style={s.emojiBadge}>{goal.emoji}</Text>
           <View style={{ flex: 1, gap: 2 }}>
-            <KamiText variant="label" numberOfLines={1} style={goal.imageUrl && { color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0,height:1}, textShadowRadius: 2 }}>
+            <KamiText variant="label" numberOfLines={1} style={imageUrl && { color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0,height:1}, textShadowRadius: 2 }}>
               {goal.title}
             </KamiText>
             {goal.description ? (
-              <KamiText variant="caption" color={goal.imageUrl ? '#e0d5d7' : Colors.textMuted} numberOfLines={1}>
+              <KamiText variant="caption" color={imageUrl ? '#e0d5d7' : Colors.textMuted} numberOfLines={1}>
                 {goal.description}
               </KamiText>
             ) : (
-              <KamiText variant="caption" color={goal.imageUrl ? '#e0d5d7' : Colors.textMuted}>
+              <KamiText variant="caption" color={imageUrl ? '#e0d5d7' : Colors.textMuted}>
                 {cat?.emoji} {cat?.label}
               </KamiText>
             )}

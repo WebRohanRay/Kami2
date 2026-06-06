@@ -18,6 +18,11 @@ type ProfileRow = {
   weekly_digest_enabled: boolean;
   streak_alerts_enabled: boolean;
   push_token: string | null;
+  kami_id: string | null;
+  active_space: 'personal' | 'couple' | null;
+  current_mood_label: string | null;
+  current_mood_emoji: string | null;
+  last_seen_at: string | null;
 };
 
 type UpdateInput = {
@@ -29,6 +34,10 @@ type UpdateInput = {
   weeklyDigest?: boolean;
   streakAlerts?: boolean;
   pushToken?: string;
+  activeSpace?: 'personal' | 'couple';
+  currentMoodLabel?: string;
+  currentMoodEmoji?: string;
+  lastSeenAt?: string;
 };
 
 function clean(v: string | undefined | null): string | undefined {
@@ -59,6 +68,11 @@ export function rowToAuthUser(row: ProfileRow, base: AuthUser, resolvedAvatarUrl
     weeklyDigest:  row.weekly_digest_enabled  ?? base.weeklyDigest,
     streakAlerts:  row.streak_alerts_enabled  ?? base.streakAlerts,
     pushToken:     row.push_token         ?? base.pushToken,
+    kamiId:        row.kami_id            ?? base.kamiId,
+    activeSpace:   (row.active_space as any) ?? base.activeSpace,
+    currentMoodLabel: row.current_mood_label ?? base.currentMoodLabel,
+    currentMoodEmoji: row.current_mood_emoji ?? base.currentMoodEmoji,
+    lastSeenAt:    row.last_seen_at ?? base.lastSeenAt,
   };
 }
 
@@ -85,7 +99,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
       { id: user.id, email: base.email, nickname: base.nickname ?? null, avatar_url: base.avatarUrl ?? null },
       { onConflict: 'id' }
     )
-    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token')
+    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
     .single();
 
   if (error || !data) {
@@ -107,6 +121,10 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
   if ('streakAlerts'   in input) patch.streak_alerts_enabled  = input.streakAlerts;
 
   if ('pushToken' in input) patch.push_token = clean(input.pushToken) ?? null;
+  if ('activeSpace' in input) patch.active_space = input.activeSpace;
+  if ('currentMoodLabel' in input) patch.current_mood_label = input.currentMoodLabel;
+  if ('currentMoodEmoji' in input) patch.current_mood_emoji = input.currentMoodEmoji;
+  if ('lastSeenAt' in input) patch.last_seen_at = input.lastSeenAt;
 
   if (Object.keys(patch).length === 0) {
     return { success: false, error: 'Nothing to update.' };
@@ -116,7 +134,7 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
     .from('profiles')
     .update(patch)
     .eq('id', userId)
-    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token')
+    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
     .single();
 
   if (error || !data) {

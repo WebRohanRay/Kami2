@@ -20,6 +20,10 @@ import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from 
 import { useAuthStore } from '@features/auth';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import type { Letter } from '@features/home/types';
+import type { CoupleLetter } from '@features/couple/types';
+import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCouple } from '@features/couple/hooks/useCouple';
+import * as coupleService from '@infrastructure/couple/coupleService';
 import * as futureService from '@infrastructure/home/futureService';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme } from '@shared/hooks';
@@ -328,9 +332,10 @@ const wm = StyleSheet.create({
 // ─── Read modal (calls RPC to pull locked body/attachments) ───────────────────
 const ReadModal: React.FC<{
   visible: boolean;
-  letter: Letter | null;
+  letter: Letter | CoupleLetter | null;
   onClose: () => void;
-}> = ({ visible, letter, onClose }) => {
+  activeSpace: 'personal' | 'couple';
+}> = ({ visible, letter, onClose, activeSpace }) => {
   const [content, setContent] = useState<{ body: string; imageUrls: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const { colors } = useTheme();
@@ -338,7 +343,11 @@ const ReadModal: React.FC<{
   useEffect(() => {
     if (visible && letter) {
       setLoading(true);
-      futureService.fetchLetter(letter.id).then(r => {
+      const fetchPromise = activeSpace === 'couple'
+        ? coupleService.fetchCoupleLetterDetails(letter.id)
+        : futureService.fetchLetter(letter.id);
+
+      fetchPromise.then(r => {
         setLoading(false);
         if (r.success) setContent(r.data);
         else Alert.alert('Kami', r.error);
@@ -404,6 +413,11 @@ const rm = StyleSheet.create({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export function FutureScreen({ navigation }: Props) {
   const user = useAuthStore(s => s.user);
+  const activeSpace = user?.activeSpace ?? 'personal';
+  const coupleStore = useCoupleStore();
+  const coupleActions = useCouple();
+  const couple = coupleStore.couple;
+
   const { colors } = useTheme();
 
   const [letters,    setLetters]    = useState<Letter[]>([]);
@@ -411,10 +425,19 @@ export function FutureScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [writeOpen,  setWriteOpen]  = useState(false);
   const [readOpen,   setReadOpen]   = useState(false);
-  const [reading,    setReading]    = useState<Letter | null>(null);
+  const [reading,    setReading]    = useState<Letter | CoupleLetter | null>(null);
   const [saving,     setSaving]     = useState(false);
 
-  useEffect(() => { loadLetters(); }, []);
+  // Dual-mode loaders
+  useEffect(() => {
+    if (activeSpace === 'couple') {
+      if (couple?.id) {
+        coupleActions.loadLetters();
+      }
+    } else {
+      loadLetters();
+    }
+  }, [activeSpace, couple?.id]);
 
   async function loadLetters() {
     setLoading(true);
@@ -426,7 +449,6 @@ export function FutureScreen({ navigation }: Props) {
 
   const handleSave = async (subject: string, body: string, daysFromNow: number, localUris: string[] = []) => {
     if (!user?.id) return;
-    setSaving(false);
     setSaving(true);
     try {
       const targetId = uuid();
@@ -443,11 +465,24 @@ export function FutureScreen({ navigation }: Props) {
         relativePaths = uploadRes.paths;
       }
 
-      const r = await futureService.createLetter(targetId, { subject, body, deliverAt, imageUrls: relativePaths });
-      if (!r.success) { Alert.alert('Kami', r.error); }
-      else {
-        setLetters(prev => [...prev, r.data].sort((a, b) => new Date(a.deliverAt).getTime() - new Date(b.deliverAt).getTime()));
-        setWriteOpen(false);
+      if (activeSpace === 'couple') {
+        if (!couple?.id) {
+          Alert.alert('Kami', 'No couple space connected.');
+          setSaving(false);
+          return;
+        }
+        const r = await coupleActions.addLetter(couple.id, subject, body, deliverAt, relativePaths);
+        if (!r.success) { Alert.alert('Kami', r.error); }
+        else {
+          setWriteOpen(false);
+        }
+      } else {
+        const r = await futureService.createLetter(targetId, { subject, body, deliverAt, imageUrls: relativePaths });
+        if (!r.success) { Alert.alert('Kami', r.error); }
+        else {
+          setLetters(prev => [...prev, r.data].sort((a, b) => new Date(a.deliverAt).getTime() - new Date(b.deliverAt).getTime()));
+          setWriteOpen(false);
+        }
       }
     } catch (e) {
       Alert.alert('Kami', 'Failed to seal your letter.');
@@ -456,7 +491,7 @@ export function FutureScreen({ navigation }: Props) {
     }
   };
 
-  const handleOpen = (l: Letter) => {
+  const handleOpen = (l: Letter | CoupleLetter) => {
     if (!l.isUnlocked) {
       Alert.alert('🔒 Sealed envelope', `This letter is locked and cannot be read until ${new Date(l.deliverAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}.`);
       return;
@@ -464,19 +499,34 @@ export function FutureScreen({ navigation }: Props) {
     setReading(l); setReadOpen(true);
   };
 
-  const handleDelete = (l: Letter) => Alert.alert('Delete letter?', `"${l.subject}"`, [
+  const handleDelete = (l: Letter | CoupleLetter) => Alert.alert('Delete letter?', `"${l.subject}"`, [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => {
-      const r = await futureService.deleteLetter(l.id);
-      if (!r.success) { Alert.alert('Kami', r.error); return; }
-      setLetters(prev => prev.filter(x => x.id !== l.id));
+      if (activeSpace === 'couple') {
+        const r = await coupleActions.deleteLetter(l.id);
+        if (!r.success) { Alert.alert('Kami', r.error); }
+      } else {
+        const r = await futureService.deleteLetter(l.id);
+        if (!r.success) { Alert.alert('Kami', r.error); return; }
+        setLetters(prev => prev.filter(x => x.id !== l.id));
+      }
     }},
   ]);
 
-  const handleRefresh = async () => { setRefreshing(true); await loadLetters(); setRefreshing(false); };
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (activeSpace === 'couple') {
+      await coupleActions.loadLetters();
+    } else {
+      await loadLetters();
+    }
+    setRefreshing(false);
+  };
 
-  const unlocked = letters.filter(l => l.isUnlocked);
-  const sealed   = letters.filter(l => !l.isUnlocked);
+  const currentLetters = activeSpace === 'couple' ? coupleStore.coupleLetters : letters;
+
+  const unlocked = currentLetters.filter(l => l.isUnlocked);
+  const sealed   = currentLetters.filter(l => !l.isUnlocked);
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
@@ -485,8 +535,8 @@ export function FutureScreen({ navigation }: Props) {
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.pageBg }]}>
         <View>
-          <KamiText variant="overline">Letters to yourself</KamiText>
-          <KamiText variant="title">Future</KamiText>
+          <KamiText variant="overline">{activeSpace === 'couple' ? 'Sealed capsules' : 'Letters to yourself'}</KamiText>
+          <KamiText variant="title">{activeSpace === 'couple' ? 'Love Letters' : 'Future'}</KamiText>
         </View>
         <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => setWriteOpen(true)}>
           <Text style={[s.writePlus, { color: colors.primary }]}>+</Text>
@@ -499,19 +549,21 @@ export function FutureScreen({ navigation }: Props) {
         contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        {loading && letters.length === 0 && (
+        {((loading && activeSpace === 'personal') ||
+          (coupleStore.lettersLoading === 'loading' && activeSpace === 'couple')) && currentLetters.length === 0 && (
           <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
-        {!loading && letters.length === 0 && (
+        {((!loading && activeSpace === 'personal') ||
+          (coupleStore.lettersLoading !== 'loading' && activeSpace === 'couple')) && currentLetters.length === 0 && (
           <TouchableOpacity style={s.emptyState} onPress={() => setWriteOpen(true)} activeOpacity={0.85}>
             <Text style={{ fontSize: 56, marginBottom: Space[3] }}>💌</Text>
-            <KamiText variant="subtitle" align="center">Write to your future self</KamiText>
+            <KamiText variant="subtitle" align="center">{activeSpace === 'couple' ? 'Send a Love Letter Capsule' : 'Write to your future self'}</KamiText>
             <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-              Seal a letter. Open it months from now and see how much you've grown.
+              {activeSpace === 'couple' ? 'Seal a love letter. It will unlock on a special future date.' : 'Seal a letter. Open it months from now and see how much you\'ve grown.'}
             </KamiText>
             <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
-              <KamiText variant="label" color={colors.primary} bold>Write your first letter ›</KamiText>
+              <KamiText variant="label" color={colors.primary} bold>{activeSpace === 'couple' ? 'Seal first love letter ›' : 'Write your first letter ›'}</KamiText>
             </View>
           </TouchableOpacity>
         )}
@@ -542,12 +594,12 @@ export function FutureScreen({ navigation }: Props) {
       </ScrollView>
 
       <WriteModal visible={writeOpen} onClose={() => setWriteOpen(false)} onSave={handleSave} saving={saving} />
-      <ReadModal visible={readOpen} letter={reading} onClose={() => { setReadOpen(false); setReading(null); }} />
+      <ReadModal visible={readOpen} letter={reading} onClose={() => { setReadOpen(false); setReading(null); }} activeSpace={activeSpace} />
     </SafeAreaView>
   );
 }
 
-const LetterCard: React.FC<{ letter: Letter; onOpen: () => void; onDelete: () => void }> = ({ letter, onOpen, onDelete }) => {
+const LetterCard: React.FC<{ letter: Letter | CoupleLetter; onOpen: () => void; onDelete: () => void }> = ({ letter, onOpen, onDelete }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   return (

@@ -4,7 +4,7 @@
  * Each section taps through to its dedicated screen.
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -29,11 +29,44 @@ import { useHome }       from '../hooks';
 import { useHomeStore }  from '../store';
 import { useShallow }    from 'zustand/react/shallow';
 import KamiText          from '@shared/ui/atoms/KamiText';
+import KamiButton          from '@shared/ui/atoms/KamiButton';
 import {
   Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Sizing, Space,
 } from '@shared/constants';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { useTheme }      from '@shared/hooks';
+import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCouple }      from '@features/couple/hooks/useCouple';
+
+function getRelationshipDuration(anniversaryDate: string | null): string {
+  if (!anniversaryDate) return 'Connected';
+  const ann = new Date(anniversaryDate);
+  const now = new Date();
+  let years = now.getFullYear() - ann.getFullYear();
+  let months = now.getMonth() - ann.getMonth();
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  const yStr = years > 0 ? `${years} Year${years > 1 ? 's' : ''}` : '';
+  const mStr = months > 0 ? `${months} Month${months > 1 ? 's' : ''}` : '';
+  if (yStr && mStr) return `Together for ${yStr} ${mStr}`;
+  if (yStr) return `Together for ${yStr}`;
+  if (mStr) return `Together for ${mStr}`;
+  return 'Connected';
+}
+
+function getDaysUntilAnniversary(anniversaryDate: string | null): number | null {
+  if (!anniversaryDate) return null;
+  const ann = new Date(anniversaryDate);
+  const now = new Date();
+  const nextAnn = new Date(now.getFullYear(), ann.getMonth(), ann.getDate());
+  if (nextAnn.getTime() < now.getTime()) {
+    nextAnn.setFullYear(now.getFullYear() + 1);
+  }
+  const diff = nextAnn.getTime() - now.getTime();
+  return Math.ceil(diff / 86400000);
+}
 
 type Props = MainTabScreenProps<'Home'>;
 
@@ -162,6 +195,21 @@ export function HomeScreen({ navigation }: Props) {
   const [moodSaving, setMoodSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Couple Space Hooks & State
+  const { 
+    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories 
+  } = useCoupleStore();
+  const { loadAll: loadCoupleAll, submitAnswer } = useCouple();
+
+  const [answerInput, setAnswerInput] = useState('');
+  const [submittingAnswerState, setSubmittingAnswerState] = useState(false);
+
+  useEffect(() => {
+    if (user?.activeSpace === 'couple') {
+      loadCoupleAll();
+    }
+  }, [user?.activeSpace, user?.id, loadCoupleAll]);
+
   const handleMoodPick = (m: typeof MOODS[0]) => { setPending(m); setMoodModal(true); };
   const handleMoodSave = async (note: string) => {
     if (!pending) return;
@@ -171,12 +219,289 @@ export function HomeScreen({ navigation }: Props) {
     setMoodModal(false);
     if (!r.success) Alert.alert('Kami', r.error);
   };
-  const handleRefresh = async () => { setRefreshing(true); await refresh(); setRefreshing(false); };
+  
+  const handleRefresh = async () => { 
+    setRefreshing(true); 
+    if (user?.activeSpace === 'couple') {
+      await loadCoupleAll();
+    } else {
+      await refresh(); 
+    }
+    setRefreshing(false); 
+  };
 
   const activeGoals    = goals.filter(g => g.status === 'active');
   const completedToday = goals.filter(g => g.progress === 100).length;
 
+  const activeCoupleGoals = coupleGoals.filter(g => g.status === 'active');
+
   const { colors } = useTheme();
+
+  if (user?.activeSpace === 'couple' && couple) {
+    const partnerName = partner?.nickname || partner?.email?.split('@')[0] || 'Partner';
+    const isPartnerOnline = partner?.lastSeenAt
+      ? (Date.now() - new Date(partner.lastSeenAt).getTime() < 5 * 60 * 1000)
+      : false;
+    const myAnswer = dailyAnswers.find(a => a.userId === user?.id);
+    const partnerAnswer = dailyAnswers.find(a => a.userId === partner?.id);
+    const bothAnswered = myAnswer && partnerAnswer;
+
+    const relationshipDays = couple.anniversaryDate 
+      ? Math.max(1, Math.ceil((Date.now() - new Date(couple.anniversaryDate).getTime()) / 86400000))
+      : 1;
+
+    const daysUntilAnniversary = getDaysUntilAnniversary(couple.anniversaryDate);
+
+    return (
+      <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
+        <StatusBar style="dark" />
+
+        {/* ── COUPLE HEADER ───────────────────────────────────── */}
+        <View style={[s.topBar, { backgroundColor: colors.pageBg }]}>
+          <View style={{ flex: 1 }}>
+            <KamiText style={[s.kamiLogo, { color: colors.primary }]}>Kami</KamiText>
+            <View style={s.onlineContainer}>
+              <KamiText variant="caption" color={Colors.textMuted} style={s.greeting}>
+                {couple.name || `${user.nickname || 'You'} & ${partnerName}`} ❤️
+              </KamiText>
+              {partner && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+                  <View style={[s.onlineDot, { backgroundColor: isPartnerOnline ? Colors.success : Colors.textMuted + '66' }]} />
+                  <KamiText variant="caption" color={isPartnerOnline ? Colors.success : Colors.textMuted} style={{ fontSize: 11 }}>
+                    {isPartnerOnline ? 'online' : 'offline'}
+                  </KamiText>
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={s.topBarRight}>
+            <TouchableOpacity 
+              style={[s.avatarWrap, { borderColor: colors.primary, backgroundColor: colors.creamDeep }]} 
+              onPress={() => navigation.navigate('Settings')}
+            >
+              {user?.avatarUrl
+                ? <Image source={{ uri: user.avatarUrl }} style={s.avatarImg} />
+                : <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={s.scroll}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+        >
+          {/* ── RELATIONSHIP DURATION & STREAK BANNERS ─────── */}
+          <View style={s.streakBanner}>
+            <View style={s.streakItem}>
+              <View style={[s.streakIconContainer, { backgroundColor: colors.creamDeep }]}>
+                <Text style={s.streakEmoji}>💑</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <KamiText style={s.streakNum}>
+                  {couple.anniversaryDate ? getRelationshipDuration(couple.anniversaryDate) : 'Couple Space'}
+                </KamiText>
+                <KamiText variant="caption" color={Colors.textMuted} style={s.streakLabel}>
+                  {daysUntilAnniversary !== null ? `${daysUntilAnniversary} days to anniversary 📅` : 'Set your anniversary in settings'}
+                </KamiText>
+              </View>
+            </View>
+          </View>
+
+          {/* ── MOOD INSIGHTS BANNER ──────────────────────── */}
+          {partner && (partner as any).currentMoodEmoji ? (
+            <View style={[s.card, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11', gap: Space[1] }]}>
+              <View style={s.cardTitleRow}>
+                <Text style={s.cardIcon}>🌸</Text>
+                <KamiText variant="caption" color={colors.primary} bold>{partnerName}'s Mood Check-in</KamiText>
+              </View>
+              <KamiText variant="body" style={{ fontStyle: 'italic', marginTop: 2 }}>
+                {partnerName} is feeling **{(partner as any).currentMoodLabel}** today {(partner as any).currentMoodEmoji}
+              </KamiText>
+            </View>
+          ) : null}
+
+          {/* ── SHARED DAILY QUESTION ──────────────────────── */}
+          {todayQuestion && (
+            <View style={[s.card, { borderColor: colors.primary + '33' }]}>
+              <View style={s.cardHeader}>
+                <View style={s.cardTitleRow}>
+                  <Text style={[s.cardIcon, { color: colors.primary }]}>✍️</Text>
+                  <KamiText variant="subtitle" bold>Today's Daily Question</KamiText>
+                </View>
+              </View>
+
+              <View style={[s.promptCard, { borderColor: colors.primary + '22', backgroundColor: colors.primary + '05', padding: Space[4], gap: Space[1] }]}>
+                <KamiText variant="body" style={s.promptText} numberOfLines={3}>
+                  “{todayQuestion.content}”
+                </KamiText>
+              </View>
+
+              {bothAnswered ? (
+                <View style={{ gap: Space[3], marginTop: Space[2] }}>
+                  <View style={[s.answerBubble, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primary + '22' }]}>
+                    <KamiText variant="caption" color={colors.primary} bold>You answered:</KamiText>
+                    <KamiText variant="body" style={{ marginTop: 2 }}>{myAnswer.response}</KamiText>
+                  </View>
+                  <View style={[s.answerBubble, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primary + '22' }]}>
+                    <KamiText variant="caption" color={colors.primary} bold>{partnerName} answered:</KamiText>
+                    <KamiText variant="body" style={{ marginTop: 2 }}>{partnerAnswer.response}</KamiText>
+                  </View>
+                </View>
+              ) : myAnswer ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.success + '15', borderRadius: Radii.full, paddingHorizontal: Space[3], paddingVertical: Space[1], alignSelf: 'flex-start', marginTop: Space[2] }}>
+                  <Text style={{ fontSize: 11, color: Colors.success }}>✓</Text>
+                  <KamiText variant="caption" color={Colors.success} bold>You answered — Waiting for partner</KamiText>
+                </View>
+              ) : (
+                <View style={{ gap: Space[2], marginTop: Space[1] }}>
+                  <TextInput
+                    style={[s.answerInput, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11' }]}
+                    placeholder="Type your response to reveal..."
+                    placeholderTextColor={Colors.textMuted}
+                    value={answerInput}
+                    onChangeText={setAnswerInput}
+                    multiline
+                    numberOfLines={3}
+                  />
+                  <KamiButton
+                    label="Submit Answer"
+                    loading={submittingAnswerState}
+                    disabled={!answerInput.trim() || submittingAnswerState}
+                    onPress={async () => {
+                      setSubmittingAnswerState(true);
+                      await submitAnswer(todayQuestion.id, couple.id, answerInput.trim());
+                      setAnswerInput('');
+                      setSubmittingAnswerState(false);
+                    }}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ── RELATIONSHIP JOURNAL PREVIEW ────────────────── */}
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <View style={s.cardTitleRow}>
+                <Text style={[s.cardIcon, { color: colors.primary }]}>📓</Text>
+                <KamiText variant="subtitle" bold>Relationship Journal</KamiText>
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Journal')} hitSlop={8}>
+                <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
+              </TouchableOpacity>
+            </View>
+
+            {coupleJournals.length === 0 ? (
+              <Tap onPress={() => navigation.navigate('Journal')} style={s.emptyInner}>
+                <KamiText variant="caption" color={Colors.textMuted} align="center">
+                  No shared entries yet.{"\n"}Write your first joint memory.
+                </KamiText>
+                <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Write entry ›</KamiText>
+              </Tap>
+            ) : (
+              <Tap onPress={() => navigation.navigate('Journal')} style={[s.journalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
+                <View style={[s.journalPreviewDot, { backgroundColor: colors.primary }]} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <KamiText variant="label" numberOfLines={1} bold>
+                    {coupleJournals[0].title || 'Untitled shared entry'}
+                  </KamiText>
+                  <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>
+                    {coupleJournals[0].body}
+                  </KamiText>
+                  <KamiText variant="caption" color={colors.primary} style={{ fontSize: 10 }} bold>
+                    Written by {coupleJournals[0].userNickname}
+                  </KamiText>
+                </View>
+                <KamiText variant="caption" color={Colors.textMuted}>
+                  {new Date(coupleJournals[0].entryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </KamiText>
+              </Tap>
+            )}
+          </View>
+
+          {/* ── RELATIONSHIP STATS GRID ─────────────────────── */}
+          <View style={{ gap: Space[2] }}>
+            <KamiText variant="overline" style={{ paddingHorizontal: Space[2] }}>Relationship Growth Stats</KamiText>
+            <View style={s.statsGrid}>
+              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
+                <KamiText style={s.statsNum}>{relationshipDays}</KamiText>
+                <KamiText variant="caption" color={Colors.textMuted}>Days Connected</KamiText>
+              </View>
+              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
+                <KamiText style={s.statsNum}>{dailyAnswers.length}</KamiText>
+                <KamiText variant="caption" color={Colors.textMuted}>Answers Shared</KamiText>
+              </View>
+              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
+                <KamiText style={s.statsNum}>{coupleMemories.length}</KamiText>
+                <KamiText variant="caption" color={Colors.textMuted}>Memories Saved</KamiText>
+              </View>
+              <View style={[s.statsCard, { backgroundColor: colors.creamDeep + '15' }]}>
+                <KamiText style={s.statsNum}>{coupleGoals.filter(g => g.status === 'completed').length}</KamiText>
+                <KamiText variant="caption" color={Colors.textMuted}>Goals Completed</KamiText>
+              </View>
+            </View>
+          </View>
+
+          {/* ── COUPLE GOALS PREVIEW ────────────────────────── */}
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <View style={s.cardTitleRow}>
+                <Text style={[s.cardIcon, { color: colors.primary }]}>🌱</Text>
+                <KamiText variant="subtitle" bold>Couple Goals</KamiText>
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('Goals')} hitSlop={8}>
+                <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
+              </TouchableOpacity>
+            </View>
+
+            {activeCoupleGoals.length === 0 ? (
+              <Tap onPress={() => navigation.navigate('Goals')} style={s.emptyInner}>
+                <KamiText variant="caption" color={Colors.textMuted} align="center">No active shared goals.</KamiText>
+                <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Add couple goal ›</KamiText>
+              </Tap>
+            ) : (
+              <View style={{ gap: Space[3] }}>
+                {activeCoupleGoals.slice(0, 3).map(g => (
+                  <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={[s.goalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
+                    <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <KamiText variant="label" numberOfLines={1} bold>{g.title}</KamiText>
+                      <View style={[s.miniBar, { backgroundColor: colors.creamDeep }]}>
+                        <View style={[s.miniFill, { width: `${g.progress}%` as any, backgroundColor: colors.primary }]} />
+                      </View>
+                    </View>
+                    <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
+                  </Tap>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* ── QUICK ACTIONS ROW ────────────────────────── */}
+          <View style={s.quickRow}>
+            <Tap onPress={() => navigation.navigate('Memories')} style={s.quickCard}>
+              <Text style={s.quickEmoji}>📸</Text>
+              <View>
+                <KamiText variant="label" bold>Shared Timeline</KamiText>
+                <KamiText variant="caption" color={Colors.textMuted}>Couple Memories</KamiText>
+              </View>
+            </Tap>
+            <Tap onPress={() => navigation.navigate('Future')} style={s.quickCard}>
+              <Text style={s.quickEmoji}>💌</Text>
+              <View>
+                <KamiText variant="label" bold>Love Letters</KamiText>
+                <KamiText variant="caption" color={Colors.textMuted}>Capsules</KamiText>
+              </View>
+            </Tap>
+          </View>
+
+          <View style={{ height: Space[8] }} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
@@ -454,6 +779,17 @@ const s = StyleSheet.create({
   avatarImg:    { width: '100%', height: '100%' },
   avatarLetter: { color: Colors.primary, fontSize: FontSize.lg, fontWeight: FontWeight.extrabold },
   greeting:     { marginTop: 0, lineHeight: 18 },
+  onlineContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Space[1],
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
 
   // Streak banner
   streakBanner: {
@@ -596,4 +932,12 @@ const s = StyleSheet.create({
     ...Shadows.sm,
   },
   quickEmoji: { fontSize: 26 },
+
+  // Couple specific styles
+  answersRow: { gap: Space[2], marginTop: Space[1] },
+  answerBubble: { padding: Space[3], borderRadius: Radii.md, borderWidth: 1, borderColor: Colors.border + '44', backgroundColor: Colors.cardBg },
+  answerInput: { minHeight: 60, borderWidth: 1.5, borderRadius: Radii.input, padding: Space[3], color: Colors.textPrimary, textAlignVertical: 'top', fontSize: FontSize.base },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[3], justifyContent: 'space-between' },
+  statsCard: { width: '47%', padding: Space[4], borderRadius: Radii.card, gap: Space[1], alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '22' },
+  statsNum: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary, fontFamily: FontFamily.display },
 });

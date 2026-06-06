@@ -17,6 +17,11 @@ export type AuthUser = {
   weeklyDigest?: boolean;
   streakAlerts?: boolean;
   pushToken?: string;
+  kamiId?: string;
+  activeSpace?: 'personal' | 'couple';
+  currentMoodLabel?: string;
+  currentMoodEmoji?: string;
+  lastSeenAt?: string;
 };
 
 export type AuthState = {
