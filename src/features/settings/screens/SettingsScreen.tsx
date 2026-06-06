@@ -28,6 +28,7 @@ import {
   TouchableOpacity,
   View,
   StatusBar as RNStatusBar,
+  DevSettings,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -35,7 +36,7 @@ import KamiButton  from '@shared/ui/atoms/KamiButton';
 import InputField  from '@shared/ui/atoms/InputField';
 import KamiText    from '@shared/ui/atoms/KamiText';
 import {
-  Colors, FontSize, FontWeight, Radii, Shadows, Sizing, Space, FontFamily
+  Colors, FontSize, FontWeight, Radii, Shadows, Sizing, Space, FontFamily, applyTheme
 } from '@shared/constants';
 import { useAuth }      from '@features/auth';
 import { useAuthStore } from '@features/auth';
@@ -328,7 +329,12 @@ export function SettingsScreen({ navigation }: Props) {
   const handleThemeSelect = async (themeId: string) => {
     if (!user?.id) return;
     const r = await updateProfile(user.id, { theme: themeId });
-    if (!r.success) Alert.alert('Kami', r.error);
+    if (!r.success) {
+      Alert.alert('Kami', r.error);
+    } else {
+      applyTheme(themeId);
+      DevSettings.reload();
+    }
   };
 
   const handleTextSizeSelect = async (sizeId: string) => {

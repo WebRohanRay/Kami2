@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import * as authService  from '@infrastructure/auth';
 import * as profileRepo  from '@infrastructure/profile';
 import { registerForPushNotificationsAsync } from '@infrastructure/notifications/notificationService';
+import { applyTheme } from '@shared/constants';
 import { useAuthStore }  from '../store';
 import type { AuthUser, AuthStatus, Result } from '../types';
 
@@ -23,6 +24,11 @@ async function hydrateUser(
 ) {
   const result = await profileRepo.fetchOrCreateProfile(supabaseUser);
   const authUser = result.success ? result.data : profileRepo.supabaseUserToAuthUser(supabaseUser);
+  
+  if (authUser.theme) {
+    applyTheme(authUser.theme);
+  }
+
   setUser(authUser);
   setStatus(statusFor(authUser));
 
