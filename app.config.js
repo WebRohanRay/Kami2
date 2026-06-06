@@ -60,6 +60,7 @@ export default {
     },
 
     plugins: [
+      'expo-notifications',
       'expo-secure-store',
       'expo-web-browser',
       'expo-image-picker',
