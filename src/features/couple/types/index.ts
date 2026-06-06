@@ -98,6 +98,11 @@ export interface CoupleLetter {
   body?: string;
   imageUrls?: string[];
   senderNickname?: string;
+  isRead?: boolean;
+  isFavorite?: boolean;
+  isDraft?: boolean;
+  isArchived?: boolean;
+  reactions?: { userId: string; emoji: string }[];
 }
 
 export interface CoupleDailyQuestion {

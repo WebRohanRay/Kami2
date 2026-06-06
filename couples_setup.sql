@@ -330,3 +330,68 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 REVOKE ALL ON FUNCTION public.fetch_unlocked_couple_letter(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.fetch_unlocked_couple_letter(UUID) TO authenticated;
 
+-- Letter read status & favorites extensions
+ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
+
+-- Update RLS policies to allow updating letters
+DROP POLICY IF EXISTS "couple_letters_update" ON public.couple_letters;
+CREATE POLICY "couple_letters_update" ON public.couple_letters
+  FOR UPDATE USING (public.is_couple_member(couple_id));
+
+DROP POLICY IF EXISTS "future_letters_update" ON public.future_letters;
+CREATE POLICY "future_letters_update" ON public.future_letters
+  FOR UPDATE USING (auth.uid() = user_id);
+-- Create couple letter reactions table
+CREATE TABLE IF NOT EXISTS public.couple_letter_reactions (
+  letter_id     UUID REFERENCES public.couple_letters(id) ON DELETE CASCADE,
+  user_id       UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji         TEXT NOT NULL,
+  PRIMARY KEY (letter_id, user_id, emoji)
+);
+ALTER TABLE public.couple_letter_reactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "couple_letter_reactions_access" ON public.couple_letter_reactions;
+CREATE POLICY "couple_letter_reactions_access" ON public.couple_letter_reactions
+  FOR ALL USING (EXISTS (
+    SELECT 1 FROM public.couple_letters 
+    WHERE couple_letters.id = letter_id AND public.is_couple_member(couple_letters.couple_id)
+  ));
+
+-- Create couple memory reactions table
+CREATE TABLE IF NOT EXISTS public.couple_memory_reactions (
+  memory_id     UUID REFERENCES public.couple_memories(id) ON DELETE CASCADE,
+  user_id       UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji         TEXT NOT NULL,
+  PRIMARY KEY (memory_id, user_id, emoji)
+);
+ALTER TABLE public.couple_memory_reactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "couple_memory_reactions_access" ON public.couple_memory_reactions;
+CREATE POLICY "couple_memory_reactions_access" ON public.couple_memory_reactions
+  FOR ALL USING (EXISTS (
+    SELECT 1 FROM public.couple_memories 
+    WHERE couple_memories.id = memory_id AND public.is_couple_member(couple_memories.couple_id)
+  ));
+
+-- Create couple goal reactions table
+CREATE TABLE IF NOT EXISTS public.couple_goal_reactions (
+  goal_id       UUID REFERENCES public.couple_goals(id) ON DELETE CASCADE,
+  user_id       UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji         TEXT NOT NULL,
+  PRIMARY KEY (goal_id, user_id, emoji)
+);
+ALTER TABLE public.couple_goal_reactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "couple_goal_reactions_access" ON public.couple_goal_reactions;
+CREATE POLICY "couple_goal_reactions_access" ON public.couple_goal_reactions
+  FOR ALL USING (EXISTS (
+    SELECT 1 FROM public.couple_goals 
+    WHERE couple_goals.id = goal_id AND public.is_couple_member(couple_goals.couple_id)
+  ));
+
+-- Add columns for drafts & archive support on letters
+ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_draft BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_draft BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;

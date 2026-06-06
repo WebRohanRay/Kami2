@@ -23,6 +23,7 @@ import type { Goal, GoalCategory } from '@features/home/types';
 import type { CoupleGoal } from '@features/couple/types';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
+import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
@@ -203,6 +204,7 @@ export function GoalsScreen({ navigation }: Props) {
   const [editing,      setEditing]      = useState<Goal | CoupleGoal | null>(null);
   const [saving,       setSaving]       = useState(false);
   const [refreshing,   setRefreshing]   = useState(false);
+  const [isFocused,    setIsFocused]    = useState(navigation.isFocused());
   const [filter,       setFilter]       = useState<'all' | GoalCategory>('all');
 
   const [visibleActive,    setVisibleActive]    = useState(10);
@@ -213,12 +215,51 @@ export function GoalsScreen({ navigation }: Props) {
     setVisibleCompleted(10);
   }, [activeSpace]);
 
+  // Focus listener to auto-refresh data when focused
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      setIsFocused(true);
+      if (activeSpace === 'couple') {
+        coupleActions.loadGoals();
+      } else {
+        refresh();
+      }
+    });
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setIsFocused(false);
+    });
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [navigation, activeSpace, refresh]);
+
+  // Real-time ephemeral broadcast status when adding/editing a goal
+  useEffect(() => {
+    if (activeSpace === 'couple' && couple?.id && user?.id) {
+      if (isFocused) {
+        const action = modalVisible ? 'creating_goal' : 'viewing_goals';
+        useCoupleStore.getState().setMyActiveAction(action);
+        broadcastPartnerAction(couple.id, user.id, action);
+      } else {
+        const store = useCoupleStore.getState();
+        const cleared1 = store.clearMyActiveAction('creating_goal');
+        const cleared2 = store.clearMyActiveAction('viewing_goals');
+        if (cleared1 || cleared2) {
+          broadcastPartnerAction(couple.id, user.id, 'idle');
+        }
+      }
+    }
+  }, [isFocused, modalVisible, activeSpace, couple?.id, user?.id]);
+
   // Dual-mode loaders
   useEffect(() => {
     if (activeSpace === 'couple') {
       if (couple?.id) {
         coupleActions.loadGoals();
       }
+    } else {
+      refresh();
     }
   }, [activeSpace, couple?.id]);
 
@@ -454,12 +495,24 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
   const sc = useRef(new Animated.Value(1)).current;
   const cat = CATEGORIES.find(c => c.id === goal.category);
   const imageUrl = 'imageUrl' in goal ? (goal as any).imageUrl : null;
+
+  // Plant growth stage representation: Sprout Seed 🌱 (<30%), Growing Vine 🌿 (30-99%), Blooming Flower 🌸 (100%)
+  const getPlantEmoji = () => {
+    if (goal.progress < 30) return '🌱';
+    if (goal.progress < 100) return '🌿';
+    return '🌸';
+  };
+
   return (
     <TouchableOpacity activeOpacity={1} onPress={onEdit}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
-      <Animated.View style={[s.card, completed && s.cardDone, { transform: [{ scale: sc }] }]}>
+      <Animated.View style={[
+        s.card, 
+        completed ? s.cardDone : s.cardActive,
+        { transform: [{ scale: sc }] }
+      ]}>
         
         {/* Cover Photo */}
         {imageUrl && (
@@ -470,10 +523,12 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
         )}
 
         <View style={s.cardTop}>
-          <Text style={s.emojiBadge}>{goal.emoji}</Text>
+          <View style={s.gardenBadge}>
+            <Text style={{ fontSize: 22 }}>{getPlantEmoji()}</Text>
+          </View>
           <View style={{ flex: 1, gap: 2 }}>
-            <KamiText variant="label" numberOfLines={1} style={imageUrl && { color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0,height:1}, textShadowRadius: 2 }}>
-              {goal.title}
+            <KamiText variant="label" numberOfLines={1} style={[imageUrl && { color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0,height:1}, textShadowRadius: 2 }, { color: Colors.textPrimary }]}>
+              {goal.title} {goal.emoji}
             </KamiText>
             {goal.description ? (
               <KamiText variant="caption" color={imageUrl ? '#e0d5d7' : Colors.textMuted} numberOfLines={1}>
@@ -491,7 +546,7 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
         </View>
 
         <View style={s.progRow}>
-          <View style={s.progTrack}>
+          <View style={[s.progTrack, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.primary + '18' }]}>
             <View style={[s.progFill, { width: `${goal.progress}%` as any, backgroundColor: completed ? Colors.success : colors.primary }]} />
           </View>
           <KamiText variant="caption" color={completed ? Colors.success : colors.primary} bold style={{ minWidth: 36, ...Platform.select({ web: { textAlign: 'right' } }) }}>
@@ -518,8 +573,8 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
 
         {completed && (
           <View style={s.completedBadge}>
-            <Text style={{ fontSize: 14 }}>🎉</Text>
-            <KamiText variant="caption" color={Colors.success} bold>Completed</KamiText>
+            <Text style={{ fontSize: 14 }}>🌸</Text>
+            <KamiText variant="caption" color={Colors.success} bold>Bloomed & Completed</KamiText>
           </View>
         )}
       </Animated.View>
@@ -549,24 +604,26 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
   emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
 
-  card:     { position: 'relative', backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], gap: Space[3], borderWidth: 1, borderColor: Colors.border + '44', overflow: 'hidden', ...Shadows.sm },
-  cardDone: { opacity: 0.75, borderColor: Colors.success + '44' },
+  card:     { position: 'relative', borderRadius: Radii.card, padding: Space[4], gap: Space[3], borderWidth: 1.5, overflow: 'hidden', ...Shadows.sm },
+  cardActive: { backgroundColor: '#f0fdf4', borderColor: '#dcfce7' }, // Soft organic light green
+  cardDone: { opacity: 0.85, backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }, // Soft completion mint green
   
   // Cover Photo
   cardCoverWrap:{ ...StyleSheet.absoluteFillObject, height: 80, overflow: 'hidden' },
   cardCover:    { width: '100%', height: '100%' },
   cardCoverOverlay:{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
 
+  gardenBadge:{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#dcfce7', ...Shadows.sm },
   emojiBadge:{ fontSize: 24, width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', textAlign: 'center', lineHeight: Platform.OS === 'ios' ? 34 : 30 },
   cardTop:  { flexDirection: 'row', alignItems: 'center', gap: Space[3], zIndex: 1 },
-  delBtn:   { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border, zIndex: 2 },
+  delBtn:   { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '33', zIndex: 2 },
   progRow:  { flexDirection: 'row', alignItems: 'center', gap: Space[3] },
-  progTrack:{ flex: 1, height: 6, backgroundColor: Colors.creamDeep, borderRadius: 3, overflow: 'hidden' },
-  progFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 3 },
+  progTrack:{ flex: 1, height: 8, backgroundColor: Colors.creamDeep, borderRadius: 4, overflow: 'hidden' },
+  progFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 4 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  ctrlBtnMinus: { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: Colors.creamDeep, borderWidth: 1, borderColor: Colors.border },
+  ctrlBtnMinus: { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: '#fff', borderWidth: 1, borderColor: Colors.border + '33' },
   ctrlBtnPlus:  { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: Colors.primary },
-  completedBadge:{ flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: Colors.success + '15', borderRadius: Radii.sm, paddingHorizontal: Space[3], paddingVertical: Space[2], alignSelf: 'flex-start' },
+  completedBadge:{ flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: '#d1fae5', borderRadius: Radii.sm, paddingHorizontal: Space[3], paddingVertical: Space[2], alignSelf: 'flex-start', borderWidth: 1, borderColor: '#6ee7b7' },
   loadMoreBtn: {
     alignItems: 'center',
     justifyContent: 'center',

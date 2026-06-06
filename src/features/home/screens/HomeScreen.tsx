@@ -10,6 +10,7 @@ import {
   Alert,
   Animated,
   Image,
+  ImageBackground,
   Modal,
   Platform,
   RefreshControl,
@@ -24,7 +25,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore }  from '@features/auth';
+import { useAuthStore, useAuth }  from '@features/auth';
 import { useHome }       from '../hooks';
 import { useHomeStore }  from '../store';
 import { useShallow }    from 'zustand/react/shallow';
@@ -39,6 +40,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple }      from '@features/couple/hooks/useCouple';
 import { supabase }       from '@shared/lib/supabase';
+import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
 
 function getRelationshipDuration(anniversaryDate: string | null): string {
   if (!anniversaryDate) return 'Connected';
@@ -100,6 +102,9 @@ function initial(name: string) { return name.slice(0, 1).toUpperCase() || 'K'; }
 function daysSince(iso?: string) {
   if (!iso) return 1;
   return Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+}
+function checkUnlocked(l: { deliverAt: string }) {
+  return Date.now() >= new Date(l.deliverAt).getTime();
 }
 
 // ─── Animated card ───────────────────────────────────────────────────────────
@@ -197,14 +202,18 @@ export function HomeScreen({ navigation }: Props) {
   const [moodSaving, setMoodSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const { updateProfile } = useAuth();
+
   // Couple Space Hooks & State
   const { 
-    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories, setPartner 
+    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories, setPartner,
+    homeAlerts, removeHomeAlert, partnerAction, coupleLetters
   } = useCoupleStore();
   const { loadAll: loadCoupleAll, submitAnswer } = useCouple();
 
   const [answerInput, setAnswerInput] = useState('');
   const [submittingAnswerState, setSubmittingAnswerState] = useState(false);
+  const [loveSending, setLoveSending] = useState(false);
 
   // Trigger periodic tick to refresh online status calculations locally
   const [tick, setTick] = useState(0);
@@ -216,11 +225,119 @@ export function HomeScreen({ navigation }: Props) {
     return () => clearInterval(interval);
   }, [user?.activeSpace]);
 
+  // Focus listener to refresh data automatically when user comes to this screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (user?.activeSpace === 'couple') {
+        loadCoupleAll();
+      } else {
+        refresh();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, user?.activeSpace, loadCoupleAll, refresh]);
+
+  // Initial load
   useEffect(() => {
     if (user?.activeSpace === 'couple') {
       loadCoupleAll();
     }
   }, [user?.activeSpace, user?.id, loadCoupleAll]);
+
+  // Canvas floating animations
+  const floatAnim1 = useRef(new Animated.Value(0)).current;
+  const floatAnim2 = useRef(new Animated.Value(0)).current;
+  const floatAnim3 = useRef(new Animated.Value(0)).current;
+  const floatAnim4 = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (user?.activeSpace !== 'couple') return;
+    const createFloatLoop = (anim: Animated.Value, duration: number, delay = 0) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: duration,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: duration,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    };
+
+    const float1 = createFloatLoop(floatAnim1, 2500, 0);
+    const float2 = createFloatLoop(floatAnim2, 2800, 300);
+    const float3 = createFloatLoop(floatAnim3, 3100, 150);
+    const float4 = createFloatLoop(floatAnim4, 2600, 450);
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    float1.start();
+    float2.start();
+    float3.start();
+    float4.start();
+    pulse.start();
+
+    return () => {
+      float1.stop();
+      float2.stop();
+      float3.stop();
+      float4.stop();
+      pulse.stop();
+    };
+  }, [user?.activeSpace]);
+
+  const y1 = floatAnim1.interpolate({ inputRange: [0, 1], outputRange: [-6, 6] });
+  const y2 = floatAnim2.interpolate({ inputRange: [0, 1], outputRange: [5, -5] });
+  const y3 = floatAnim3.interpolate({ inputRange: [0, 1], outputRange: [-4, 8] });
+  const y4 = floatAnim4.interpolate({ inputRange: [0, 1], outputRange: [7, -4] });
+
+  // Partner Action presence indicator pulse
+  const partnerActionPulse = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    let animLoop: Animated.CompositeAnimation | null = null;
+    if (partnerAction !== 'idle') {
+      animLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(partnerActionPulse, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(partnerActionPulse, {
+            toValue: 0.4,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animLoop.start();
+    } else {
+      partnerActionPulse.setValue(0.4);
+    }
+    return () => {
+      if (animLoop) animLoop.stop();
+    };
+  }, [partnerAction]);
 
   // Realtime subscription for partner's lastSeenAt updates
   useEffect(() => {
@@ -283,8 +400,6 @@ export function HomeScreen({ navigation }: Props) {
       const parsedTime = new Date(partner.lastSeenAt).getTime();
       if (isNaN(parsedTime)) return false;
       const diffMs = Date.now() - parsedTime;
-      // Allow minor clock skew in the future (up to 5 minutes) and up to 5 minutes in the past.
-      // This protects against emulator timezone discrepancies where partner.lastSeenAt is in the future.
       return diffMs >= -5 * 60 * 1000 && diffMs < 5 * 60 * 1000;
     })();
     const myAnswer = dailyAnswers.find(a => a.userId === user?.id);
@@ -297,53 +412,206 @@ export function HomeScreen({ navigation }: Props) {
 
     const daysUntilAnniversary = getDaysUntilAnniversary(couple.anniversaryDate);
 
+    const getGoalPlantEmoji = (progress: number) => {
+      if (progress < 30) return '🌱';
+      if (progress < 100) return '🌿';
+      return '🌸';
+    };
+
+    // Calculate unread letters count
+    const unreadLettersCount = coupleLetters.filter(l => l.senderId !== user.id && !l.isRead && l.isUnlocked).length;
+
+    // Helper for relative time ago
+    const getTimeAgo = (date: Date | string): string => {
+      const ms = Date.now() - new Date(date).getTime();
+      const sec = Math.floor(ms / 1000);
+      const min = Math.floor(sec / 60);
+      const hr = Math.floor(min / 60);
+      const day = Math.floor(hr / 24);
+      if (day > 0) return `${day}d ago`;
+      if (hr > 0) return `${hr}h ago`;
+      if (min > 0) return `${min}m ago`;
+      return 'Just now';
+    };
+
+    // Extract dynamic timeline events based on actual data
+    interface TimelineEvent {
+      id: string;
+      title: string;
+      time: string;
+      icon: string;
+      date: Date;
+    }
+    const dynamicTimeline: TimelineEvent[] = [];
+
+    // Let's add couple letters
+    coupleLetters.forEach(l => {
+      const isLocked = !checkUnlocked(l);
+      dynamicTimeline.push({
+        id: `letter-${l.id}`,
+        title: isLocked 
+          ? (l.senderId === user?.id ? 'Letter Sealed 🔒' : 'Letter Scheduled 🔒')
+          : (l.senderId === user?.id ? 'Letter Opened' : 'Letter Opened ✉️'),
+        time: getTimeAgo(l.createdAt),
+        icon: isLocked ? '🔒' : '✉️',
+        date: new Date(l.createdAt)
+      });
+    });
+
+    // Add couple memories
+    coupleMemories.forEach(m => {
+      dynamicTimeline.push({
+        id: `memory-${m.id}`,
+        title: m.title,
+        time: getTimeAgo(m.memoryDate || m.createdAt),
+        icon: '📸',
+        date: new Date(m.memoryDate || m.createdAt)
+      });
+    });
+
+    // Add completed couple goals
+    coupleGoals.filter(g => g.status === 'completed').forEach(g => {
+      dynamicTimeline.push({
+        id: `goal-${g.id}`,
+        title: `Goal Completed`,
+        time: g.completedAt ? getTimeAgo(g.completedAt) : 'Recent',
+        icon: '🎯',
+        date: new Date(g.completedAt || g.createdAt)
+      });
+    });
+
+    // Sort chronologically (newest first)
+    dynamicTimeline.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    // Dynamic Latest Letter Excerpt
+    const latestLetterFromPartner = coupleLetters
+      .filter(l => l.senderId !== user?.id && l.isUnlocked && !l.isDraft && !l.isArchived)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const letterExcerpt = latestLetterFromPartner && latestLetterFromPartner.body
+      ? (latestLetterFromPartner.body.length > 55 ? `“${latestLetterFromPartner.body.substring(0, 52)}...”` : `“${latestLetterFromPartner.body}”`)
+      : null;
+    const letterTimeAgo = latestLetterFromPartner
+      ? `Written ${getTimeAgo(latestLetterFromPartner.createdAt)}`
+      : null;
+
+    // Dynamic Latest Active Goal details
+    const activeCoupleGoalsList = coupleGoals.filter(g => g.status === 'active');
+    const latestCoupleGoal = activeCoupleGoalsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const goalTitle = latestCoupleGoal ? latestCoupleGoal.title : null;
+    const goalProgress = latestCoupleGoal ? latestCoupleGoal.progress : 0;
+    const goalTimeRemainingText = latestCoupleGoal && latestCoupleGoal.targetDate
+      ? `${Math.max(1, Math.ceil((new Date(latestCoupleGoal.targetDate).getTime() - Date.now()) / 86400000))} days left ❤️`
+      : null;
+
+    // Dynamic Flashback Memory details
+    const flashbackMemory = coupleMemories.length > 0
+      ? coupleMemories[Math.floor(Math.random() * coupleMemories.length)]
+      : null;
+    const flashbackTitle = flashbackMemory ? flashbackMemory.title : '';
+    const flashbackDesc = flashbackMemory && flashbackMemory.description
+      ? (flashbackMemory.description.length > 70 ? `${flashbackMemory.description.substring(0, 67)}...` : flashbackMemory.description)
+      : '';
+    const flashbackImage = flashbackMemory && flashbackMemory.imageUrls && flashbackMemory.imageUrls.length > 0
+      ? flashbackMemory.imageUrls[0]
+      : 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop';
+
+    // Presence mapping description
+    const getPresenceDescription = () => {
+      switch (partnerAction) {
+        case 'writing_letter': return `${partnerName} is writing a letter... ✍️`;
+        case 'reading_memories': return `${partnerName} is viewing memories... 📸`;
+        case 'creating_goal': return `${partnerName} is composing a goal... 🎯`;
+        case 'reading_letter': return `${partnerName} is reading your letter... ❤️`;
+        case 'writing_journal': return `${partnerName} is writing journal... 📓`;
+        case 'sending_love': return `${partnerName} sent you love! ❤️`;
+        case 'writing_memory': return `${partnerName} is sharing a memory... 📸`;
+        case 'viewing_memory': return `${partnerName} is viewing a memory... 📸`;
+        case 'reading_journal': return `${partnerName} is reading journal... 📓`;
+        case 'viewing_goals': return `${partnerName} is viewing goals... 🎯`;
+        case 'viewing_letters': return `${partnerName} is viewing letters... ✉️`;
+        default: return isPartnerOnline ? `${partnerName} is online` : '';
+      }
+    };
+
+    const handleSendLove = async () => {
+      if (user?.id && couple?.id) {
+        setLoveSending(true);
+        await broadcastPartnerAction(couple.id, user.id, 'sending_love');
+        Alert.alert('Kami ❤️', `Love sent to ${partnerName}!`);
+        setTimeout(async () => {
+          await broadcastPartnerAction(couple.id, user.id, 'idle');
+          setLoveSending(false);
+        }, 3000);
+      }
+    };
+
     return (
       <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
         <StatusBar style="dark" />
 
-        {/* ── COUPLE HEADER ───────────────────────────────────── */}
-        <View style={[s.topBar, { backgroundColor: colors.pageBg }]}>
-          <View style={{ flex: 1 }}>
-            <KamiText style={[s.kamiLogo, { color: colors.primary }]}>Kami</KamiText>
-            <View style={s.onlineContainer}>
-              <KamiText variant="caption" color={Colors.textMuted} style={s.greeting}>
-                {couple.name || `${name} & ${partnerName}`}
-              </KamiText>
-              <Text style={{ fontSize: 11, color: Colors.textMuted + '88', marginHorizontal: 2 }}>•</Text>
-              <KamiText variant="caption" color={isPartnerOnline ? Colors.success : Colors.textMuted} bold={isPartnerOnline} style={{ fontSize: 11 }}>
-                {isPartnerOnline ? 'online' : 'offline'}
-              </KamiText>
-            </View>
-          </View>
-          <View style={s.topBarRight}>
+        {/* ── 1. HEADER SECTION ──────────────────────── */}
+        <View style={hsStyles.premiumHeader}>
+          <View style={hsStyles.headerLeft}>
             <TouchableOpacity 
-              style={[s.avatarWrap, { borderColor: isPartnerOnline ? Colors.success : colors.primaryLight, backgroundColor: colors.creamDeep }]} 
+              activeOpacity={0.9}
               onPress={() => navigation.navigate('Settings')}
+              style={hsStyles.couplePhotoFrame}
             >
               {partner?.avatarUrl ? (
-                <Image source={{ uri: partner.avatarUrl }} style={s.avatarImg} />
+                <Image 
+                  source={{ uri: partner.avatarUrl }} 
+                  style={hsStyles.couplePhoto} 
+                />
               ) : (
-                <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(partnerName)}</Text>
+                <View style={[hsStyles.couplePhotoPlaceholder, { backgroundColor: colors.creamDeep }]}>
+                  <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(partnerName)}</Text>
+                </View>
               )}
-              {/* Online/Offline status dot on partner's avatar */}
-              <View 
-                style={[
-                  s.heroOnlineBadge, 
-                  { 
-                    position: 'absolute',
-                    bottom: -1, 
-                    right: -1, 
-                    width: 14, 
-                    height: 14, 
-                    borderRadius: 7, 
-                    borderWidth: 2.5, 
-                    borderColor: colors.pageBg, 
-                    backgroundColor: isPartnerOnline ? Colors.success : '#CBD5E1' 
-                  }
-                ]} 
-              />
+              <View style={[hsStyles.onlineStatusBadge, { backgroundColor: isPartnerOnline ? '#22c55e' : '#94a3b8' }]} />
+            </TouchableOpacity>
+
+            <View style={hsStyles.appIdentity}>
+              <KamiText style={[hsStyles.appName, { color: colors.primary }]} bold>Kami ✨</KamiText>
+              <KamiText style={hsStyles.coupleName} bold>{name} & {partnerName} ❤️</KamiText>
+              <KamiText style={hsStyles.daysCount}>{relationshipDays} Days Together</KamiText>
+            </View>
+          </View>
+
+          <View style={hsStyles.headerActions}>
+            <TouchableOpacity 
+              style={hsStyles.headerGlassBtn}
+              onPress={() => Alert.alert('Search', 'Search couple space...')}
+            >
+              <Text style={{ fontSize: 16 }}>🔍</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={hsStyles.headerGlassBtn}
+              onPress={() => {
+                if (homeAlerts.length > 0) {
+                  Alert.alert('Notifications', homeAlerts.map(a => `${a.title}: ${a.message}`).join('\n'));
+                } else {
+                  Alert.alert('Notifications', 'No new alerts today.');
+                }
+              }}
+            >
+              <Text style={{ fontSize: 16 }}>🔔</Text>
+              {homeAlerts.length > 0 && (
+                <View style={[hsStyles.notifBadgeDot, { backgroundColor: colors.primary }]} />
+              )}
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Alerts Stack Overlay */}
+        <View style={hsStyles.alertsContainer} pointerEvents="box-none">
+          {homeAlerts.map(alert => (
+            <AlertPopup
+              key={alert.id}
+              alert={alert}
+              onDismiss={removeHomeAlert}
+              navigation={navigation}
+            />
+          ))}
         </View>
 
         <ScrollView
@@ -351,78 +619,290 @@ export function HomeScreen({ navigation }: Props) {
           contentContainerStyle={s.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         >
-          {/* ── RELATIONSHIP HERO BANNER (GRADIENT CARD) ─────── */}
-          <LinearGradient
-            colors={[colors.primary, colors.primaryDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={s.heroGradient}
+          {/* ── 2. LIVE PRESENCE CARD ──────────────────── */}
+          {isPartnerOnline && (
+            <View style={hsStyles.livePresenceCard}>
+              <View style={hsStyles.livePresenceLeft}>
+                <View style={hsStyles.liveGreenDot} />
+                <View style={{ flex: 1 }}>
+                  <KamiText bold style={hsStyles.presenceTitle}>{getPresenceDescription()}</KamiText>
+                  <KamiText style={hsStyles.presenceSub}>{partnerAction !== 'idle' ? 'Active now' : 'Online'}</KamiText>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={[hsStyles.presenceViewBtn, { backgroundColor: colors.primary + '11' }]}
+                onPress={() => {
+                  if (partnerAction === 'writing_letter' || partnerAction === 'reading_letter' || partnerAction === 'viewing_letters') {
+                    navigation.navigate('Future');
+                  } else if (partnerAction === 'reading_memories' || partnerAction === 'viewing_memory' || partnerAction === 'writing_memory') {
+                    navigation.navigate('Memories');
+                  } else if (partnerAction === 'creating_goal' || partnerAction === 'viewing_goals') {
+                    navigation.navigate('Goals');
+                  } else if (partnerAction === 'writing_journal' || partnerAction === 'reading_journal') {
+                    navigation.navigate('Journal');
+                  }
+                }}
+              >
+                <KamiText variant="caption" color={colors.primary} bold>View →</KamiText>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── 3. TODAY'S MOMENT CARD (HERO) ─────────── */}
+          <ImageBackground
+            source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBVo5UBqhIVeM-wgfjIejlBbswrZ05C-eYLadYjh1b8FAIKxQO7JOD6W4xVfcCCaybhJAn-GTQnLBoS018YtDfZQsE2cddHAlvpWyfVaFLFjP7rIwQHz7b49ghMNHHfZQvi0QpyKjjep46d2XdMAlRqCDjFDEo9HUcOSTBeDpNISsT0lVgcg4lRgMu4LjLzCJtyYq3kGj5VXXEAVHskJgHUeCxvm_VB_UWwsHMIN_nATl_tycmNYFt8zJBbHuDSe8ji2YGEu-yd' }}
+            style={hsStyles.heroCardImage}
+            imageStyle={{ borderRadius: 24 }}
           >
-            <View style={s.heroContent}>
-              <View style={s.heroHeader}>
-                <View style={s.dualAvatarsContainer}>
-                  {/* Current User Avatar */}
-                  <View style={[s.heroAvatarWrap, { borderColor: '#fff' }]}>
-                    {user?.avatarUrl ? (
-                      <Image source={{ uri: user.avatarUrl }} style={s.heroAvatar} />
-                    ) : (
-                      <Text style={[s.heroAvatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
-                    )}
-                  </View>
-                  {/* Overlapping Partner Avatar */}
-                  <View style={[s.heroAvatarWrap, s.heroAvatarOverlap, { borderColor: '#fff' }]}>
-                    {partner?.avatarUrl ? (
-                      <Image source={{ uri: partner.avatarUrl }} style={s.heroAvatar} />
-                    ) : (
-                      <Text style={[s.heroAvatarLetter, { color: colors.primary }]}>{initial(partnerName)}</Text>
-                    )}
-                    <View style={[s.heroOnlineBadge, { backgroundColor: isPartnerOnline ? Colors.success : '#CBD5E1' }]} />
-                  </View>
+            <LinearGradient
+              colors={['transparent', 'rgba(109, 17, 41, 0.92)']}
+              style={hsStyles.heroOverlay}
+            >
+              <View style={hsStyles.heroTopRow}>
+                <View style={hsStyles.heroBadge}>
+                  <KamiText style={hsStyles.heroBadgeText} bold>Today's Moment ✨</KamiText>
                 </View>
-                
-                {/* Stats / Day Count */}
-                <View style={s.dayCountBadge}>
-                  <Text style={s.dayCountText}>Day {relationshipDays}</Text>
+                <View style={hsStyles.heroMailBadge}>
+                  <Text style={{ fontSize: 18 }}>✉️</Text>
+                  {unreadLettersCount > 0 && (
+                    <View style={[hsStyles.heroUnreadBadge, { backgroundColor: colors.primary }]}>
+                      <KamiText style={hsStyles.heroUnreadText} bold>{unreadLettersCount}</KamiText>
+                    </View>
+                  )}
                 </View>
               </View>
 
-              <View style={s.heroTextSection}>
-                <KamiText style={s.heroTitle} color="#fff" bold>
-                  {couple.name || `${name} & ${partnerName}`}
+              <View style={hsStyles.heroContentBottom}>
+                <KamiText style={hsStyles.heroTitleText}>A new letter</KamiText>
+                <KamiText style={[hsStyles.heroTitleScript, { color: colors.primaryLight }]}>arrived ❤️</KamiText>
+                <KamiText style={hsStyles.heroTimeText}>
+                  {coupleLetters.length > 0 ? `Written ${getTimeAgo(coupleLetters[0].createdAt)}` : 'Written 2 hours ago'}
                 </KamiText>
-                <KamiText style={s.heroDuration} color="#ffffffdd">
-                  {couple.anniversaryDate ? getRelationshipDuration(couple.anniversaryDate) : 'Your shared space'}
-                </KamiText>
+                <TouchableOpacity 
+                  style={hsStyles.heroCtaBtn}
+                  onPress={() => navigation.navigate('Future')}
+                >
+                  <KamiText bold style={{ color: colors.primary }}>Open Letter →</KamiText>
+                </TouchableOpacity>
               </View>
+            </LinearGradient>
+          </ImageBackground>
 
-              <View style={s.heroFooter}>
-                <Text style={s.heroFooterText}>
-                  {daysUntilAnniversary !== null 
-                    ? `🎉 ${daysUntilAnniversary} days until your next anniversary!` 
-                    : '📅 Set your anniversary date in Settings'}
-                </Text>
+          {/* ── 4. QUICK ACTIONS SECTION ────────────────── */}
+          <View style={hsStyles.quickActionsRow}>
+            <TouchableOpacity 
+              style={hsStyles.quickCardCol}
+              onPress={() => navigation.navigate('Future')}
+            >
+              <View style={[hsStyles.quickIconBg, { backgroundColor: '#fdeae9' }]}>
+                <Text style={{ fontSize: 26, color: colors.primary }}>✍️</Text>
               </View>
+              <KamiText style={hsStyles.quickCardLabel} bold>Write Letter</KamiText>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={hsStyles.quickCardCol}
+              onPress={() => navigation.navigate('Memories')}
+            >
+              <View style={[hsStyles.quickIconBg, { backgroundColor: '#fdf2e9' }]}>
+                <Text style={{ fontSize: 26, color: '#935a26' }}>📸</Text>
+              </View>
+              <KamiText style={hsStyles.quickCardLabel} bold>Add Memory</KamiText>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={hsStyles.quickCardCol}
+              onPress={() => navigation.navigate('Goals')}
+            >
+              <View style={[hsStyles.quickIconBg, { backgroundColor: '#eef7ed' }]}>
+                <Text style={{ fontSize: 26, color: '#2d5a27' }}>🎯</Text>
+              </View>
+              <KamiText style={hsStyles.quickCardLabel} bold>New Goal</KamiText>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={hsStyles.quickCardCol}
+              onPress={handleSendLove}
+              disabled={loveSending}
+            >
+              <View style={[hsStyles.quickIconBg, { backgroundColor: '#f4effa' }]}>
+                <Text style={{ fontSize: 26, color: '#5c2d91' }}>❤️</Text>
+              </View>
+              <KamiText style={hsStyles.quickCardLabel} bold>Send Love</KamiText>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── 5. OUR JOURNEY TIMELINE ─────────────────── */}
+          <View style={hsStyles.journeySection}>
+            <View style={hsStyles.journeyHeader}>
+              <KamiText variant="subtitle" bold style={hsStyles.journeyTitle}>Our Journey ❤️</KamiText>
+              <TouchableOpacity onPress={() => navigation.navigate('Memories')}>
+                <KamiText variant="caption" color={colors.primary} bold>See All ›</KamiText>
+              </TouchableOpacity>
             </View>
-          </LinearGradient>
 
-          {/* ── PARTNER'S MOOD SPEECH BUBBLE ────────────── */}
-          {partner && (partner as any).currentMoodEmoji ? (
-            <View style={[s.card, { borderColor: colors.primaryLight + '55', backgroundColor: colors.creamDeep + '44', padding: Space[4], flexDirection: 'row', alignItems: 'center', gap: Space[4] }]}>
-              <View style={[s.moodDoneEmojiWrap, { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', elevation: 2 }]}>
-                <Text style={{ fontSize: 26 }}>{(partner as any).currentMoodEmoji}</Text>
+            {dynamicTimeline.length > 0 ? (
+              <View style={hsStyles.journeyScrollWrap}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={hsStyles.journeyScroll}>
+                  <View style={hsStyles.journeyDashedLine} />
+
+                  {dynamicTimeline.map((item) => (
+                    <View key={item.id} style={hsStyles.journeyNodeCol}>
+                      <View style={hsStyles.journeyNodeCircle}>
+                        <Text style={{ fontSize: 20 }}>{item.icon}</Text>
+                        <View style={[hsStyles.journeyNodeSmallIndicator, { backgroundColor: colors.primary }]} />
+                      </View>
+                      <KamiText bold style={hsStyles.journeyNodeText} align="center" numberOfLines={2}>{item.title}</KamiText>
+                      <KamiText style={hsStyles.journeyNodeTime} align="center">{item.time}</KamiText>
+                    </View>
+                  ))}
+                </ScrollView>
               </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <KamiText variant="caption" color={colors.primary} bold>{partnerName}'s Mood Check-in</KamiText>
-                <KamiText variant="body" style={{ fontStyle: 'italic', color: Colors.textPrimary }}>
-                  "{partnerName} is feeling <KamiText bold color={colors.primaryDark}>{(partner as any).currentMoodLabel}</KamiText> today."
+            ) : (
+              <View style={hsStyles.emptyJourneyBox}>
+                <KamiText variant="caption" color={Colors.textMuted} align="center">
+                  Your journey timeline is empty. Seal a letter or share a memory to start compiling milestones! ✨
                 </KamiText>
               </View>
-            </View>
-          ) : null}
+            )}
+          </View>
 
-          {/* ── SHARED DAILY QUESTION ──────────────────────── */}
+          {/* ── 6. MEMORY FLASHBACK CARD ────────────────── */}
+          {flashbackMemory && (
+            <ImageBackground
+              source={{ uri: flashbackImage }}
+              style={hsStyles.flashbackCardBg}
+              imageStyle={{ borderRadius: 24 }}
+            >
+              <LinearGradient
+                colors={['transparent', 'rgba(0, 0, 0, 0.85)']}
+                style={hsStyles.flashbackOverlay}
+              >
+                <View style={hsStyles.flashbackBadge}>
+                  <Text style={{ fontSize: 10, marginRight: 4 }}>📅</Text>
+                  <KamiText style={hsStyles.flashbackBadgeText} bold>Flashback Moment</KamiText>
+                </View>
+
+                <View style={hsStyles.flashbackContentBottom}>
+                  <KamiText style={hsStyles.flashbackTitleText}>{flashbackTitle} ❤️</KamiText>
+                  <KamiText style={hsStyles.flashbackDescText}>{flashbackDesc}</KamiText>
+                  <TouchableOpacity 
+                    style={hsStyles.flashbackCta}
+                    onPress={() => navigation.navigate('Memories')}
+                  >
+                    <KamiText bold style={{ color: colors.primary, fontSize: 12 }}>Relive this memory →</KamiText>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </ImageBackground>
+          )}
+
+          {/* ── 7 & 8. WIDGETS ROW SPLIT ────────────────── */}
+          <View style={hsStyles.widgetsSplitRow}>
+            {/* Latest Letter Excerpt Widget */}
+            <View style={hsStyles.tornPaperWidget}>
+              <View style={hsStyles.widgetTopRow}>
+                <KamiText style={hsStyles.widgetHeader} bold>Latest Letter</KamiText>
+                <Text style={{ fontSize: 13 }}>✉️</Text>
+              </View>
+              {letterExcerpt ? (
+                <View style={{ gap: Space[2], flex: 1 }}>
+                  <View style={hsStyles.toLabelRow}>
+                    <Text style={{ fontSize: 10 }}>❤️</Text>
+                    <KamiText style={hsStyles.toLabelText} bold>To: My Love</KamiText>
+                  </View>
+                  <KamiText style={hsStyles.letterExcerptText}>
+                    {letterExcerpt}
+                  </KamiText>
+                  <KamiText style={hsStyles.letterWrittenText}>
+                    {letterTimeAgo}
+                  </KamiText>
+                </View>
+              ) : (
+                <View style={{ flex: 1, justifyContent: 'center', paddingVertical: Space[2] }}>
+                  <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
+                    No letters opened yet. Write a time capsule to surprise your partner!
+                  </KamiText>
+                </View>
+              )}
+              <TouchableOpacity 
+                style={hsStyles.widgetFooterCta}
+                onPress={() => navigation.navigate('Future')}
+              >
+                <KamiText style={[hsStyles.widgetCtaText, { color: colors.primary }]} bold>
+                  {letterExcerpt ? 'Read Letter →' : 'Write Letter →'}
+                </KamiText>
+              </TouchableOpacity>
+            </View>
+
+            {/* Our Goal Widget Card */}
+            <View style={hsStyles.goalWidgetCard}>
+              <View style={hsStyles.widgetTopRow}>
+                <KamiText style={hsStyles.widgetHeader} bold>Our Goal</KamiText>
+                <Text style={{ fontSize: 13 }}>🏔</Text>
+              </View>
+              {goalTitle ? (
+                <>
+                  <View style={{ gap: 2 }}>
+                    <KamiText style={hsStyles.goalWidgetTitle} bold>{goalTitle}</KamiText>
+                    <KamiText style={hsStyles.goalWidgetDaysLeft}>{goalTimeRemainingText}</KamiText>
+                  </View>
+                  
+                  <View style={hsStyles.goalWidgetMiddle}>
+                    <View style={hsStyles.avatarOverlapRow}>
+                      {user?.avatarUrl ? (
+                        <Image source={{ uri: user.avatarUrl }} style={hsStyles.widgetOverlapAvatar} />
+                      ) : (
+                        <View style={[hsStyles.widgetOverlapAvatar, { backgroundColor: colors.creamDeep, alignItems: 'center', justifyContent: 'center' }]}>
+                          <Text style={{ fontSize: 9, color: colors.primary, fontWeight: 'bold' }}>{initial(name)}</Text>
+                        </View>
+                      )}
+                      {partner?.avatarUrl ? (
+                        <Image source={{ uri: partner.avatarUrl }} style={[hsStyles.widgetOverlapAvatar, { marginLeft: -12 }]} />
+                      ) : (
+                        <View style={[hsStyles.widgetOverlapAvatar, { marginLeft: -12, backgroundColor: colors.creamDeep, alignItems: 'center', justifyContent: 'center' }]}>
+                          <Text style={{ fontSize: 9, color: colors.primary, fontWeight: 'bold' }}>{initial(partnerName)}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {latestCoupleGoal && (latestCoupleGoal as any).imageUrl ? (
+                      <Image source={{ uri: (latestCoupleGoal as any).imageUrl }} style={hsStyles.widgetGoalImage} />
+                    ) : (
+                      <View style={[hsStyles.widgetGoalImagePlaceholder, { backgroundColor: colors.creamDeep, width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }]}>
+                        <Text style={{ fontSize: 16 }}>{getGoalPlantEmoji(goalProgress)}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={hsStyles.goalWidgetProgressRow}>
+                    <KamiText style={hsStyles.progressPercentText} bold>{goalProgress}% Complete</KamiText>
+                    <View style={hsStyles.progressBarTrack}>
+                      <View style={[hsStyles.progressBarFill, { width: `${goalProgress}%` as any, backgroundColor: colors.primary }]} />
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={{ flex: 1, justifyContent: 'center', paddingVertical: Space[2] }}>
+                  <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
+                    No active shared goals. Create one to track milestones together!
+                  </KamiText>
+                </View>
+              )}
+
+              <TouchableOpacity 
+                style={hsStyles.widgetFooterCta}
+                onPress={() => navigation.navigate('Goals')}
+              >
+                <KamiText style={[hsStyles.widgetCtaText, { color: colors.primary }]} bold>
+                  {goalTitle ? 'View Goal →' : 'Add Goal →'}
+                </KamiText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Today's Daily Question (Retained functionality, styled nicely) */}
           {todayQuestion && (
-            <View style={[s.card, { borderColor: colors.primary + '33' }]}>
+            <View style={[s.card, { borderColor: colors.primary + '33', marginTop: Space[4] }]}>
               <View style={s.cardHeader}>
                 <View style={s.cardTitleRow}>
                   <Text style={[s.cardIcon, { color: colors.primary }]}>✍️</Text>
@@ -479,131 +959,7 @@ export function HomeScreen({ navigation }: Props) {
             </View>
           )}
 
-          {/* ── RELATIONSHIP JOURNAL PREVIEW ────────────────── */}
-          <View style={s.card}>
-            <View style={s.cardHeader}>
-              <View style={s.cardTitleRow}>
-                <Text style={[s.cardIcon, { color: colors.primary }]}>📓</Text>
-                <KamiText variant="subtitle" bold>Relationship Journal</KamiText>
-              </View>
-              <TouchableOpacity onPress={() => navigation.navigate('Journal')} hitSlop={8}>
-                <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
-              </TouchableOpacity>
-            </View>
-
-            {coupleJournals.length === 0 ? (
-              <Tap onPress={() => navigation.navigate('Journal')} style={s.emptyInner}>
-                <KamiText variant="caption" color={Colors.textMuted} align="center">
-                  No shared entries yet.{"\n"}Write your first joint memory.
-                </KamiText>
-                <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Write entry ›</KamiText>
-              </Tap>
-            ) : (
-              <Tap onPress={() => navigation.navigate('Journal')} style={[s.journalPreview, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primaryLight + '44' }]}>
-                {coupleJournals[0].imageUrls && coupleJournals[0].imageUrls.length > 0 ? (
-                  <Image source={{ uri: coupleJournals[0].imageUrls[0] }} style={s.journalPreviewThumb} />
-                ) : (
-                  <View style={[s.journalPreviewDot, { backgroundColor: colors.primary }]} />
-                )}
-                <View style={{ flex: 1, gap: 2 }}>
-                  <KamiText variant="label" numberOfLines={1} bold>
-                    {coupleJournals[0].title || 'Untitled shared entry'}
-                  </KamiText>
-                  <KamiText variant="caption" color={Colors.textSecondary} numberOfLines={1}>
-                    {coupleJournals[0].body}
-                  </KamiText>
-                  <KamiText variant="caption" color={colors.primaryDark} style={{ fontSize: 10 }} bold>
-                    Written by {coupleJournals[0].userNickname}
-                  </KamiText>
-                </View>
-                <KamiText variant="caption" color={Colors.textMuted}>
-                  {new Date(coupleJournals[0].entryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </KamiText>
-              </Tap>
-            )}
-          </View>
-
-          {/* ── RELATIONSHIP STATS GRID ─────────────────────── */}
-          <View style={{ gap: Space[2] }}>
-            <KamiText variant="overline" style={{ paddingHorizontal: Space[2] }}>Relationship Growth Stats</KamiText>
-            <View style={s.statsGrid}>
-              <View style={[s.statsCard, { backgroundColor: colors.creamDeep, borderColor: colors.primaryLight + '44' }]}>
-                <Text style={{ fontSize: 24 }}>📅</Text>
-                <KamiText style={s.statsNum} color={colors.primaryDark}>{relationshipDays}</KamiText>
-                <KamiText variant="caption" color={Colors.textSecondary}>Days Connected</KamiText>
-              </View>
-              <View style={[s.statsCard, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '33' }]}>
-                <Text style={{ fontSize: 24 }}>💬</Text>
-                <KamiText style={s.statsNum} color={colors.primaryDark}>{dailyAnswers.length}</KamiText>
-                <KamiText variant="caption" color={Colors.textSecondary}>Answers Shared</KamiText>
-              </View>
-              <View style={[s.statsCard, { backgroundColor: '#FEF9C3' + '88', borderColor: '#FDE047' + 'aa' }]}>
-                <Text style={{ fontSize: 24 }}>📸</Text>
-                <KamiText style={s.statsNum} color="#A16207">{coupleMemories.length}</KamiText>
-                <KamiText variant="caption" color={Colors.textSecondary}>Memories Saved</KamiText>
-              </View>
-              <View style={[s.statsCard, { backgroundColor: '#DCFCE7' + '88', borderColor: '#86EFAC' + 'aa' }]}>
-                <Text style={{ fontSize: 24 }}>🏆</Text>
-                <KamiText style={s.statsNum} color="#15803D">{coupleGoals.filter(g => g.status === 'completed').length}</KamiText>
-                <KamiText variant="caption" color={Colors.textSecondary}>Goals Completed</KamiText>
-              </View>
-            </View>
-          </View>
-
-          {/* ── COUPLE GOALS PREVIEW ────────────────────────── */}
-          <View style={s.card}>
-            <View style={s.cardHeader}>
-              <View style={s.cardTitleRow}>
-                <Text style={[s.cardIcon, { color: colors.primary }]}>🌱</Text>
-                <KamiText variant="subtitle" bold>Couple Goals</KamiText>
-              </View>
-              <TouchableOpacity onPress={() => navigation.navigate('Goals')} hitSlop={8}>
-                <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
-              </TouchableOpacity>
-            </View>
-
-            {activeCoupleGoals.length === 0 ? (
-              <Tap onPress={() => navigation.navigate('Goals')} style={s.emptyInner}>
-                <KamiText variant="caption" color={Colors.textMuted} align="center">No active shared goals.</KamiText>
-                <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Add couple goal ›</KamiText>
-              </Tap>
-            ) : (
-              <View style={{ gap: Space[3] }}>
-                {activeCoupleGoals.slice(0, 3).map(g => (
-                  <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={[s.goalPreview, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primaryLight + '44' }]}>
-                    <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <KamiText variant="label" numberOfLines={1} bold>{g.title}</KamiText>
-                      <View style={[s.miniBar, { backgroundColor: colors.creamDeep }]}>
-                        <View style={[s.miniFill, { width: `${g.progress}%` as any, backgroundColor: colors.primary }]} />
-                      </View>
-                    </View>
-                    <KamiText variant="caption" color={colors.primaryDark} bold>{g.progress}%</KamiText>
-                  </Tap>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* ── QUICK ACTIONS ROW ────────────────────────── */}
-          <View style={s.quickRow}>
-            <Tap onPress={() => navigation.navigate('Memories')} style={s.quickCard}>
-              <Text style={s.quickEmoji}>📸</Text>
-              <View>
-                <KamiText variant="label" bold>Shared Timeline</KamiText>
-                <KamiText variant="caption" color={Colors.textMuted}>Couple Memories</KamiText>
-              </View>
-            </Tap>
-            <Tap onPress={() => navigation.navigate('Future')} style={s.quickCard}>
-              <Text style={s.quickEmoji}>💌</Text>
-              <View>
-                <KamiText variant="label" bold>Love Letters</KamiText>
-                <KamiText variant="caption" color={Colors.textMuted}>Capsules</KamiText>
-              </View>
-            </Tap>
-          </View>
-
-          <View style={{ height: Space[8] }} />
+          <View style={{ height: Space[10] }} />
         </ScrollView>
       </SafeAreaView>
     );
@@ -1174,3 +1530,665 @@ const s = StyleSheet.create({
   streakNum:    { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: Colors.textPrimary, lineHeight: 22 },
   streakLabel:  { fontSize: 10, marginTop: -2 },
 });
+
+const hsStyles = StyleSheet.create({
+  // Alerts stack
+  alertsContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 70,
+    right: 20,
+    left: 20,
+    zIndex: 9999,
+  },
+  alertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: Radii.card,
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[4],
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.25)', // primary light Rose
+    ...Shadows.md,
+    gap: Space[3],
+  },
+  alertEmoji: {
+    fontSize: 24,
+  },
+  alertTitle: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.textPrimary,
+  },
+  alertMsg: {
+    fontFamily: FontFamily.body,
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+  },
+  alertClose: {
+    padding: Space[1],
+  },
+
+  // 1. Premium Header Styles
+  premiumHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Space[5],
+    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2],
+    paddingBottom: Space[4],
+    backgroundColor: Colors.pageBg,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[3],
+  },
+  couplePhotoFrame: {
+    position: 'relative',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#fff',
+    ...Shadows.sm,
+    elevation: 3,
+  },
+  couplePhoto: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
+    objectFit: 'cover',
+  },
+  heartBadge: {
+    position: 'absolute',
+    bottom: -3,
+    right: -3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+  },
+  heartBadgeText: {
+    fontSize: 10,
+  },
+  appIdentity: {
+    gap: 1,
+  },
+  appName: {
+    fontSize: FontSize.md,
+    fontWeight: 'bold',
+    fontFamily: FontFamily.display,
+  },
+  coupleName: {
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+  },
+  daysCount: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: Space[2],
+  },
+  headerGlassBtn: {
+    position: 'relative',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+    elevation: 2,
+  },
+  notifBadgeDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+
+  // 2. Live Presence Card Styles
+  livePresenceCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: Radii.full,
+    paddingVertical: Space[2],
+    paddingHorizontal: Space[4],
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    ...Shadows.sm,
+    elevation: 2,
+    marginHorizontal: Space[5],
+    marginBottom: Space[2],
+  },
+  livePresenceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[3],
+    flex: 1,
+  },
+  liveGreenDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#22c55e',
+  },
+  presenceTitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+  },
+  presenceSub: {
+    fontSize: 9,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  presenceViewBtn: {
+    paddingVertical: Space[1] + 2,
+    paddingHorizontal: Space[4],
+    borderRadius: Radii.full,
+  },
+
+  // 3. Today's Moment (Hero Card)
+  heroCardImage: {
+    height: 290,
+    marginHorizontal: Space[5],
+    borderRadius: 24,
+    overflow: 'hidden',
+    ...Shadows.md,
+    elevation: 6,
+    marginBottom: Space[4],
+  },
+  heroOverlay: {
+    flex: 1,
+    padding: Space[5],
+    justifyContent: 'space-between',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroBadge: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: Radii.full,
+  },
+  heroBadgeText: {
+    fontSize: 9,
+    color: '#fff',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  heroMailBadge: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroUnreadBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  heroUnreadText: {
+    fontSize: 9,
+    color: '#fff',
+  },
+  heroContentBottom: {
+    gap: 1,
+  },
+  heroTitleText: {
+    fontSize: 22,
+    color: '#fff',
+    fontFamily: FontFamily.display,
+  },
+  heroTitleScript: {
+    fontSize: 34,
+    fontFamily: FontFamily.display,
+    fontStyle: 'italic',
+    marginTop: -4,
+  },
+  heroTimeText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginVertical: Space[2],
+  },
+  heroCtaBtn: {
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: Radii.full,
+    alignSelf: 'flex-start',
+    ...Shadows.sm,
+    elevation: 3,
+  },
+
+  // 4. Quick Actions Grid Styles
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: Space[5],
+    marginBottom: Space[5],
+    paddingVertical: Space[1],
+  },
+  quickCardCol: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickIconBg: {
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+    elevation: 2,
+  },
+  quickCardLabel: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+  },
+
+  // 5. Our Journey Timeline
+  journeySection: {
+    marginBottom: Space[5],
+  },
+  journeyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: Space[5],
+    marginBottom: Space[3],
+  },
+  journeyTitle: {
+    fontFamily: FontFamily.display,
+  },
+  journeyScrollWrap: {
+    position: 'relative',
+    height: 120,
+  },
+  journeyScroll: {
+    paddingHorizontal: Space[5],
+    alignItems: 'center',
+    gap: Space[6],
+  },
+  journeyDashedLine: {
+    position: 'absolute',
+    top: 28,
+    left: Space[10],
+    right: Space[10],
+    height: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(201, 104, 130, 0.25)',
+    borderStyle: 'dashed',
+    zIndex: -1,
+  },
+  journeyNodeCol: {
+    alignItems: 'center',
+    width: 80,
+    gap: 4,
+  },
+  journeyNodeCircle: {
+    position: 'relative',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+    elevation: 2,
+  },
+  journeyNodeSmallIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  journeyNodeText: {
+    fontSize: 9,
+    color: Colors.textPrimary,
+    lineHeight: 11,
+  },
+  journeyNodeTime: {
+    fontSize: 8,
+    color: Colors.textMuted,
+  },
+
+  // 6. Memory Flashback Card Styles
+  flashbackCardBg: {
+    height: 310,
+    marginHorizontal: Space[5],
+    borderRadius: 24,
+    overflow: 'hidden',
+    ...Shadows.md,
+    elevation: 5,
+    marginBottom: Space[5],
+  },
+  flashbackOverlay: {
+    flex: 1,
+    padding: Space[5],
+    justifyContent: 'space-between',
+  },
+  flashbackBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: Radii.full,
+    alignSelf: 'flex-start',
+  },
+  flashbackBadgeText: {
+    fontSize: 10,
+    color: '#fff',
+  },
+  flashbackContentBottom: {
+    gap: 2,
+  },
+  flashbackTitleText: {
+    fontSize: 22,
+    color: '#fff',
+    fontFamily: FontFamily.display,
+    lineHeight: 28,
+  },
+  flashbackDescText: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginBottom: Space[3],
+  },
+  flashbackCta: {
+    backgroundColor: '#fff',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: Radii.full,
+    alignSelf: 'flex-start',
+    ...Shadows.sm,
+    elevation: 2,
+  },
+
+  // 7 & 8. Widgets Split Row Styles
+  widgetsSplitRow: {
+    flexDirection: 'row',
+    gap: Space[4],
+    marginHorizontal: Space[5],
+    marginBottom: Space[5],
+  },
+  tornPaperWidget: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: Space[4],
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.15)',
+    borderStyle: 'dashed',
+    ...Shadows.sm,
+    elevation: 2,
+    justifyContent: 'space-between',
+    minHeight: 180,
+  },
+  widgetTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  widgetHeader: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: Colors.textMuted,
+  },
+  toLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  toLabelText: {
+    fontSize: 9,
+    textTransform: 'uppercase',
+    color: 'rgba(201, 104, 130, 0.75)',
+    letterSpacing: 0.5,
+  },
+  letterExcerptText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: Colors.textSecondary,
+    lineHeight: 17,
+  },
+  letterWrittenText: {
+    fontSize: 8,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  widgetFooterCta: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
+    paddingTop: 8,
+    marginTop: 6,
+  },
+  widgetCtaText: {
+    fontSize: 11,
+  },
+  goalWidgetCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: Space[4],
+    borderWidth: 1,
+    borderColor: Colors.border + '55',
+    ...Shadows.sm,
+    elevation: 2,
+    justifyContent: 'space-between',
+    minHeight: 180,
+  },
+  goalWidgetTitle: {
+    fontSize: 14,
+    fontFamily: FontFamily.display,
+    color: Colors.textPrimary,
+    marginTop: 4,
+  },
+  goalWidgetDaysLeft: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+  },
+  goalWidgetMiddle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: Space[1],
+  },
+  avatarOverlapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  widgetOverlapAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    backgroundColor: '#eee',
+  },
+  widgetGoalImage: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#eee',
+  },
+  goalWidgetProgressRow: {
+    gap: 4,
+    marginVertical: 4,
+  },
+  progressPercentText: {
+    fontSize: 9,
+    color: Colors.textSecondary,
+  },
+  progressBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  couplePhotoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onlineStatusBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#fff',
+    elevation: 2,
+  },
+  emptyJourneyBox: {
+    padding: Space[5],
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.15)',
+    borderStyle: 'dashed',
+    marginHorizontal: Space[5],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  widgetGoalImagePlaceholder: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+const AlertPopup: React.FC<{
+  alert: { id: string; type: string; title: string; message: string; targetScreen: string };
+  onDismiss: (id: string) => void;
+  navigation: any;
+}> = ({ alert, onDismiss, navigation }) => {
+  const transX = useRef(new Animated.Value(300)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(transX, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 8,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    const timer = setTimeout(() => {
+      dismiss();
+    }, 4500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const dismiss = () => {
+    Animated.parallel([
+      Animated.timing(transX, {
+        toValue: 300,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      onDismiss(alert.id);
+    });
+  };
+
+  const handlePress = () => {
+    if (alert.targetScreen) {
+      navigation.navigate(alert.targetScreen);
+    }
+    dismiss();
+  };
+
+  const getEmoji = (type: string) => {
+    switch (type) {
+      case 'letter': return '💌';
+      case 'goal': return '🎯';
+      case 'memory': return '📝';
+      case 'reaction': return '❤️';
+      case 'completed_goal': return '🎉';
+      default: return '✨';
+    }
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ translateX: transX }], opacity, marginBottom: 8 }}>
+      <TouchableOpacity activeOpacity={0.9} onPress={handlePress} style={hsStyles.alertCard}>
+        <Text style={hsStyles.alertEmoji}>{getEmoji(alert.type)}</Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={hsStyles.alertTitle}>{alert.title}</Text>
+          <Text style={hsStyles.alertMsg} numberOfLines={2}>{alert.message}</Text>
+        </View>
+        <TouchableOpacity onPress={dismiss} style={hsStyles.alertClose}>
+          <Text style={{ color: Colors.textMuted, fontSize: 14 }}>✕</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};

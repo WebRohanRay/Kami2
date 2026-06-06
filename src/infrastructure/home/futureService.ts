@@ -25,6 +25,10 @@ function mapLetterRow(row: Record<string, any>): Letter {
     deliverAt:    row.deliver_at as string,
     isUnlocked:   Date.now() >= unlockTime,
     createdAt:    row.created_at as string,
+    isRead:       row.is_read    as boolean,
+    isFavorite:   row.is_favorite as boolean,
+    isDraft:      row.is_draft    as boolean,
+    isArchived:   row.is_archived as boolean,
   };
 }
 
@@ -33,7 +37,7 @@ export async function fetchLetters(): Promise<Result<Letter[]>> {
   try {
     const { data, error } = await supabase
       .from('future_letters')
-      .select('id, user_id, subject, deliver_at, created_at')
+      .select('id, user_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
       .order('deliver_at', { ascending: true });
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -82,8 +86,10 @@ export async function createLetter(
         body:       input.body,
         deliver_at: input.deliverAt,
         image_urls: input.imageUrls ?? [],
+        is_draft:   input.isDraft ?? false,
+        is_archived:input.isArchived ?? false,
       })
-      .select('id, user_id, subject, deliver_at, created_at')
+      .select('id, user_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
       .single();
 
     if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
@@ -109,6 +115,74 @@ export async function deleteLetter(id: string): Promise<Result<void>> {
 
     if (error) return { success: false, error: friendly(error.message) };
     return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function toggleFavoriteLetter(id: string, currentVal: boolean): Promise<Result<boolean>> {
+  try {
+    const nextVal = !currentVal;
+    const { error } = await supabase
+      .from('future_letters')
+      .update({ is_favorite: nextVal })
+      .eq('id', id);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: nextVal };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function markLetterRead(id: string): Promise<Result<void>> {
+  try {
+    const { error } = await supabase
+      .from('future_letters')
+      .update({ is_read: true })
+      .eq('id', id);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function toggleLetterArchive(id: string, currentVal: boolean): Promise<Result<boolean>> {
+  try {
+    const nextVal = !currentVal;
+    const { error } = await supabase
+      .from('future_letters')
+      .update({ is_archived: nextVal })
+      .eq('id', id);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: nextVal };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function updateLetter(
+  id: string,
+  fields: Partial<{ subject: string; body: string; deliverAt: string; isDraft: boolean; isArchived: boolean; imageUrls: string[] }>
+): Promise<Result<Letter>> {
+  try {
+    const updatePayload: any = {};
+    if (fields.subject !== undefined) updatePayload.subject = fields.subject;
+    if (fields.body !== undefined) updatePayload.body = fields.body;
+    if (fields.deliverAt !== undefined) updatePayload.deliver_at = fields.deliverAt;
+    if (fields.isDraft !== undefined) updatePayload.is_draft = fields.isDraft;
+    if (fields.isArchived !== undefined) updatePayload.is_archived = fields.isArchived;
+    if (fields.imageUrls !== undefined) updatePayload.image_urls = fields.imageUrls;
+
+    const { data, error } = await supabase
+      .from('future_letters')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('id, user_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
+      .single();
+
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: mapLetterRow(data) };
   } catch (e) {
     return { success: false, error: err(e) };
   }

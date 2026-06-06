@@ -198,10 +198,31 @@ export function useCouple() {
       }
       return r;
     },
-    addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = []) => {
-      const r = await coupleService.createCoupleLetter(cId, subject, body, deliverAt, imageUrls);
+    addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = [], isDraft: boolean = false) => {
+      const r = await coupleService.createCoupleLetter(cId, subject, body, deliverAt, imageUrls, isDraft);
       if (r.success) {
         store.getState().prependCoupleLetter(r.data);
+      }
+      return r;
+    },
+    updateLetter: async (letterId: string, fields: any) => {
+      const r = await coupleService.updateCoupleLetter(letterId, fields);
+      if (r.success) {
+        await loadLetters();
+      }
+      return r;
+    },
+    toggleLetterReaction: async (letterId: string, emoji: string) => {
+      const r = await coupleService.toggleCoupleLetterReaction(letterId, emoji);
+      if (r.success) {
+        await loadLetters();
+      }
+      return r;
+    },
+    toggleLetterArchive: async (letterId: string, currentVal: boolean) => {
+      const r = await coupleService.toggleCoupleLetterArchive(letterId, currentVal);
+      if (r.success) {
+        await loadLetters();
       }
       return r;
     },

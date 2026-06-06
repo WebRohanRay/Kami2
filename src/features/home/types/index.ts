@@ -166,6 +166,10 @@ export interface Letter {
   isUnlocked:   boolean;
   imageUrls?:   string[];
   createdAt:    string;
+  isRead?:      boolean;
+  isFavorite?:  boolean;
+  isDraft?:     boolean;
+  isArchived?:  boolean;
 }
 
 export type CreateLetterInput = {
@@ -173,6 +177,8 @@ export type CreateLetterInput = {
   body:       string;
   deliverAt:  string;
   imageUrls?: string[];
+  isDraft?:   boolean;
+  isArchived?:boolean;
 };
 
 // ─── Result ──────────────────────────────────────────────────────────────────

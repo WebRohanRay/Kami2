@@ -400,7 +400,7 @@ BEGIN
   FROM future_letters fl
   WHERE fl.id = p_letter_id 
     AND fl.user_id = auth.uid() 
-    AND fl.deliver_at <= NOW();
+    AND (fl.deliver_at <= NOW() OR fl.is_draft = TRUE);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
@@ -788,4 +788,21 @@ ON CONFLICT DO NOTHING;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
+
+-- Letter read status & favorites extensions
+ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
+
+-- Update RLS policies to allow updating letters
+DROP POLICY IF EXISTS "couple_letters_update" ON public.couple_letters;
+CREATE POLICY "couple_letters_update" ON public.couple_letters
+  FOR UPDATE USING (public.is_couple_member(couple_id));
+
+DROP POLICY IF EXISTS "future_letters_update" ON public.future_letters;
+CREATE POLICY "future_letters_update" ON public.future_letters
+  FOR UPDATE USING (auth.uid() = user_id);
+
 

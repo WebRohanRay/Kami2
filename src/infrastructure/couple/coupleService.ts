@@ -964,7 +964,7 @@ export async function fetchCoupleLetters(coupleId: string): Promise<Result<Coupl
   try {
     const { data, error } = await supabase
       .from('couple_letters')
-      .select('id, couple_id, sender_id, subject, deliver_at, created_at, profiles(nickname)')
+      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived, profiles(nickname), couple_letter_reactions(user_id, emoji)')
       .eq('couple_id', coupleId)
       .order('deliver_at', { ascending: true });
 
@@ -980,7 +980,15 @@ export async function fetchCoupleLetters(coupleId: string): Promise<Result<Coupl
         deliverAt: r.deliver_at,
         isUnlocked: Date.now() >= unlockTime,
         createdAt: r.created_at,
-        senderNickname: r.profiles?.nickname
+        senderNickname: r.profiles?.nickname,
+        isRead: r.is_read,
+        isFavorite: r.is_favorite,
+        isDraft: r.is_draft,
+        isArchived: r.is_archived,
+        reactions: (r.couple_letter_reactions ?? []).map((rx: any) => ({
+          userId: rx.user_id,
+          emoji: rx.emoji
+        }))
       };
     });
 
@@ -996,7 +1004,8 @@ export async function createCoupleLetter(
   subject: string, 
   body: string, 
   deliverAt: string, 
-  imageUrls: string[] = []
+  imageUrls: string[] = [],
+  isDraft: boolean = false
 ): Promise<Result<CoupleLetter>> {
   try {
     const { data: userRes } = await supabase.auth.getUser();
@@ -1010,9 +1019,10 @@ export async function createCoupleLetter(
         subject: subject.trim(),
         body: body.trim(),
         deliver_at: deliverAt,
-        image_urls: imageUrls
+        image_urls: imageUrls,
+        is_draft: isDraft
       })
-      .select('id, couple_id, sender_id, subject, deliver_at, created_at')
+      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -1026,7 +1036,11 @@ export async function createCoupleLetter(
         subject: data.subject,
         deliverAt: data.deliver_at,
         isUnlocked: false,
-        createdAt: data.created_at
+        createdAt: data.created_at,
+        isRead: data.is_read,
+        isFavorite: data.is_favorite,
+        isDraft: data.is_draft,
+        isArchived: data.is_archived
       }
     };
   } catch (e) {
@@ -1134,6 +1148,126 @@ export async function createRelationshipEvent(
         eventType: data.event_type as any,
         createdAt: data.created_at,
         updatedAt: data.updated_at
+      }
+    };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function toggleCoupleLetterFavorite(id: string, currentVal: boolean): Promise<Result<boolean>> {
+  try {
+    const nextVal = !currentVal;
+    const { error } = await supabase
+      .from('couple_letters')
+      .update({ is_favorite: nextVal })
+      .eq('id', id);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: nextVal };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function markCoupleLetterRead(id: string): Promise<Result<void>> {
+  try {
+    const { error } = await supabase
+      .from('couple_letters')
+      .update({ is_read: true })
+      .eq('id', id);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function toggleCoupleLetterReaction(letterId: string, emoji: string): Promise<Result<void>> {
+  try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+
+    const userId = userRes.user.id;
+    const { data, error: sErr } = await supabase
+      .from('couple_letter_reactions')
+      .select('*')
+      .eq('letter_id', letterId)
+      .eq('user_id', userId)
+      .eq('emoji', emoji)
+      .maybeSingle();
+
+    if (sErr) return { success: false, error: friendly(sErr.message) };
+
+    if (data) {
+      const { error: dErr } = await supabase
+        .from('couple_letter_reactions')
+        .delete()
+        .eq('letter_id', letterId)
+        .eq('user_id', userId)
+        .eq('emoji', emoji);
+      if (dErr) return { success: false, error: friendly(dErr.message) };
+    } else {
+      const { error: iErr } = await supabase
+        .from('couple_letter_reactions')
+        .insert({ letter_id: letterId, user_id: userId, emoji });
+      if (iErr) return { success: false, error: friendly(iErr.message) };
+    }
+
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function toggleCoupleLetterArchive(id: string, currentVal: boolean): Promise<Result<boolean>> {
+  try {
+    const nextVal = !currentVal;
+    const { error } = await supabase
+      .from('couple_letters')
+      .update({ is_archived: nextVal })
+      .eq('id', id);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: nextVal };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+export async function updateCoupleLetter(
+  letterId: string, 
+  fields: Partial<{ subject: string; body: string; deliverAt: string; isDraft: boolean; isArchived: boolean }>
+): Promise<Result<CoupleLetter>> {
+  try {
+    const updatePayload: any = {};
+    if (fields.subject !== undefined) updatePayload.subject = fields.subject;
+    if (fields.body !== undefined) updatePayload.body = fields.body;
+    if (fields.deliverAt !== undefined) updatePayload.deliver_at = fields.deliverAt;
+    if (fields.isDraft !== undefined) updatePayload.is_draft = fields.isDraft;
+    if (fields.isArchived !== undefined) updatePayload.is_archived = fields.isArchived;
+
+    const { data, error } = await supabase
+      .from('couple_letters')
+      .update(updatePayload)
+      .eq('id', letterId)
+      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
+      .single();
+
+    if (error) return { success: false, error: friendly(error.message) };
+
+    return {
+      success: true,
+      data: {
+        id: data.id,
+        coupleId: data.couple_id,
+        senderId: data.sender_id,
+        subject: data.subject,
+        deliverAt: data.deliver_at,
+        isUnlocked: false,
+        createdAt: data.created_at,
+        isRead: data.is_read,
+        isFavorite: data.is_favorite,
+        isDraft: data.is_draft,
+        isArchived: data.is_archived
       }
     };
   } catch (e) {

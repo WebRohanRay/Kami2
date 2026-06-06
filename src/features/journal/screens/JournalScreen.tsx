@@ -26,6 +26,7 @@ import { useTheme }     from '@shared/hooks';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple }      from '@features/couple/hooks/useCouple';
 import { supabase }       from '@shared/lib/supabase';
+import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
 
 type Props = MainTabScreenProps<'Journal'>;
 
@@ -324,6 +325,47 @@ export function JournalScreen({ navigation }: Props) {
   useEffect(() => {
     setVisibleEntries(10);
   }, [user?.activeSpace]);
+
+  const [isFocused, setIsFocused] = useState(navigation.isFocused());
+
+  // Focus listener to auto-refresh data when focused
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      setIsFocused(true);
+      if (user?.activeSpace === 'couple') {
+        loadCoupleJournals();
+      } else {
+        if (user?.id) {
+          loadJournal(search.trim() || undefined, selectedTag || undefined);
+        }
+      }
+    });
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setIsFocused(false);
+    });
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [navigation, user?.activeSpace, user?.id, search, selectedTag, loadCoupleJournals, loadJournal]);
+
+  // Real-time ephemeral broadcast status when writing a journal or responding to prompt
+  useEffect(() => {
+    if (user?.activeSpace === 'couple' && couple?.id && user?.id) {
+      if (isFocused) {
+        const action = writeVisible || promptVisible ? 'writing_journal' : 'reading_journal';
+        useCoupleStore.getState().setMyActiveAction(action);
+        broadcastPartnerAction(couple.id, user.id, action);
+      } else {
+        const store = useCoupleStore.getState();
+        const cleared1 = store.clearMyActiveAction('writing_journal');
+        const cleared2 = store.clearMyActiveAction('reading_journal');
+        if (cleared1 || cleared2) {
+          broadcastPartnerAction(couple.id, user.id, 'idle');
+        }
+      }
+    }
+  }, [isFocused, writeVisible, promptVisible, user?.activeSpace, couple?.id, user?.id]);
 
   useEffect(() => {
     if (user?.activeSpace === 'couple') {

@@ -7,6 +7,20 @@ import type {
 
 type LoadingState = 'idle' | 'loading' | 'refreshing' | 'error';
 
+export type PartnerActionType = 
+  | 'writing_letter' 
+  | 'reading_memories' 
+  | 'creating_goal' 
+  | 'reading_letter' 
+  | 'writing_journal' 
+  | 'sending_love' 
+  | 'writing_memory' 
+  | 'viewing_memory' 
+  | 'reading_journal'
+  | 'viewing_goals'
+  | 'viewing_letters'
+  | 'idle';
+
 interface CoupleState {
   // ── Connection & Meta ───────────────────────────────────
   couple: Couple | null;
@@ -44,6 +58,20 @@ interface CoupleState {
 
   // ── Toast Notification ──────────────────────────────────
   toast: { title: string; message: string; icon: string; targetScreen?: string } | null;
+
+  // ── Home Alerts ─────────────────────────────────────────
+  homeAlerts: { id: string; type: 'letter' | 'goal' | 'memory' | 'reaction' | 'completed_goal'; title: string; message: string; targetScreen: string }[];
+  addHomeAlert: (alert: { type: 'letter' | 'goal' | 'memory' | 'reaction' | 'completed_goal'; title: string; message: string; targetScreen: string }) => void;
+  removeHomeAlert: (id: string) => void;
+
+  // ── Partner Real-time Activity Presence Status ─────────
+  partnerAction: PartnerActionType;
+  setPartnerAction: (action: PartnerActionType) => void;
+  myActiveAction: PartnerActionType;
+  setMyActiveAction: (action: PartnerActionType) => void;
+  clearMyActiveAction: (action: PartnerActionType) => boolean;
+  realtimeChannel: any | null;
+  setRealtimeChannel: (ch: any | null) => void;
 
   // ── Setters ─────────────────────────────────────────────
   setCouple: (c: Couple | null) => void;
@@ -119,6 +147,10 @@ const initial = {
   questionLoading: 'idle' as LoadingState,
 
   toast: null,
+  homeAlerts: [],
+  partnerAction: 'idle' as PartnerActionType,
+  myActiveAction: 'idle' as PartnerActionType,
+  realtimeChannel: null,
 };
 
 export const useCoupleStore = create<CoupleState>((set) => ({
@@ -176,6 +208,27 @@ export const useCoupleStore = create<CoupleState>((set) => ({
   setQuestionLoading: (s) => set({ questionLoading: s }),
 
   setToast: (toast) => set({ toast }),
+
+  addHomeAlert: (alert) => set((s) => ({
+    homeAlerts: [...s.homeAlerts, { ...alert, id: Math.random().toString(36).substring(7) }]
+  })),
+  removeHomeAlert: (id) => set((s) => ({
+    homeAlerts: s.homeAlerts.filter((x) => x.id !== id)
+  })),
+  setPartnerAction: (action) => set({ partnerAction: action }),
+  setMyActiveAction: (action) => set({ myActiveAction: action }),
+  clearMyActiveAction: (action) => {
+    let changed = false;
+    set((s) => {
+      if (s.myActiveAction === action) {
+        changed = true;
+        return { myActiveAction: 'idle' };
+      }
+      return {};
+    });
+    return changed;
+  },
+  setRealtimeChannel: (ch) => set({ realtimeChannel: ch }),
 
   reset: () => set(initial),
 }));

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Animated, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useAuthStore } from '@features/auth';
-import { useCoupleStore } from '../store/coupleStore';
+import { useCoupleStore, PartnerActionType } from '../store/coupleStore';
 import { useCouple } from '../hooks/useCouple';
 import { supabase } from '@shared/lib/supabase';
 import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
@@ -32,6 +32,12 @@ export function CoupleRealtimeListener() {
 
     // Set up Supabase realtime channel for this couple space
     const channel = supabase.channel(`couple_space_realtime_${coupleId}`)
+      // Broadcast listener for ephemeral action presence (writing letter, reading memories, etc.)
+      .on('broadcast', { event: 'presence_action' }, (payload: any) => {
+        if (payload?.payload?.userId !== user.id) {
+          useCoupleStore.getState().setPartnerAction(payload.payload.action);
+        }
+      })
       // 1. Couple Letters
       .on('postgres_changes', { 
         event: '*', 
@@ -48,6 +54,12 @@ export function CoupleRealtimeListener() {
             icon: '✉️',
             targetScreen: 'Future'
           });
+          useCoupleStore.getState().addHomeAlert({
+            type: 'letter',
+            title: 'New Letter Received 💌',
+            message: `${partnerName} just sent you a letter!`,
+            targetScreen: 'Future'
+          });
           Alert.alert(
             'New Love Letter! ✉️',
             `${partnerName} just sealed a new love letter for you.`,
@@ -61,6 +73,19 @@ export function CoupleRealtimeListener() {
               }
             ]
           );
+        } else if (payload.eventType === 'UPDATE' && newRow.is_read && newRow.sender_id === user.id) {
+          setToast({
+            title: 'Letter Read! ❤️',
+            message: `${partnerName} read your love letter.`,
+            icon: '❤️',
+            targetScreen: 'Future'
+          });
+          useCoupleStore.getState().addHomeAlert({
+            type: 'reaction',
+            title: 'Letter Read ❤️',
+            message: `${partnerName} opened your letter!`,
+            targetScreen: 'Future'
+          });
         }
       })
       // 2. Couple Journals
@@ -109,6 +134,20 @@ export function CoupleRealtimeListener() {
         const newRow = payload.new as any;
         if (newRow && newRow.user_id === partner?.id) {
           loadJournals();
+          if (payload.eventType === 'INSERT') {
+            setToast({
+              title: 'Partner Reacted! ❤️',
+              message: `${partnerName} reacted to a journal entry.`,
+              icon: '❤️',
+              targetScreen: 'Journal'
+            });
+            useCoupleStore.getState().addHomeAlert({
+              type: 'reaction',
+              title: 'Partner Reacted ❤️',
+              message: `${partnerName} left a reaction in the journal.`,
+              targetScreen: 'Journal'
+            });
+          }
         }
       })
       // 5. Couple Goals
@@ -128,6 +167,12 @@ export function CoupleRealtimeListener() {
             icon: '🎯',
             targetScreen: 'Goals'
           });
+          useCoupleStore.getState().addHomeAlert({
+            type: 'goal',
+            title: 'New Goal Added 🎯',
+            message: `A new shared goal has been created!`,
+            targetScreen: 'Goals'
+          });
         } else if (payload.eventType === 'UPDATE') {
           if (oldRow && oldRow.progress !== newRow.progress) {
             setToast({
@@ -136,6 +181,14 @@ export function CoupleRealtimeListener() {
               icon: '📈',
               targetScreen: 'Goals'
             });
+            if (newRow.progress === 100) {
+              useCoupleStore.getState().addHomeAlert({
+                type: 'completed_goal',
+                title: 'Goal Completed! 🎉',
+                message: `"${newRow.title}" is fully completed!`,
+                targetScreen: 'Goals'
+              });
+            }
           }
         }
       })
@@ -152,6 +205,12 @@ export function CoupleRealtimeListener() {
             title: 'New Memory Card! 📸',
             message: `${partnerName} added a new memory to your timeline.`,
             icon: '📸',
+            targetScreen: 'Memories'
+          });
+          useCoupleStore.getState().addHomeAlert({
+            type: 'memory',
+            title: 'New Memory Added 📝',
+            message: `${partnerName} added a new memory to your timeline.`,
             targetScreen: 'Memories'
           });
         }
@@ -194,7 +253,10 @@ export function CoupleRealtimeListener() {
       })
       .subscribe();
 
+    useCoupleStore.getState().setRealtimeChannel(channel);
+
     return () => {
+      useCoupleStore.getState().setRealtimeChannel(null);
       supabase.removeChannel(channel);
     };
   }, [activeSpace, couple?.id, partner?.id, user?.id]);
@@ -351,3 +413,33 @@ const styles = StyleSheet.create({
     marginLeft: Space[2],
   }
 });
+
+export async function broadcastPartnerAction(coupleId: string, userId: string, action: PartnerActionType) {
+  const channel = useCoupleStore.getState().realtimeChannel;
+  if (channel) {
+    channel.send({
+      type: 'broadcast',
+      event: 'presence_action',
+      payload: { userId, action }
+    });
+  } else {
+    const channelName = `couple_space_realtime_${coupleId}`;
+    const ch = supabase.channel(channelName);
+    const sendAction = () => {
+      ch.send({
+        type: 'broadcast',
+        event: 'presence_action',
+        payload: { userId, action }
+      });
+    };
+    if ((ch as any).state === 'joined') {
+      sendAction();
+    } else {
+      ch.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          sendAction();
+        }
+      });
+    }
+  }
+}
