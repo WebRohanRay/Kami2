@@ -12,6 +12,7 @@ import { AuthNavigator } from './AuthNavigator';
 import MainNavigator     from './MainNavigator';
 import { useDeepLink }   from './useDeepLink';
 import type { RootStackParamList } from './types';
+import { CoupleRealtimeListener } from '@features/couple/components/CoupleRealtimeListener';
 
 const Stack  = createNativeStackNavigator<RootStackParamList>();
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -40,6 +41,7 @@ export const RootNavigator: React.FC = () => {
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
       </Stack.Navigator>
+      {status === 'authenticated' && <CoupleRealtimeListener />}
     </NavigationContainer>
   );
 };

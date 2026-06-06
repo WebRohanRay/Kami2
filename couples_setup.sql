@@ -248,11 +248,14 @@ CREATE POLICY "couple_letters_insert" ON public.couple_letters
 
 DROP POLICY IF EXISTS "couple_letters_select" ON public.couple_letters;
 CREATE POLICY "couple_letters_select" ON public.couple_letters
-  FOR SELECT USING (public.is_couple_member(couple_id) AND (deliver_at <= NOW() OR auth.uid() = sender_id));
+  FOR SELECT USING (public.is_couple_member(couple_id));
 
 DROP POLICY IF EXISTS "couple_letters_delete" ON public.couple_letters;
 CREATE POLICY "couple_letters_delete" ON public.couple_letters
   FOR DELETE USING (public.is_couple_member(couple_id) AND auth.uid() = sender_id);
+
+REVOKE SELECT (body, image_urls) ON public.couple_letters FROM authenticated;
+
 
 -- Shared Daily Questions
 CREATE TABLE IF NOT EXISTS public.couple_daily_questions (
@@ -310,3 +313,20 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Decrypt/select sealed couple letters RPC
+CREATE OR REPLACE FUNCTION public.fetch_unlocked_couple_letter(p_letter_id UUID)
+RETURNS TABLE (body TEXT, image_urls TEXT[]) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT cl.body, cl.image_urls
+  FROM couple_letters cl
+  WHERE cl.id = p_letter_id 
+    AND public.is_couple_member(cl.couple_id) 
+    AND (cl.deliver_at <= NOW() OR auth.uid() = cl.sender_id);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.fetch_unlocked_couple_letter(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fetch_unlocked_couple_letter(UUID) TO authenticated;
+

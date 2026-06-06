@@ -13,19 +13,18 @@ import { GoalsScreen }    from '@features/goals';
 import { FutureScreen }   from '@features/future';
 import { SettingsScreen } from '@features/settings';
 
+import { useAuthStore }   from '@features/auth';
 import { Colors, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import type { MainTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-
-// ─── Tab definitions ─────────────────────────────────────────────────────────
 
 const TABS = [
   { name: 'Home',     emoji: '✦',  label: 'Home'     },
   { name: 'Journal',  emoji: '📓', label: 'Journal'  },
   { name: 'Memories', emoji: '📸', label: 'Memories' },
   { name: 'Goals',    emoji: '🌱', label: 'Goals'    },
-  { name: 'Future',   emoji: '💌', label: 'Future'   },
+  { name: 'Future',   emoji: '✨',  label: 'Future'   },
 ] as const;
 
 // ─── Custom tab bar ───────────────────────────────────────────────────────────
@@ -33,6 +32,7 @@ const TABS = [
 function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   // Only render tabs that are in our TABS list (hides Settings)
   const visibleRoutes = state.routes.filter(r => TABS.some(t => t.name === r.name));
+  const activeSpace = useAuthStore((s) => s.user?.activeSpace) ?? 'personal';
 
   return (
     <View style={tb.wrapper}>
@@ -49,12 +49,20 @@ function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             }
           };
 
+          const tabEmoji = route.name === 'Future'
+            ? (activeSpace === 'couple' ? '✉️' : '✨')
+            : tab.emoji;
+
+          const tabLabel = route.name === 'Future'
+            ? (activeSpace === 'couple' ? 'Letters' : 'Future')
+            : tab.label;
+
           return (
             <TouchableOpacity
               key={route.key}
               onPress={onPress}
               accessibilityRole="button"
-              accessibilityLabel={tab.label}
+              accessibilityLabel={tabLabel}
               accessibilityState={{ selected: isFocused }}
               style={tb.item}
               activeOpacity={0.7}
@@ -63,10 +71,10 @@ function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               {isFocused && <View style={tb.pill} />}
 
               <Text style={[tb.emoji, { opacity: isFocused ? 1 : 0.4 }]}>
-                {tab.emoji}
+                {tabEmoji}
               </Text>
               <Text style={[tb.label, { color: isFocused ? Colors.primary : Colors.textMuted }]}>
-                {tab.label}
+                {tabLabel}
               </Text>
             </TouchableOpacity>
           );

@@ -97,6 +97,7 @@ export interface CoupleLetter {
   createdAt: string;
   body?: string;
   imageUrls?: string[];
+  senderNickname?: string;
 }
 
 export interface CoupleDailyQuestion {

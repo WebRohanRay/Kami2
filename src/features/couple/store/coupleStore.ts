@@ -42,6 +42,9 @@ interface CoupleState {
   dailyAnswers: CoupleAnswer[];
   questionLoading: LoadingState;
 
+  // ── Toast Notification ──────────────────────────────────
+  toast: { title: string; message: string; icon: string; targetScreen?: string } | null;
+
   // ── Setters ─────────────────────────────────────────────
   setCouple: (c: Couple | null) => void;
   setPartner: (p: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null } | null) => void;
@@ -82,6 +85,8 @@ interface CoupleState {
   addDailyAnswer: (answer: CoupleAnswer) => void;
   setQuestionLoading: (s: LoadingState) => void;
 
+  setToast: (toast: { title: string; message: string; icon: string; targetScreen?: string } | null) => void;
+
   reset: () => void;
 }
 
@@ -112,6 +117,8 @@ const initial = {
   todayQuestion: null,
   dailyAnswers: [],
   questionLoading: 'idle' as LoadingState,
+
+  toast: null,
 };
 
 export const useCoupleStore = create<CoupleState>((set) => ({
@@ -167,6 +174,8 @@ export const useCoupleStore = create<CoupleState>((set) => ({
   setDailyAnswers: (answers) => set({ dailyAnswers: answers }),
   addDailyAnswer: (answer) => set((s) => ({ dailyAnswers: [...s.dailyAnswers.filter(a => a.userId !== answer.userId), answer] })),
   setQuestionLoading: (s) => set({ questionLoading: s }),
+
+  setToast: (toast) => set({ toast }),
 
   reset: () => set(initial),
 }));

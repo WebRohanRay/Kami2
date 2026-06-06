@@ -319,6 +319,12 @@ export function JournalScreen({ navigation }: Props) {
   const [selectedCommentsEntry, setSelectedCommentsEntry] = useState<any>(null);
   const [commentsVisible, setCommentsVisible] = useState(false);
 
+  const [visibleEntries, setVisibleEntries] = useState(10);
+
+  useEffect(() => {
+    setVisibleEntries(10);
+  }, [user?.activeSpace]);
+
   useEffect(() => {
     if (user?.activeSpace === 'couple') {
       loadCoupleJournals();
@@ -538,36 +544,53 @@ export function JournalScreen({ navigation }: Props) {
         )}
 
         {/* Entries */}
-        {(user?.activeSpace === 'couple' ? coupleJournals : journalEntries).map((e, idx) => {
-          const list = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
-          const showDate = idx === 0 || new Date(e.entryDate).toDateString() !== new Date(list[idx - 1].entryDate).toDateString();
+        {(() => {
+          const rawList = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
+          const sortedList = [...rawList].sort((a, b) => new Date(b.entryDate || b.createdAt).getTime() - new Date(a.entryDate || a.createdAt).getTime());
+          const paginatedList = sortedList.slice(0, visibleEntries);
           return (
-            <React.Fragment key={e.id}>
-              {showDate && (
-                <KamiText variant="overline" style={s.dateLabel}>{formatDate(e.entryDate)}</KamiText>
+            <>
+              {paginatedList.map((e, idx) => {
+                const showDate = idx === 0 || new Date(e.entryDate).toDateString() !== new Date(paginatedList[idx - 1].entryDate).toDateString();
+                return (
+                  <React.Fragment key={e.id}>
+                    {showDate && (
+                      <KamiText variant="overline" style={s.dateLabel}>{formatDate(e.entryDate)}</KamiText>
+                    )}
+                    <EntryCard
+                      entry={e}
+                      onEdit={() => {
+                        if (user?.activeSpace === 'couple' && e.userId !== user?.id) {
+                          Alert.alert('Kami', 'You can only edit entries you wrote.');
+                          return;
+                        }
+                        setEditing(e); setWriteVisible(true);
+                      }}
+                      onDelete={() => handleDelete(e)}
+                      onTogglePin={() => togglePin(e)}
+                      activeSpace={user?.activeSpace}
+                      user={user}
+                      onReact={toggleReaction}
+                      onOpenComments={(item) => {
+                        setSelectedCommentsEntry(item);
+                        setCommentsVisible(true);
+                      }}
+                    />
+                  </React.Fragment>
+                );
+              })}
+              {sortedList.length > visibleEntries && (
+                <TouchableOpacity
+                  style={[s.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
+                  onPress={() => setVisibleEntries(prev => prev + 10)}
+                  activeOpacity={0.8}
+                >
+                  <KamiText variant="label" color={colors.primary} bold>Load More Entries</KamiText>
+                </TouchableOpacity>
               )}
-              <EntryCard
-                entry={e}
-                onEdit={() => {
-                  if (user?.activeSpace === 'couple' && e.userId !== user?.id) {
-                    Alert.alert('Kami', 'You can only edit entries you wrote.');
-                    return;
-                  }
-                  setEditing(e); setWriteVisible(true);
-                }}
-                onDelete={() => handleDelete(e)}
-                onTogglePin={() => togglePin(e)}
-                activeSpace={user?.activeSpace}
-                user={user}
-                onReact={toggleReaction}
-                onOpenComments={(item) => {
-                  setSelectedCommentsEntry(item);
-                  setCommentsVisible(true);
-                }}
-              />
-            </React.Fragment>
+            </>
           );
-        })}
+        })()}
 
         <View style={{ height: Space[8] }} />
       </ScrollView>
@@ -824,4 +847,15 @@ const s = StyleSheet.create({
   // Couple Space journal card styles
   coupleActionsRow: { flexDirection: 'row', alignItems: 'center', paddingTop: Space[3], borderTopWidth: 1, marginTop: Space[2] },
   reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 6, borderRadius: Radii.sm, borderWidth: 1, borderColor: Colors.border + '44', backgroundColor: Colors.creamDeep + '11' },
+  loadMoreBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[5],
+    borderRadius: Radii.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border + '66',
+    marginVertical: Space[2],
+    ...Shadows.sm,
+  },
 });

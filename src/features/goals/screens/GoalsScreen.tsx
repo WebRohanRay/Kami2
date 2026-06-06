@@ -205,6 +205,14 @@ export function GoalsScreen({ navigation }: Props) {
   const [refreshing,   setRefreshing]   = useState(false);
   const [filter,       setFilter]       = useState<'all' | GoalCategory>('all');
 
+  const [visibleActive,    setVisibleActive]    = useState(10);
+  const [visibleCompleted, setVisibleCompleted] = useState(10);
+
+  useEffect(() => {
+    setVisibleActive(10);
+    setVisibleCompleted(10);
+  }, [activeSpace]);
+
   // Dual-mode loaders
   useEffect(() => {
     if (activeSpace === 'couple') {
@@ -216,9 +224,16 @@ export function GoalsScreen({ navigation }: Props) {
 
   const currentGoals = activeSpace === 'couple' ? coupleStore.coupleGoals : goals;
 
-  const active    = currentGoals.filter(g => g.status === 'active');
-  const completed = currentGoals.filter(g => g.status === 'completed');
-  const filtered  = filter === 'all' ? active : active.filter(g => g.category === filter);
+  const active = currentGoals.filter(g => g.status === 'active');
+  const completed = currentGoals
+    .filter(g => g.status === 'completed')
+    .sort((a, b) => new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime());
+
+  const sortedActive = [...active].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const filtered = filter === 'all' ? sortedActive : sortedActive.filter(g => g.category === filter);
+
+  const paginatedActive = filtered.slice(0, visibleActive);
+  const paginatedCompleted = completed.slice(0, visibleCompleted);
 
   const handleSave = async (title: string, cat: GoalCategory, emoji: string, desc?: string, coverUri: string | null = null) => {
     if (!user?.id) return;
@@ -394,13 +409,35 @@ export function GoalsScreen({ navigation }: Props) {
 
         {/* Active goals */}
         {filtered.length > 0 && <KamiText variant="overline">Active · {filtered.length}</KamiText>}
-        {filtered.map(g => <GoalCard key={g.id} goal={g} onEdit={() => { setEditing(g); setModalVisible(true); }} onDelete={() => handleDelete(g)} onProgress={handleProgress} />)}
+        {paginatedActive.map(g => (
+          <GoalCard key={g.id} goal={g} onEdit={() => { setEditing(g); setModalVisible(true); }} onDelete={() => handleDelete(g)} onProgress={handleProgress} />
+        ))}
+        {filtered.length > visibleActive && (
+          <TouchableOpacity
+            style={[s.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
+            onPress={() => setVisibleActive(prev => prev + 10)}
+            activeOpacity={0.8}
+          >
+            <KamiText variant="label" color={colors.primary} bold>Load More Active Goals</KamiText>
+          </TouchableOpacity>
+        )}
 
         {/* Completed goals */}
         {completed.length > 0 && (
           <>
             <KamiText variant="overline" style={{ marginTop: Space[2] }}>Completed · {completed.length}</KamiText>
-            {completed.map(g => <GoalCard key={g.id} goal={g} onEdit={() => {}} onDelete={() => handleDelete(g)} onProgress={() => {}} completed />)}
+            {paginatedCompleted.map(g => (
+              <GoalCard key={g.id} goal={g} onEdit={() => {}} onDelete={() => handleDelete(g)} onProgress={() => {}} completed />
+            ))}
+            {completed.length > visibleCompleted && (
+              <TouchableOpacity
+                style={[s.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
+                onPress={() => setVisibleCompleted(prev => prev + 10)}
+                activeOpacity={0.8}
+              >
+                <KamiText variant="label" color={colors.primary} bold>Load More Completed Goals</KamiText>
+              </TouchableOpacity>
+            )}
           </>
         )}
 
@@ -530,4 +567,15 @@ const s = StyleSheet.create({
   ctrlBtnMinus: { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: Colors.creamDeep, borderWidth: 1, borderColor: Colors.border },
   ctrlBtnPlus:  { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: Colors.primary },
   completedBadge:{ flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: Colors.success + '15', borderRadius: Radii.sm, paddingHorizontal: Space[3], paddingVertical: Space[2], alignSelf: 'flex-start' },
+  loadMoreBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[5],
+    borderRadius: Radii.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border + '66',
+    marginVertical: Space[2],
+    ...Shadows.sm,
+  },
 });

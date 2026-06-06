@@ -31,12 +31,13 @@ import { useTheme } from '@shared/hooks';
 type Props = MainTabScreenProps<'Future'>;
 
 const DELIVERY_OPTIONS = [
-  { label: '1 month',  days: 30  },
-  { label: '3 months', days: 90  },
-  { label: '6 months', days: 180 },
-  { label: '1 year',   days: 365 },
-  { label: '2 years',  days: 730 },
-  { label: '5 years',  days: 1825},
+  { label: 'Send Now',  days: 0   },
+  { label: '1 month',   days: 30  },
+  { label: '3 months',  days: 90  },
+  { label: '6 months',  days: 180 },
+  { label: '1 year',    days: 365 },
+  { label: '2 years',   days: 730 },
+  { label: '5 years',   days: 1825},
 ];
 
 const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -59,6 +60,10 @@ function daysUntil(iso: string) {
   return `Opens in ${Math.floor(d / 365)} year${Math.floor(d / 365) > 1 ? 's' : ''}`;
 }
 
+function checkUnlocked(l: Letter | CoupleLetter) {
+  return Date.now() >= new Date(l.deliverAt).getTime();
+}
+
 // ─── Write modal ──────────────────────────────────────────────────────────────
 const WriteModal: React.FC<{
   visible: boolean; onClose: () => void;
@@ -66,7 +71,7 @@ const WriteModal: React.FC<{
 }> = ({ visible, onClose, onSave, saving }) => {
   const [subject,  setSubject]  = useState('');
   const [body,     setBody]     = useState('');
-  const [delivery, setDelivery] = useState(DELIVERY_OPTIONS[2]);
+  const [delivery, setDelivery] = useState(DELIVERY_OPTIONS[3]);
   const [customMonth, setCustomMonth] = useState('');
   const [customDay, setCustomDay] = useState('');
   const [customYear, setCustomYear] = useState('');
@@ -78,7 +83,7 @@ const WriteModal: React.FC<{
   const reset = () => {
     setSubject('');
     setBody('');
-    setDelivery(DELIVERY_OPTIONS[2]);
+    setDelivery(DELIVERY_OPTIONS[3]);
     setCustomMonth('');
     setCustomDay('');
     setCustomYear('');
@@ -109,7 +114,7 @@ const WriteModal: React.FC<{
         }
       }
     }
-    setDelivery({ label: 'Custom Date', days: 0 });
+    setDelivery({ label: 'Custom Date', days: -1 });
   };
 
   const handlePickPhotos = async () => {
@@ -243,12 +248,14 @@ const WriteModal: React.FC<{
 
           {/* Unlock date display */}
           <View style={[wm.unlockDate, { backgroundColor: colors.creamDeep }]}>
-            <Text style={{ fontSize: 20 }}>🔒</Text>
+            <Text style={{ fontSize: 20 }}>{delivery.days === 0 ? '✉️' : '🔒'}</Text>
             <KamiText variant="body" color={colors.primary} bold>
               {delivery.days > 0 ? (
                 `Unlocks on ${new Date(Date.now() + delivery.days * 86400000).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`
+              ) : delivery.days === 0 ? (
+                'Delivers immediately'
               ) : (
-                'Please enter a valid number of days'
+                'Please enter a valid date'
               )}
             </KamiText>
           </View>
@@ -291,13 +298,13 @@ const WriteModal: React.FC<{
 
           {/* Submit Button */}
           <KamiButton
-            label="Seal & Send Letter 🔒"
+            label={delivery.days === 0 ? "Send Letter Now ✉️" : "Seal & Send Letter 🔒"}
             loading={saving}
-            disabled={!body.trim() || delivery.days <= 0}
+            disabled={!body.trim() || delivery.days < 0}
             onPress={() => {
-              if (!body.trim() || delivery.days <= 0) return;
+              if (!body.trim() || delivery.days < 0) return;
               Keyboard.dismiss();
-              onSave(subject.trim() || 'To my future self', body.trim(), delivery.days, localUris).then(reset);
+              onSave(subject.trim(), body.trim(), delivery.days, localUris).then(reset);
             }}
             style={wm.submitBtn}
           />
@@ -339,6 +346,7 @@ const ReadModal: React.FC<{
   const [content, setContent] = useState<{ body: string; imageUrls: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const { colors } = useTheme();
+  const user = useAuthStore(s => s.user);
 
   useEffect(() => {
     if (visible && letter) {
@@ -375,6 +383,13 @@ const ReadModal: React.FC<{
               <KamiText variant="overline" align="center" style={{ marginTop: Space[2] }}>
                 Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
               </KamiText>
+              {activeSpace === 'couple' && 'senderId' in letter && (
+                <KamiText variant="caption" align="center" color={Colors.textMuted} style={{ marginTop: Space[1] }}>
+                  {(letter as CoupleLetter).senderId === user?.id
+                    ? 'From: You'
+                    : `From: ${(letter as CoupleLetter).senderNickname || 'Partner'}`}
+                </KamiText>
+              )}
             </View>
             <KamiText variant="title" style={{ marginBottom: Space[3] }}>{letter.subject}</KamiText>
             <KamiText variant="body" style={{ lineHeight: 28, fontFamily: FontFamily.display }}>{content.body}</KamiText>
@@ -428,6 +443,22 @@ export function FutureScreen({ navigation }: Props) {
   const [reading,    setReading]    = useState<Letter | CoupleLetter | null>(null);
   const [saving,     setSaving]     = useState(false);
 
+  const [visibleUnlocked, setVisibleUnlocked] = useState(10);
+  const [visibleSealed,   setVisibleSealed]   = useState(10);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    setVisibleUnlocked(10);
+    setVisibleSealed(10);
+  }, [activeSpace]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Dual-mode loaders
   useEffect(() => {
     if (activeSpace === 'couple') {
@@ -453,6 +484,7 @@ export function FutureScreen({ navigation }: Props) {
     try {
       const targetId = uuid();
       const deliverAt = new Date(Date.now() + daysFromNow * 86400000).toISOString();
+      const finalSubject = subject.trim() || (activeSpace === 'couple' ? 'Love Letter' : 'To my future self');
 
       let relativePaths: string[] = [];
       if (localUris.length > 0) {
@@ -471,13 +503,13 @@ export function FutureScreen({ navigation }: Props) {
           setSaving(false);
           return;
         }
-        const r = await coupleActions.addLetter(couple.id, subject, body, deliverAt, relativePaths);
+        const r = await coupleActions.addLetter(couple.id, finalSubject, body, deliverAt, relativePaths);
         if (!r.success) { Alert.alert('Kami', r.error); }
         else {
           setWriteOpen(false);
         }
       } else {
-        const r = await futureService.createLetter(targetId, { subject, body, deliverAt, imageUrls: relativePaths });
+        const r = await futureService.createLetter(targetId, { subject: finalSubject, body, deliverAt, imageUrls: relativePaths });
         if (!r.success) { Alert.alert('Kami', r.error); }
         else {
           setLetters(prev => [...prev, r.data].sort((a, b) => new Date(a.deliverAt).getTime() - new Date(b.deliverAt).getTime()));
@@ -492,7 +524,7 @@ export function FutureScreen({ navigation }: Props) {
   };
 
   const handleOpen = (l: Letter | CoupleLetter) => {
-    if (!l.isUnlocked) {
+    if (!checkUnlocked(l)) {
       Alert.alert('🔒 Sealed envelope', `This letter is locked and cannot be read until ${new Date(l.deliverAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}.`);
       return;
     }
@@ -525,8 +557,15 @@ export function FutureScreen({ navigation }: Props) {
 
   const currentLetters = activeSpace === 'couple' ? coupleStore.coupleLetters : letters;
 
-  const unlocked = currentLetters.filter(l => l.isUnlocked);
-  const sealed   = currentLetters.filter(l => !l.isUnlocked);
+  const unlocked = currentLetters
+    .filter(checkUnlocked)
+    .sort((a, b) => new Date(b.deliverAt).getTime() - new Date(a.deliverAt).getTime());
+  const sealed = currentLetters
+    .filter(l => !checkUnlocked(l))
+    .sort((a, b) => new Date(a.deliverAt).getTime() - new Date(b.deliverAt).getTime());
+
+  const paginatedUnlocked = unlocked.slice(0, visibleUnlocked);
+  const paginatedSealed = sealed.slice(0, visibleSealed);
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
@@ -575,7 +614,18 @@ export function FutureScreen({ navigation }: Props) {
               <Text style={{ fontSize: 18 }}>✨</Text>
               <KamiText variant="overline" style={{ color: colors.primary }}>Ready to read · {unlocked.length}</KamiText>
             </View>
-            {unlocked.map(l => <LetterCard key={l.id} letter={l} onOpen={() => handleOpen(l)} onDelete={() => handleDelete(l)} />)}
+            {paginatedUnlocked.map(l => (
+              <LetterCard key={l.id} letter={l} onOpen={() => handleOpen(l)} onDelete={() => handleDelete(l)} />
+            ))}
+            {unlocked.length > visibleUnlocked && (
+              <TouchableOpacity
+                style={[s.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
+                onPress={() => setVisibleUnlocked(prev => prev + 10)}
+                activeOpacity={0.8}
+              >
+                <KamiText variant="label" color={colors.primary} bold>Load More Unlocked</KamiText>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -586,7 +636,18 @@ export function FutureScreen({ navigation }: Props) {
               <Text style={{ fontSize: 18 }}>🔒</Text>
               <KamiText variant="overline">Sealed · {sealed.length}</KamiText>
             </View>
-            {sealed.map(l => <LetterCard key={l.id} letter={l} onOpen={() => handleOpen(l)} onDelete={() => handleDelete(l)} />)}
+            {paginatedSealed.map(l => (
+              <LetterCard key={l.id} letter={l} onOpen={() => handleOpen(l)} onDelete={() => handleDelete(l)} />
+            ))}
+            {sealed.length > visibleSealed && (
+              <TouchableOpacity
+                style={[s.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
+                onPress={() => setVisibleSealed(prev => prev + 10)}
+                activeOpacity={0.8}
+              >
+                <KamiText variant="label" color={colors.primary} bold>Load More Sealed</KamiText>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -602,14 +663,25 @@ export function FutureScreen({ navigation }: Props) {
 const LetterCard: React.FC<{ letter: Letter | CoupleLetter; onOpen: () => void; onDelete: () => void }> = ({ letter, onOpen, onDelete }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
+  const user = useAuthStore(s => s.user);
+
+  const coupleLetter = 'coupleId' in letter ? (letter as CoupleLetter) : null;
+  const senderText = coupleLetter
+    ? coupleLetter.senderId === user?.id
+      ? 'From: You'
+      : `From: ${coupleLetter.senderNickname || 'Partner'}`
+    : null;
+
+  const isUnlocked = checkUnlocked(letter);
+
   return (
     <TouchableOpacity activeOpacity={1} onPress={onOpen}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
-      <Animated.View style={[s.card, letter.isUnlocked && [s.cardOpen, { borderColor: colors.primary + '55', backgroundColor: colors.creamDeep }], { transform: [{ scale: sc }] }]}>
+      <Animated.View style={[s.card, isUnlocked && [s.cardOpen, { borderColor: colors.primary + '55', backgroundColor: colors.creamDeep }], { transform: [{ scale: sc }] }]}>
         <View style={s.cardLeft}>
-          <Text style={{ fontSize: 30 }}>{letter.isUnlocked ? '💌' : '🔒'}</Text>
+          <Text style={{ fontSize: 30 }}>{isUnlocked ? '💌' : '🔒'}</Text>
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <View style={s.cardRow}>
@@ -618,13 +690,18 @@ const LetterCard: React.FC<{ letter: Letter | CoupleLetter; onOpen: () => void; 
               <Text style={{ fontSize: 12, color: Colors.textMuted }}>✕</Text>
             </TouchableOpacity>
           </View>
-          <KamiText variant="caption" color={letter.isUnlocked ? colors.primary : Colors.textMuted} bold={letter.isUnlocked}>
+          {senderText && (
+            <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: -2, marginBottom: 2 }}>
+              {senderText}
+            </KamiText>
+          )}
+          <KamiText variant="caption" color={isUnlocked ? colors.primary : Colors.textMuted} bold={isUnlocked}>
             {daysUntil(letter.deliverAt)}
           </KamiText>
           <KamiText variant="caption" color={Colors.textMuted}>
             Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
           </KamiText>
-          {letter.isUnlocked && (
+          {isUnlocked && (
             <KamiText variant="caption" color={colors.primary} bold>Tap to read ›</KamiText>
           )}
         </View>
@@ -648,4 +725,15 @@ const s = StyleSheet.create({
   cardLeft: { alignItems: 'center', justifyContent: 'flex-start', width: 44, paddingTop: Space[1] },
   cardRow:  { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
   delBtn:   { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  loadMoreBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[5],
+    borderRadius: Radii.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border + '66',
+    marginVertical: Space[2],
+    ...Shadows.sm,
+  },
 });

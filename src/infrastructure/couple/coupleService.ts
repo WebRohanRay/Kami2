@@ -964,13 +964,13 @@ export async function fetchCoupleLetters(coupleId: string): Promise<Result<Coupl
   try {
     const { data, error } = await supabase
       .from('couple_letters')
-      .select('id, couple_id, sender_id, subject, deliver_at, created_at')
+      .select('id, couple_id, sender_id, subject, deliver_at, created_at, profiles(nickname)')
       .eq('couple_id', coupleId)
       .order('deliver_at', { ascending: true });
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const mapped = (data ?? []).map(r => {
+    const mapped = (data ?? []).map((r: any) => {
       const unlockTime = new Date(r.deliver_at).getTime();
       return {
         id: r.id,
@@ -979,7 +979,8 @@ export async function fetchCoupleLetters(coupleId: string): Promise<Result<Coupl
         subject: r.subject,
         deliverAt: r.deliver_at,
         isUnlocked: Date.now() >= unlockTime,
-        createdAt: r.created_at
+        createdAt: r.created_at,
+        senderNickname: r.profiles?.nickname
       };
     });
 
@@ -1037,18 +1038,16 @@ export async function createCoupleLetter(
 export async function fetchCoupleLetterDetails(letterId: string): Promise<Result<{ body: string; imageUrls: string[] }>> {
   try {
     const { data, error } = await supabase
-      .from('couple_letters')
-      .select('body, image_urls')
-      .eq('id', letterId)
-      .single();
+      .rpc('fetch_unlocked_couple_letter', { p_letter_id: letterId });
 
-    if (error) return { success: false, error: 'Could not open letter. It is still sealed.' };
+    if (error || !data || data.length === 0) return { success: false, error: 'Could not open letter. It is still sealed.' };
 
-    const resolvedUrls = await resolveSignedUrls('letter_images', data.image_urls || []);
+    const row = data[0];
+    const resolvedUrls = await resolveSignedUrls('letter_images', row.image_urls || []);
     return {
       success: true,
       data: {
-        body: data.body,
+        body: row.body,
         imageUrls: resolvedUrls
       }
     };

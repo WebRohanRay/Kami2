@@ -582,8 +582,10 @@ CREATE POLICY "couple_goals_access" ON public.couple_goals FOR ALL USING (public
 
 ALTER TABLE public.couple_letters ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "couple_letters_insert" ON public.couple_letters FOR INSERT WITH CHECK (public.is_couple_member(couple_id) AND auth.uid() = sender_id);
-CREATE POLICY "couple_letters_select" ON public.couple_letters FOR SELECT USING (public.is_couple_member(couple_id) AND (deliver_at <= NOW() OR auth.uid() = sender_id));
+CREATE POLICY "couple_letters_select" ON public.couple_letters FOR SELECT USING (public.is_couple_member(couple_id));
 CREATE POLICY "couple_letters_delete" ON public.couple_letters FOR DELETE USING (public.is_couple_member(couple_id) AND auth.uid() = sender_id);
+REVOKE SELECT (body, image_urls) ON public.couple_letters FROM authenticated;
+
 
 ALTER TABLE public.couple_answers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "couple_answers_access" ON public.couple_answers FOR ALL USING (public.is_couple_member(couple_id));
@@ -710,6 +712,14 @@ BEGIN
 
   BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE couple_journals;
+  EXCEPTION WHEN duplicate_object THEN NULL; END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE couple_journal_comments;
+  EXCEPTION WHEN duplicate_object THEN NULL; END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE couple_journal_reactions;
   EXCEPTION WHEN duplicate_object THEN NULL; END;
 
   BEGIN
