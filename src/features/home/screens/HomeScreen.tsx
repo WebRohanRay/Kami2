@@ -74,6 +74,66 @@ function getDaysUntilAnniversary(anniversaryDate: string | null): number | null 
   return Math.ceil(diff / 86400000);
 }
 
+interface DurationData {
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+}
+
+function getDetailedDurationObj(anniversaryDate: string | null, fallbackDate: string): DurationData {
+  const start = new Date(anniversaryDate || fallbackDate);
+  const now = new Date();
+  let diffMs = now.getTime() - start.getTime();
+  if (diffMs < 0) {
+    return { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
+  }
+
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  let days = now.getDate() - start.getDate();
+
+  if (days < 0) {
+    const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    days += prevMonth;
+    months--;
+  }
+  if (months < 0) {
+    months += 12;
+    years--;
+  }
+
+  let hours = now.getHours() - start.getHours();
+  let minutes = now.getMinutes() - start.getMinutes();
+  let seconds = now.getSeconds() - start.getSeconds();
+
+  if (seconds < 0) {
+    seconds += 60;
+    minutes--;
+  }
+  if (minutes < 0) {
+    minutes += 60;
+    hours--;
+  }
+  if (hours < 0) {
+    hours += 24;
+    days--;
+    if (days < 0) {
+      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      days += prevMonth;
+      months--;
+      if (months < 0) {
+        months += 12;
+        years--;
+      }
+    }
+  }
+
+  return { years, months, days, hours, minutes, seconds };
+}
+
 function getDetailedDuration(anniversaryDate: string | null, fallbackDate: string): string {
   const start = new Date(anniversaryDate || fallbackDate);
   const now = new Date();
@@ -142,7 +202,7 @@ function getNextEventCountdown(couple: any, coupleLetters: any[]): string {
   if (lockedLetters.length > 0) {
     const nextLetter = lockedLetters[0];
     const diffMs = new Date(nextLetter.deliverAt).getTime() - now.getTime();
-    
+
     const sec = Math.floor(diffMs / 1000) % 60;
     const min = Math.floor(diffMs / (1000 * 60)) % 60;
     const hr = Math.floor(diffMs / (1000 * 60 * 60)) % 24;
@@ -371,6 +431,7 @@ export function HomeScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   const [durationText, setDurationText] = useState('');
+  const [durationObj, setDurationObj] = useState<DurationData | null>(null);
   const [nextEventText, setNextEventText] = useState('');
   const [customMoodModalVisible, setCustomMoodModalVisible] = useState(false);
   const [customMoodSaving, setCustomMoodSaving] = useState(false);
@@ -422,6 +483,7 @@ export function HomeScreen({ navigation }: Props) {
     if (user?.activeSpace !== 'couple' || !couple) return;
 
     const updateTimer = () => {
+      setDurationObj(getDetailedDurationObj(couple.anniversaryDate, couple.createdAt));
       setDurationText(getDetailedDuration(couple.anniversaryDate, couple.createdAt));
       setNextEventText(getNextEventCountdown(couple, coupleLetters));
     };
@@ -684,10 +746,10 @@ export function HomeScreen({ navigation }: Props) {
       dynamicTimeline.push({
         id: `letter-${l.id}`,
         type: 'letter',
-        title: isLocked 
+        title: isLocked
           ? `${senderName} sent a sealed letter 🔒`
           : `${senderName} sent a letter: "${l.subject || 'No Subject'}"`,
-        description: isLocked 
+        description: isLocked
           ? `Unlocks in the future`
           : (l.body ? (l.body.length > 60 ? `${l.body.substring(0, 57)}...` : l.body) : undefined),
         time: getTimeAgo(l.createdAt),
@@ -954,8 +1016,8 @@ export function HomeScreen({ navigation }: Props) {
         const itemDate = new Date(item.date);
         const today = new Date();
         return itemDate.getFullYear() === today.getFullYear() &&
-               itemDate.getMonth() === today.getMonth() &&
-               itemDate.getDate() === today.getDate();
+          itemDate.getMonth() === today.getMonth() &&
+          itemDate.getDate() === today.getDate();
       } catch {
         return false;
       }
@@ -1055,16 +1117,69 @@ export function HomeScreen({ navigation }: Props) {
             style={hsStyles.statusTimerCard}
           >
             <View style={hsStyles.timerHeaderRow}>
-              <Text style={{ fontSize: 24 }}>💑</Text>
+              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                <Text style={{ fontSize: 24, marginRight: 4 }}>❤️</Text>
+              </Animated.View>
               <KamiText style={[hsStyles.timerHeaderTitle, { color: colors.primary }]} bold>Our Love Clock</KamiText>
             </View>
 
-            <View style={hsStyles.timerDisplayBox}>
-              <KamiText style={hsStyles.timerLabel} variant="caption" color={Colors.textMuted} align="center">TOGETHER FOR</KamiText>
-              <KamiText style={[hsStyles.timerText, { color: colors.primaryDark }]} bold align="center">
-                {durationText || 'Connected'}
-              </KamiText>
-            </View>
+            {durationObj ? (
+              <View style={hsStyles.elegantClockWrapper}>
+                {/* Years, Months, Days row */}
+                <View style={hsStyles.elegantMainRow}>
+                  {durationObj.years > 0 && (
+                    <View style={hsStyles.elegantMainUnit}>
+                      <KamiText style={[hsStyles.elegantMainVal, { color: colors.primary }]} bold>{durationObj.years}</KamiText>
+                      <KamiText style={hsStyles.elegantMainLbl}>years</KamiText>
+                    </View>
+                  )}
+                  {durationObj.months > 0 && (
+                    <View style={hsStyles.elegantMainUnit}>
+                      <KamiText style={[hsStyles.elegantMainVal, { color: colors.primary }]} bold>{durationObj.months}</KamiText>
+                      <KamiText style={hsStyles.elegantMainLbl}>months</KamiText>
+                    </View>
+                  )}
+                  <View style={hsStyles.elegantMainUnit}>
+                    <KamiText style={[hsStyles.elegantMainVal, { color: colors.primary }]} bold>{durationObj.days}</KamiText>
+                    <KamiText style={hsStyles.elegantMainLbl}>days</KamiText>
+                  </View>
+                </View>
+
+                {/* Delicate Divider Line */}
+                <View style={[hsStyles.elegantDivider, { backgroundColor: colors.primary + '22' }]} />
+
+                {/* Hours, Minutes, Seconds Live Ticker */}
+                <View style={hsStyles.elegantTickerRow}>
+                  <View style={hsStyles.elegantTickerUnit}>
+                    <KamiText style={[hsStyles.elegantTickerVal, { color: colors.primaryDark }]} bold>
+                      {String(durationObj.hours).padStart(2, '0')}
+                    </KamiText>
+                    <KamiText style={hsStyles.elegantTickerLbl}>Hours</KamiText>
+                  </View>
+                  <KamiText style={[hsStyles.elegantTickerColon, { color: colors.primary + '44' }]}>:</KamiText>
+                  <View style={hsStyles.elegantTickerUnit}>
+                    <KamiText style={[hsStyles.elegantTickerVal, { color: colors.primaryDark }]} bold>
+                      {String(durationObj.minutes).padStart(2, '0')}
+                    </KamiText>
+                    <KamiText style={hsStyles.elegantTickerLbl}>Mins</KamiText>
+                  </View>
+                  <KamiText style={[hsStyles.elegantTickerColon, { color: colors.primary + '44' }]}>:</KamiText>
+                  <View style={hsStyles.elegantTickerUnit}>
+                    <KamiText style={[hsStyles.elegantTickerVal, { color: colors.primaryDark }]} bold>
+                      {String(durationObj.seconds).padStart(2, '0')}
+                    </KamiText>
+                    <KamiText style={hsStyles.elegantTickerLbl}>Secs</KamiText>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View style={hsStyles.timerDisplayBox}>
+                <KamiText style={hsStyles.timerLabel} variant="caption" color={Colors.textMuted} align="center">TOGETHER FOR</KamiText>
+                <KamiText style={[hsStyles.timerText, { color: colors.primaryDark }]} bold align="center">
+                  {durationText || 'Connected'}
+                </KamiText>
+              </View>
+            )}
 
             {nextEventText ? (
               <View style={[hsStyles.nextEventBadge, { backgroundColor: colors.primary + '12' }]}>
@@ -1088,28 +1203,28 @@ export function HomeScreen({ navigation }: Props) {
                 style={[hsStyles.presenceViewBtn, { backgroundColor: colors.primary + '11' }]}
                 onPress={() => {
                   if (
-                    partnerAction === 'writing_letter' || 
-                    partnerAction === 'editing_draft' || 
-                    partnerAction === 'reading_letter' || 
+                    partnerAction === 'writing_letter' ||
+                    partnerAction === 'editing_draft' ||
+                    partnerAction === 'reading_letter' ||
                     partnerAction === 'viewing_letters'
                   ) {
                     navigation.navigate('Future');
                   } else if (
-                    partnerAction === 'reading_memories' || 
-                    partnerAction === 'viewing_memory' || 
+                    partnerAction === 'reading_memories' ||
+                    partnerAction === 'viewing_memory' ||
                     partnerAction === 'writing_memory'
                   ) {
                     navigation.navigate('Memories');
                   } else if (
-                    partnerAction === 'creating_goal' || 
-                    partnerAction === 'editing_goal' || 
+                    partnerAction === 'creating_goal' ||
+                    partnerAction === 'editing_goal' ||
                     partnerAction === 'viewing_goals'
                   ) {
                     navigation.navigate('Goals');
                   } else if (
-                    partnerAction === 'writing_journal' || 
-                    partnerAction === 'answering_prompt' || 
-                    partnerAction === 'commenting_journal' || 
+                    partnerAction === 'writing_journal' ||
+                    partnerAction === 'answering_prompt' ||
+                    partnerAction === 'commenting_journal' ||
                     partnerAction === 'reading_journal'
                   ) {
                     navigation.navigate('Journal');
@@ -1383,7 +1498,7 @@ export function HomeScreen({ navigation }: Props) {
               </View>
 
               {lettersForSlide.length > 0 ? (
-                <View 
+                <View
                   style={{ flex: 1, justifyContent: 'center' }}
                   onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
                 >
@@ -1401,17 +1516,17 @@ export function HomeScreen({ navigation }: Props) {
                       const senderLabel = isMe
                         ? `To: ${partnerName}`
                         : `From: ${partnerName}`;
-                      
+
                       const excerpt = isUnlocked
                         ? (l.body ? (l.body.length > 45 ? `“${l.body.substring(0, 42)}...”` : `“${l.body}”`) : 'No content')
                         : 'A surprise sealed envelope. Ready to read in the future!';
 
                       return (
-                        <View 
-                          key={l.id} 
-                          style={{ 
-                            width: carouselWidth || 160, 
-                            paddingHorizontal: Space[4], 
+                        <View
+                          key={l.id}
+                          style={{
+                            width: carouselWidth || 160,
+                            paddingHorizontal: Space[4],
                             paddingBottom: Space[2],
                             justifyContent: 'center',
                             gap: Space[2]
@@ -3211,13 +3326,12 @@ const hsStyles = StyleSheet.create({
 
   // Status Timer Card
   statusTimerCard: {
-    padding: Space[4],
-    borderRadius: 24,
-    marginHorizontal: Space[5],
+    padding: Space[3],
+    borderRadius: 18,
+    marginHorizontal: Space[6],
     marginBottom: Space[4],
-    borderWidth: 1.5,
+    borderWidth: 1.2,
     borderColor: 'rgba(201, 104, 130, 0.12)',
-    ...Shadows.md,
   },
   timerHeaderRow: {
     flexDirection: 'row',
@@ -3258,6 +3372,66 @@ const hsStyles = StyleSheet.create({
     paddingHorizontal: Space[4],
     borderRadius: Radii.full,
     marginTop: Space[3],
+  },
+  elegantClockWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: Space[1],
+  },
+  elegantMainRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: Space[3],
+    marginBottom: Space[1],
+  },
+  elegantMainUnit: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  elegantMainVal: {
+    fontSize: 26,
+    fontWeight: FontWeight.bold,
+    fontFamily: FontFamily.display,
+  },
+  elegantMainLbl: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    fontWeight: FontWeight.semibold,
+  },
+  elegantDivider: {
+    width: '60%',
+    height: 1,
+    marginVertical: Space[2],
+  },
+  elegantTickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Space[1] + 2,
+  },
+  elegantTickerUnit: {
+    alignItems: 'center',
+    minWidth: 28,
+  },
+  elegantTickerVal: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    fontFamily: FontFamily.body,
+  },
+  elegantTickerColon: {
+    fontSize: FontSize.sm,
+    fontWeight: '500',
+    alignSelf: 'center',
+    marginBottom: 2,
+  },
+  elegantTickerLbl: {
+    fontSize: 8,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 0,
   },
 
   // Vertical Timeline Feed
