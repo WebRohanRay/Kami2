@@ -21,6 +21,7 @@ export type MainTabParamList = {
   Goals:    undefined;
   Future:   undefined;
   Settings: undefined;
+  Timeline: undefined;
 };
 
 export type AuthScreenProps<T extends keyof AuthStackParamList> =

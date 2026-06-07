@@ -74,6 +74,104 @@ function getDaysUntilAnniversary(anniversaryDate: string | null): number | null 
   return Math.ceil(diff / 86400000);
 }
 
+function getDetailedDuration(anniversaryDate: string | null, fallbackDate: string): string {
+  const start = new Date(anniversaryDate || fallbackDate);
+  const now = new Date();
+  let diffMs = now.getTime() - start.getTime();
+  if (diffMs < 0) return 'Connected';
+
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  let days = now.getDate() - start.getDate();
+
+  if (days < 0) {
+    const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    days += prevMonth;
+    months--;
+  }
+  if (months < 0) {
+    months += 12;
+    years--;
+  }
+
+  let hours = now.getHours() - start.getHours();
+  let minutes = now.getMinutes() - start.getMinutes();
+  let seconds = now.getSeconds() - start.getSeconds();
+
+  if (seconds < 0) {
+    seconds += 60;
+    minutes--;
+  }
+  if (minutes < 0) {
+    minutes += 60;
+    hours--;
+  }
+  if (hours < 0) {
+    hours += 24;
+    days--;
+    if (days < 0) {
+      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      days += prevMonth;
+      months--;
+      if (months < 0) {
+        months += 12;
+        years--;
+      }
+    }
+  }
+
+  const parts = [];
+  if (years > 0) parts.push(`${years} Year${years > 1 ? 's' : ''}`);
+  if (months > 0) parts.push(`${months} Month${months > 1 ? 's' : ''}`);
+  if (days > 0) parts.push(`${days} Day${days > 1 ? 's' : ''}`);
+  parts.push(`${hours} Hour${hours > 1 ? 's' : ''}`);
+  parts.push(`${minutes} Minute${minutes > 1 ? 's' : ''}`);
+  parts.push(`${seconds} Second${seconds > 1 ? 's' : ''}`);
+
+  return parts.join(' • ');
+}
+
+function getNextEventCountdown(couple: any, coupleLetters: any[]): string {
+  const now = new Date();
+
+  // Find next locked letter
+  const lockedLetters = coupleLetters
+    .filter(l => !l.isDraft && !l.isArchived && new Date(l.deliverAt).getTime() > now.getTime())
+    .sort((a, b) => new Date(a.deliverAt).getTime() - new Date(b.deliverAt).getTime());
+
+  if (lockedLetters.length > 0) {
+    const nextLetter = lockedLetters[0];
+    const diffMs = new Date(nextLetter.deliverAt).getTime() - now.getTime();
+    
+    const sec = Math.floor(diffMs / 1000) % 60;
+    const min = Math.floor(diffMs / (1000 * 60)) % 60;
+    const hr = Math.floor(diffMs / (1000 * 60 * 60)) % 24;
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hr > 0) parts.push(`${hr}h`);
+    if (min > 0) parts.push(`${min}m`);
+    parts.push(`${sec}s`);
+
+    return `Next letter unlocks in ${parts.join(' ')} 🔒`;
+  }
+
+  // Fallback: next anniversary
+  if (couple.anniversaryDate) {
+    const ann = new Date(couple.anniversaryDate);
+    let nextAnn = new Date(now.getFullYear(), ann.getMonth(), ann.getDate());
+    if (nextAnn.getTime() < now.getTime()) {
+      nextAnn.setFullYear(now.getFullYear() + 1);
+    }
+    const diffMs = nextAnn.getTime() - now.getTime();
+    const days = Math.ceil(diffMs / 86400000);
+    return `Anniversary in ${days} day${days > 1 ? 's' : ''} ❤️`;
+  }
+
+  return '';
+}
+
 type Props = MainTabScreenProps<'Home'>;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -180,6 +278,74 @@ const mm = StyleSheet.create({
   save: { flex: 2, height: 52, borderRadius: Radii.button, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
 });
 
+const CustomMoodModal: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  onSave: (emoji: string, text: string) => Promise<void>;
+  saving: boolean;
+}> = ({ visible, onClose, onSave, saving }) => {
+  const { colors } = useTheme();
+  const [customText, setCustomText] = useState('');
+  const [selectedEmoji, setSelectedEmoji] = useState('✨');
+
+  const EMOJIS = ['✨', '🌸', '🌅', '🌺', '🌙', '☁️', '🌊', '🍂', '💖', '🥰', '🔥', '🥹', '😭', '🎉', '💤', '🍕', '🍿', '💻', '🎮', '🚗'];
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[mm.root, { backgroundColor: colors.pageBg }]}>
+        <View style={mm.handle} />
+        <View style={mm.top}>
+          <Text style={{ fontSize: 48, marginBottom: 8 }}>{selectedEmoji}</Text>
+          <KamiText variant="title">Custom Status</KamiText>
+          <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginTop: 4 }}>
+            Set a custom status for your partner to see.
+          </KamiText>
+        </View>
+
+        {/* Emoji Picker row */}
+        <View style={{ marginBottom: Space[4] }}>
+          <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[2] }}>Select an emoji:</KamiText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Space[2], paddingBottom: 4 }}>
+            {EMOJIS.map(e => (
+              <TouchableOpacity
+                key={e}
+                onPress={() => setSelectedEmoji(e)}
+                style={[
+                  hsStyles.moodRingChip,
+                  { borderColor: selectedEmoji === e ? colors.primary : Colors.border + '55' },
+                  selectedEmoji === e && { backgroundColor: colors.primary + '11' }
+                ]}
+              >
+                <Text style={{ fontSize: 20 }}>{e}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <TextInput
+          style={[mm.input, { height: 80 }]} placeholder="What are you up to…"
+          placeholderTextColor={Colors.textMuted} value={customText}
+          onChangeText={setCustomText} maxLength={40}
+        />
+        <View style={mm.btns}>
+          <TouchableOpacity style={mm.skip} onPress={() => { setCustomText(''); onClose(); }}>
+            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[mm.save, { backgroundColor: colors.primary }]} disabled={saving}
+            onPress={() => { Keyboard.dismiss(); onSave(selectedEmoji, customText.trim()); }}
+          >
+            {saving
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <KamiText variant="label" color="#fff">Set Status</KamiText>
+            }
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+};
+
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export function HomeScreen({ navigation }: Props) {
@@ -203,6 +369,11 @@ export function HomeScreen({ navigation }: Props) {
   const [moodModal, setMoodModal] = useState(false);
   const [moodSaving, setMoodSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [durationText, setDurationText] = useState('');
+  const [nextEventText, setNextEventText] = useState('');
+  const [customMoodModalVisible, setCustomMoodModalVisible] = useState(false);
+  const [customMoodSaving, setCustomMoodSaving] = useState(false);
 
   const { updateProfile } = useAuth();
 
@@ -247,6 +418,19 @@ export function HomeScreen({ navigation }: Props) {
     return () => clearInterval(interval);
   }, [user?.activeSpace]);
 
+  useEffect(() => {
+    if (user?.activeSpace !== 'couple' || !couple) return;
+
+    const updateTimer = () => {
+      setDurationText(getDetailedDuration(couple.anniversaryDate, couple.createdAt));
+      setNextEventText(getNextEventCountdown(couple, coupleLetters));
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [user?.activeSpace, couple, coupleLetters]);
+
   // Focus listener to refresh data automatically when user comes to this screen
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
@@ -269,7 +453,7 @@ export function HomeScreen({ navigation }: Props) {
   // Real-time ephemeral broadcast status when answering today's daily question
   useEffect(() => {
     if (user?.activeSpace !== 'couple' || !couple?.id || !user?.id) return;
-    if (isFocused && appState === 'active') {
+    if (isFocused) {
       if (questionAnswering) {
         useCoupleStore.getState().setMyActiveAction('answering_question');
         broadcastPartnerAction(couple.id, user.id, 'answering_question');
@@ -287,7 +471,7 @@ export function HomeScreen({ navigation }: Props) {
         broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [isFocused, appState, questionAnswering, user?.activeSpace, couple?.id, user?.id]);
+  }, [isFocused, questionAnswering, user?.activeSpace, couple?.id, user?.id]);
 
   // Initial load
   useEffect(() => {
@@ -391,35 +575,7 @@ export function HomeScreen({ navigation }: Props) {
     };
   }, [partnerAction]);
 
-  // Realtime subscription for partner's lastSeenAt and mood updates
-  useEffect(() => {
-    if (user?.activeSpace !== 'couple' || !partner?.id) return;
 
-    const channel = supabase
-      .channel(`partner_profile_realtime_${partner.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${partner.id}` },
-        async (payload) => {
-          const p = payload.new as any;
-          const resolvedAvatar = await resolveAvatarUrl(p.avatar_url);
-          setPartner({
-            id: p.id,
-            nickname: p.nickname || 'Partner',
-            email: p.email || '',
-            avatarUrl: resolvedAvatar,
-            lastSeenAt: p.last_seen_at,
-            currentMoodEmoji: p.current_mood_emoji,
-            currentMoodLabel: p.current_mood_label,
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.activeSpace, partner?.id]);
 
   const handleMoodPick = (m: typeof MOODS[0]) => { setPending(m); setMoodModal(true); };
   const handleMoodSave = async (note: string) => {
@@ -429,6 +585,19 @@ export function HomeScreen({ navigation }: Props) {
     setMoodSaving(false);
     setMoodModal(false);
     if (!r.success) Alert.alert('Kami', r.error);
+  };
+
+  const handleCustomMoodSave = async (emoji: string, text: string) => {
+    setCustomMoodSaving(true);
+    try {
+      await updateProfile({ currentMoodEmoji: emoji, currentMoodLabel: text || 'Custom Status' });
+      Alert.alert('Status Updated 🔮', `Your partner will see your status: ${emoji} ${text || 'Custom Status'}`);
+      setCustomMoodModalVisible(false);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update custom status');
+    } finally {
+      setCustomMoodSaving(false);
+    }
   };
 
   const handleRefresh = async () => {
@@ -492,46 +661,140 @@ export function HomeScreen({ navigation }: Props) {
     // Extract dynamic timeline events based on actual data
     interface TimelineEvent {
       id: string;
+      type: string;
       title: string;
+      description?: string;
       time: string;
       icon: string;
       date: Date;
     }
     const dynamicTimeline: TimelineEvent[] = [];
 
-    // Let's add couple letters
+    const getMemberName = (id: string) => {
+      if (id === user?.id) return 'You';
+      if (id === partner?.id) return partnerName;
+      return 'Someone';
+    };
+
+    // Add couple letters
     coupleLetters.forEach(l => {
+      if (l.isDraft) return; // ignore drafts
+      const senderName = getMemberName(l.senderId);
       const isLocked = !checkUnlocked(l);
       dynamicTimeline.push({
         id: `letter-${l.id}`,
-        title: isLocked
-          ? (l.senderId === user?.id ? 'Letter Sealed 🔒' : 'Letter Scheduled 🔒')
-          : (l.senderId === user?.id ? 'Letter Opened' : 'Letter Opened ✉️'),
+        type: 'letter',
+        title: isLocked 
+          ? `${senderName} sent a sealed letter 🔒`
+          : `${senderName} sent a letter: "${l.subject || 'No Subject'}"`,
+        description: isLocked 
+          ? `Unlocks in the future`
+          : (l.body ? (l.body.length > 60 ? `${l.body.substring(0, 57)}...` : l.body) : undefined),
         time: getTimeAgo(l.createdAt),
         icon: isLocked ? '🔒' : '✉️',
-        date: new Date(l.createdAt)
+        date: new Date(l.createdAt),
       });
+
+      // Reactions on this letter
+      if (l.reactions && Array.isArray(l.reactions)) {
+        l.reactions.forEach((rx, idx) => {
+          const rxName = getMemberName(rx.userId);
+          dynamicTimeline.push({
+            id: `letter-rx-${l.id}-${rx.userId}-${idx}`,
+            type: 'reaction',
+            title: `${rxName} reacted ${rx.emoji} to a letter`,
+            description: isLocked ? 'Reacted to a locked letter' : `"${l.subject || 'No Subject'}"`,
+            time: getTimeAgo(l.createdAt),
+            icon: rx.emoji,
+            date: new Date(l.createdAt),
+          });
+        });
+      }
     });
 
     // Add couple memories
     coupleMemories.forEach(m => {
       dynamicTimeline.push({
         id: `memory-${m.id}`,
-        title: m.title,
+        type: 'memory',
+        title: `New memory shared: "${m.title}"`,
+        description: m.description || undefined,
         time: getTimeAgo(m.memoryDate || m.createdAt),
         icon: '📸',
-        date: new Date(m.memoryDate || m.createdAt)
+        date: new Date(m.memoryDate || m.createdAt),
       });
     });
 
-    // Add completed couple goals
-    coupleGoals.filter(g => g.status === 'completed').forEach(g => {
+    // Add couple goals
+    coupleGoals.forEach(g => {
       dynamicTimeline.push({
         id: `goal-${g.id}`,
-        title: `Goal Completed`,
-        time: g.completedAt ? getTimeAgo(g.completedAt) : 'Recent',
-        icon: '🎯',
-        date: new Date(g.completedAt || g.createdAt)
+        type: 'goal',
+        title: g.status === 'completed' ? `Shared goal completed! 🎉` : `New shared goal set`,
+        description: `"${g.title}" — ${g.progress}% complete`,
+        time: getTimeAgo(g.completedAt || g.createdAt),
+        icon: g.status === 'completed' ? '🎉' : g.emoji || '🎯',
+        date: new Date(g.completedAt || g.createdAt),
+      });
+    });
+
+    // Add couple journals
+    coupleJournals.forEach(j => {
+      const jAuthor = getMemberName(j.userId);
+      dynamicTimeline.push({
+        id: `journal-${j.id}`,
+        type: 'journal',
+        title: `${jAuthor} wrote a journal entry: "${j.title || 'Untitled'}"`,
+        description: j.body ? (j.body.length > 60 ? `${j.body.substring(0, 57)}...` : j.body) : undefined,
+        time: getTimeAgo(j.entryDate || j.createdAt),
+        icon: '📓',
+        date: new Date(j.entryDate || j.createdAt),
+      });
+
+      // Reactions on journal
+      if (j.reactions && Array.isArray(j.reactions)) {
+        j.reactions.forEach((rx, idx) => {
+          const rxName = getMemberName(rx.userId);
+          dynamicTimeline.push({
+            id: `journal-rx-${j.id}-${rx.userId}-${idx}`,
+            type: 'reaction',
+            title: `${rxName} reacted ${rx.emoji} to a journal entry`,
+            description: `"${j.title || 'Untitled'}"`,
+            time: getTimeAgo(j.createdAt),
+            icon: rx.emoji,
+            date: new Date(j.createdAt),
+          });
+        });
+      }
+
+      // Comments on journal
+      if (j.comments && Array.isArray(j.comments)) {
+        j.comments.forEach((c) => {
+          const cName = getMemberName(c.userId);
+          dynamicTimeline.push({
+            id: `journal-comment-${c.id}`,
+            type: 'comment',
+            title: `${cName} commented on a journal entry`,
+            description: `"${c.body}"`,
+            time: getTimeAgo(c.createdAt),
+            icon: '💬',
+            date: new Date(c.createdAt),
+          });
+        });
+      }
+    });
+
+    // Add daily answers
+    dailyAnswers.forEach(a => {
+      const aName = getMemberName(a.userId);
+      dynamicTimeline.push({
+        id: `answer-${a.id}`,
+        type: 'answer',
+        title: `${aName} answered today's Daily Reflection`,
+        description: bothAnswered ? `"${a.response}"` : `Answer is hidden until you both respond`,
+        time: getTimeAgo(a.createdAt),
+        icon: '💭',
+        date: new Date(a.createdAt),
       });
     });
 
@@ -686,6 +949,21 @@ export function HomeScreen({ navigation }: Props) {
       }
     };
 
+    const todayEvents = dynamicTimeline.filter(item => {
+      try {
+        const itemDate = new Date(item.date);
+        const today = new Date();
+        return itemDate.getFullYear() === today.getFullYear() &&
+               itemDate.getMonth() === today.getMonth() &&
+               itemDate.getDate() === today.getDate();
+      } catch {
+        return false;
+      }
+    });
+
+    const shownTimelineEvents = todayEvents.length > 0 ? todayEvents : dynamicTimeline;
+    const isTimelineScrollable = shownTimelineEvents.length > 3;
+
     return (
       <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
         <StatusBar style="dark" />
@@ -722,8 +1000,9 @@ export function HomeScreen({ navigation }: Props) {
           <View style={hsStyles.headerBrand}>
             <KamiText style={[hsStyles.headerBrandLogo, { color: colors.primary }]} bold>Kami</KamiText>
             <View style={hsStyles.headerMetaRow}>
-              <Text style={[hsStyles.headerMetaText, { color: colors.primaryDark }]}>{relationshipDays} days together</Text>
-              <Text style={{ fontSize: 10 }}>❤️</Text>
+              <Text style={[hsStyles.headerMetaText, { color: colors.primaryDark }]}>
+                You {user?.currentMoodEmoji || '❓'} • {partnerName} {partner?.currentMoodEmoji || '❓'}
+              </Text>
             </View>
           </View>
 
@@ -770,6 +1049,31 @@ export function HomeScreen({ navigation }: Props) {
           contentContainerStyle={s.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         >
+          {/* ── 1. RELATIONSHIP STATUS & TIMER CARD ───── */}
+          <LinearGradient
+            colors={[colors.primary + '18', colors.primary + '05']}
+            style={hsStyles.statusTimerCard}
+          >
+            <View style={hsStyles.timerHeaderRow}>
+              <Text style={{ fontSize: 24 }}>💑</Text>
+              <KamiText style={[hsStyles.timerHeaderTitle, { color: colors.primary }]} bold>Our Love Clock</KamiText>
+            </View>
+
+            <View style={hsStyles.timerDisplayBox}>
+              <KamiText style={hsStyles.timerLabel} variant="caption" color={Colors.textMuted} align="center">TOGETHER FOR</KamiText>
+              <KamiText style={[hsStyles.timerText, { color: colors.primaryDark }]} bold align="center">
+                {durationText || 'Connected'}
+              </KamiText>
+            </View>
+
+            {nextEventText ? (
+              <View style={[hsStyles.nextEventBadge, { backgroundColor: colors.primary + '12' }]}>
+                <KamiText variant="caption" color={colors.primary} bold align="center">
+                  {nextEventText}
+                </KamiText>
+              </View>
+            ) : null}
+          </LinearGradient>
           {/* ── 2. LIVE PRESENCE CARD ──────────────────── */}
           {isPartnerOnline && (
             <View style={hsStyles.livePresenceCard}>
@@ -953,6 +1257,18 @@ export function HomeScreen({ navigation }: Props) {
             <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(0, 0, 0, 0.05)', paddingTop: Space[3], marginTop: Space[2] }}>
               <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[2] }}>How are you feeling right now?</KamiText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={hsStyles.moodRingChipsRow}>
+                <TouchableOpacity
+                  onPress={() => setCustomMoodModalVisible(true)}
+                  style={[
+                    hsStyles.moodRingChip,
+                    { borderColor: colors.primary, borderStyle: 'dashed', backgroundColor: colors.primary + '08' }
+                  ]}
+                >
+                  <Text style={{ fontSize: 16 }}>🔮</Text>
+                  <KamiText variant="caption" color={colors.primary} bold>
+                    Custom Status
+                  </KamiText>
+                </TouchableOpacity>
                 {MOODS.map(m => {
                   const isCurrent = user?.currentMoodEmoji === m.emoji;
                   return (
@@ -982,33 +1298,46 @@ export function HomeScreen({ navigation }: Props) {
           {/* ── 5. OUR JOURNEY TIMELINE ─────────────────── */}
           <View style={hsStyles.journeySection}>
             <View style={hsStyles.journeyHeader}>
-              <KamiText variant="subtitle" bold style={hsStyles.journeyTitle}>Our Journey ❤️</KamiText>
-              <TouchableOpacity onPress={() => navigation.navigate('Memories')}>
+              <KamiText variant="subtitle" bold style={hsStyles.journeyTitle}>Couple Timeline ✨</KamiText>
+              <TouchableOpacity onPress={() => navigation.navigate('Timeline')}>
                 <KamiText variant="caption" color={colors.primary} bold>See All ›</KamiText>
               </TouchableOpacity>
             </View>
 
-            {dynamicTimeline.length > 0 ? (
-              <View style={hsStyles.journeyScrollWrap}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={hsStyles.journeyScroll}>
-                  <View style={hsStyles.journeyDashedLine} />
-
-                  {dynamicTimeline.map((item) => (
-                    <View key={item.id} style={hsStyles.journeyNodeCol}>
-                      <View style={hsStyles.journeyNodeCircle}>
-                        <Text style={{ fontSize: 20 }}>{item.icon}</Text>
-                        <View style={[hsStyles.journeyNodeSmallIndicator, { backgroundColor: colors.primary }]} />
+            {shownTimelineEvents.length > 0 ? (
+              <ScrollView
+                style={isTimelineScrollable ? { maxHeight: 220 } : null}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                <View style={hsStyles.verticalTimelineWrap}>
+                  {shownTimelineEvents.map((item, index) => (
+                    <View key={item.id} style={hsStyles.timelineItemRow}>
+                      <View style={hsStyles.timelineLeftCol}>
+                        <View style={[hsStyles.timelineIconCircle, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primaryLight + '33' }]}>
+                          <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+                        </View>
+                        {index < shownTimelineEvents.length - 1 && (
+                          <View style={[hsStyles.timelineConnectorLine, { backgroundColor: Colors.border + '55' }]} />
+                        )}
                       </View>
-                      <KamiText bold style={hsStyles.journeyNodeText} align="center" numberOfLines={2}>{item.title}</KamiText>
-                      <KamiText style={hsStyles.journeyNodeTime} align="center">{item.time}</KamiText>
+                      <View style={hsStyles.timelineRightContent}>
+                        <View style={hsStyles.timelineMetaRow}>
+                          <KamiText bold style={hsStyles.timelineItemTitle} numberOfLines={1}>{item.title}</KamiText>
+                          <KamiText style={hsStyles.timelineItemTime}>{item.time}</KamiText>
+                        </View>
+                        {item.description ? (
+                          <KamiText style={hsStyles.timelineItemDesc} numberOfLines={2}>{item.description}</KamiText>
+                        ) : null}
+                      </View>
                     </View>
                   ))}
-                </ScrollView>
-              </View>
+                </View>
+              </ScrollView>
             ) : (
               <View style={hsStyles.emptyJourneyBox}>
                 <KamiText variant="caption" color={Colors.textMuted} align="center">
-                  Your journey timeline is empty. Seal a letter or share a memory to start compiling milestones! ✨
+                  Your timeline is empty. Write a letter, log a journal entry, or share a memory to see it here! ✨
                 </KamiText>
               </View>
             )}
@@ -1564,6 +1893,12 @@ export function HomeScreen({ navigation }: Props) {
         visible={moodModal} mood={pending}
         onClose={() => setMoodModal(false)}
         onSave={handleMoodSave} saving={moodSaving}
+      />
+      <CustomMoodModal
+        visible={customMoodModalVisible}
+        onClose={() => setCustomMoodModalVisible(false)}
+        onSave={handleCustomMoodSave}
+        saving={customMoodSaving}
       />
     </SafeAreaView>
   );
@@ -2872,6 +3207,112 @@ const hsStyles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+
+  // Status Timer Card
+  statusTimerCard: {
+    padding: Space[4],
+    borderRadius: 24,
+    marginHorizontal: Space[5],
+    marginBottom: Space[4],
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+    ...Shadows.md,
+  },
+  timerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[2],
+    justifyContent: 'center',
+    marginBottom: Space[3],
+  },
+  timerHeaderTitle: {
+    fontSize: FontSize.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  timerDisplayBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[2],
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerLabel: {
+    fontSize: 9,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  timerText: {
+    fontSize: FontSize.base + 1,
+    fontWeight: FontWeight.bold,
+    lineHeight: 24,
+    fontFamily: FontFamily.display,
+  },
+  nextEventBadge: {
+    alignSelf: 'center',
+    paddingVertical: Space[2] - 2,
+    paddingHorizontal: Space[4],
+    borderRadius: Radii.full,
+    marginTop: Space[3],
+  },
+
+  // Vertical Timeline Feed
+  verticalTimelineWrap: {
+    marginHorizontal: Space[5],
+    paddingVertical: Space[2],
+  },
+  timelineItemRow: {
+    flexDirection: 'row',
+    gap: Space[3],
+    minHeight: 64,
+  },
+  timelineLeftCol: {
+    alignItems: 'center',
+    width: 38,
+  },
+  timelineIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    ...Shadows.sm,
+  },
+  timelineConnectorLine: {
+    width: 2,
+    flex: 1,
+    marginVertical: 4,
+  },
+  timelineRightContent: {
+    flex: 1,
+    paddingBottom: Space[4],
+  },
+  timelineMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Space[2],
+  },
+  timelineItemTitle: {
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  timelineItemTime: {
+    fontSize: 9,
+    color: Colors.textMuted,
+  },
+  timelineItemDesc: {
+    fontSize: FontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
   },
 });
 

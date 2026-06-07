@@ -128,10 +128,24 @@ export function useCouple() {
       }
       return r;
     },
-    addJournal: async (cId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = []) => {
-      const r = await coupleService.createCoupleJournal(cId, body, title, tags, imageUrls);
+    addJournal: async (cId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null) => {
+      const r = await coupleService.createCoupleJournal(cId, body, title, tags, imageUrls, moodId);
       if (r.success) {
         store.getState().prependCoupleJournal(r.data);
+      }
+      return r;
+    },
+    updateJournal: async (entryId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null) => {
+      const r = await coupleService.updateCoupleJournal(entryId, body, title, tags, imageUrls, moodId);
+      if (r.success) {
+        store.getState().updateCoupleJournalInList(r.data);
+      }
+      return r;
+    },
+    deleteJournal: async (entryId: string) => {
+      const r = await coupleService.deleteCoupleJournal(entryId);
+      if (r.success) {
+        store.getState().removeCoupleJournalFromList(entryId);
       }
       return r;
     },
@@ -177,15 +191,35 @@ export function useCouple() {
       }
       return r;
     },
-    addMemory: async (cId: string, title: string, description?: string, imageUrls: string[] = [], memoryDate?: string, tags: string[] = []) => {
-      const r = await coupleService.createCoupleMemory(cId, title, description, imageUrls, memoryDate, tags);
+    addMemory: async (
+      cId: string, 
+      title: string, 
+      description?: string, 
+      imageUrls: string[] = [], 
+      memoryDate?: string, 
+      tags: string[] = [],
+      location?: string,
+      mood?: string,
+      memoryTime?: string
+    ) => {
+      const r = await coupleService.createCoupleMemory(cId, title, description, imageUrls, memoryDate, tags, location, mood, memoryTime);
       if (r.success) {
         store.getState().prependCoupleMemory(r.data);
       }
       return r;
     },
-    updateMemory: async (memoryId: string, title: string, description?: string, imageUrls: string[] = [], memoryDate?: string, tags: string[] = []) => {
-      const r = await coupleService.updateCoupleMemory(memoryId, title, description, imageUrls, memoryDate, tags);
+    updateMemory: async (
+      memoryId: string, 
+      title: string, 
+      description?: string, 
+      imageUrls: string[] = [], 
+      memoryDate?: string, 
+      tags: string[] = [],
+      location?: string,
+      mood?: string,
+      memoryTime?: string
+    ) => {
+      const r = await coupleService.updateCoupleMemory(memoryId, title, description, imageUrls, memoryDate, tags, location, mood, memoryTime);
       if (r.success) {
         store.getState().updateCoupleMemoryInList(r.data);
       }
@@ -198,8 +232,8 @@ export function useCouple() {
       }
       return r;
     },
-    addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = [], isDraft: boolean = false) => {
-      const r = await coupleService.createCoupleLetter(cId, subject, body, deliverAt, imageUrls, isDraft);
+    addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = [], isDraft: boolean = false, parentLetterId?: string) => {
+      const r = await coupleService.createCoupleLetter(cId, subject, body, deliverAt, imageUrls, isDraft, parentLetterId);
       if (r.success) {
         store.getState().prependCoupleLetter(r.data);
       }

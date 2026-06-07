@@ -6,7 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
-import { HomeScreen }     from '@features/home';
+import { HomeScreen, TimelineScreen }     from '@features/home';
 import { JournalScreen }  from '@features/journal';
 import { MemoriesScreen } from '@features/memories';
 import { GoalsScreen }    from '@features/goals';
@@ -138,6 +138,7 @@ const MainNavigator: React.FC = () => (
     <Tab.Screen name="Goals"    component={GoalsScreen}    />
     <Tab.Screen name="Future"   component={FutureScreen}   />
     <Tab.Screen name="Settings" component={SettingsScreen} />
+    <Tab.Screen name="Timeline" component={TimelineScreen} />
   </Tab.Navigator>
 );
 

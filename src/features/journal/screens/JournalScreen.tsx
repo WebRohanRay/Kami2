@@ -53,7 +53,7 @@ const WriteModal: React.FC<{
   visible: boolean;
   entry: JournalEntry | null;
   onClose: () => void;
-  onSave: (body: string, title: string | undefined, tags: string[], imageUris: string[]) => Promise<void>;
+  onSave: (body: string, title: string | undefined, tags: string[], imageUris: string[], moodId: string | null) => Promise<void>;
   saving: boolean;
 }> = ({ visible, entry, onClose, onSave, saving }) => {
   const [title, setTitle] = useState('');
@@ -63,6 +63,7 @@ const WriteModal: React.FC<{
   const [newTag, setNewTag] = useState('');
   const [localUris, setLocalUris] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -71,6 +72,7 @@ const WriteModal: React.FC<{
       setSelectedTags(entry?.tags ?? []);
       setLocalUris(entry?.imageUrls ?? []);
       setNewTag('');
+      setSelectedMood(entry?.moodId ?? null);
 
       // Populate custom tags (anything that isn't in the default JOURNAL_TAGS)
       const existingCustom = (entry?.tags ?? []).filter(t => !JOURNAL_TAGS.includes(t));
@@ -114,70 +116,96 @@ const WriteModal: React.FC<{
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-        <SafeAreaView style={[wm.root, { backgroundColor: colors.pageBg }]}>
-          <View style={wm.toolbar}>
-            <TouchableOpacity onPress={onClose} hitSlop={8}>
-              <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
-            </TouchableOpacity>
-            <KamiText variant="overline">{entry ? 'Edit entry' : new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</KamiText>
-            <TouchableOpacity onPress={() => { if (!body.trim()) return; Keyboard.dismiss(); onSave(body.trim(), title.trim() || undefined, selectedTags, localUris); }} disabled={saving || !body.trim()} hitSlop={8}>
-              {saving
-                ? <ActivityIndicator size="small" color={colors.primary} />
-                : <KamiText variant="label" color={body.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>
-              }
+      <SafeAreaView style={[wm.root, { backgroundColor: colors.pageBg }]}>
+        <View style={wm.toolbar}>
+          <TouchableOpacity onPress={onClose} hitSlop={8}>
+            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+          </TouchableOpacity>
+          <KamiText variant="overline">{entry ? 'Edit entry' : new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</KamiText>
+          <TouchableOpacity onPress={() => { if (!body.trim()) return; Keyboard.dismiss(); onSave(body.trim(), title.trim() || undefined, selectedTags, localUris, selectedMood); }} disabled={saving || !body.trim()} hitSlop={8}>
+            {saving
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <KamiText variant="label" color={body.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>
+            }
+          </TouchableOpacity>
+        </View>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={wm.content}>
+          <TextInput
+            style={wm.titleInput} placeholder="Title (optional)"
+            placeholderTextColor={Colors.textMuted} value={title}
+            onChangeText={setTitle} maxLength={120}
+          />
+          <View style={wm.rule} />
+          <TextInput
+            style={wm.bodyInput} placeholder="Write freely…"
+            placeholderTextColor={Colors.textMuted} value={body}
+            onChangeText={setBody} multiline autoFocus={!entry} textAlignVertical="top" maxLength={8000}
+          />
+
+          {/* Mood Selector */}
+          <KamiText variant="overline" style={wm.sectionLabel}>How does this moment feel?</KamiText>
+          <View style={{ flexDirection: 'row', gap: Space[2], marginVertical: Space[2] }}>
+            {['😊', '😔', '🥰', '😡', '😌', '🤪'].map(emoji => (
+              <TouchableOpacity
+                key={emoji}
+                style={[
+                  {
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: Colors.creamDeep,
+                    borderWidth: 1.5,
+                    borderColor: selectedMood === emoji ? colors.primary : Colors.border,
+                  },
+                  selectedMood === emoji && { backgroundColor: colors.primary + '18' }
+                ]}
+                onPress={() => setSelectedMood(selectedMood === emoji ? null : emoji)}
+              >
+                <Text style={{ fontSize: 22 }}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Tag Selector */}
+          <KamiText variant="overline" style={wm.sectionLabel}>Tags</KamiText>
+          <View style={wm.tagContainer}>
+            {[...JOURNAL_TAGS, ...customTags].map(t => {
+              const active = selectedTags.includes(t);
+              return (
+                <TouchableOpacity key={t} style={[wm.tagChip, active && [wm.tagChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]} onPress={() => toggleTag(t)}>
+                  <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Custom Tag Input */}
+          <View style={wm.customTagRow}>
+            <TextInput
+              style={wm.customTagInput}
+              placeholder="Add custom hashtag..."
+              placeholderTextColor={Colors.textMuted}
+              value={newTag}
+              onChangeText={setNewTag}
+              maxLength={25}
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={handleAddCustomTag}
+            />
+            <TouchableOpacity style={[wm.customTagBtn, { backgroundColor: colors.primary + '11' }]} onPress={handleAddCustomTag} activeOpacity={0.75}>
+              <KamiText variant="caption" color={colors.primary} bold>+ Add</KamiText>
             </TouchableOpacity>
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={wm.content}>
-            <TextInput
-              style={wm.titleInput} placeholder="Title (optional)"
-              placeholderTextColor={Colors.textMuted} value={title}
-              onChangeText={setTitle} maxLength={120}
-            />
-            <View style={wm.rule} />
-            <TextInput
-              style={wm.bodyInput} placeholder="Write freely…"
-              placeholderTextColor={Colors.textMuted} value={body}
-              onChangeText={setBody} multiline autoFocus={!entry} textAlignVertical="top" maxLength={8000}
-            />
 
-            {/* Tag Selector */}
-            <KamiText variant="overline" style={wm.sectionLabel}>Tags</KamiText>
-            <View style={wm.tagContainer}>
-              {[...JOURNAL_TAGS, ...customTags].map(t => {
-                const active = selectedTags.includes(t);
-                return (
-                  <TouchableOpacity key={t} style={[wm.tagChip, active && [wm.tagChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]} onPress={() => toggleTag(t)}>
-                    <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Custom Tag Input */}
-            <View style={wm.customTagRow}>
-              <TextInput
-                style={wm.customTagInput}
-                placeholder="Add custom hashtag..."
-                placeholderTextColor={Colors.textMuted}
-                value={newTag}
-                onChangeText={setNewTag}
-                maxLength={25}
-                autoCapitalize="none"
-                autoCorrect={false}
-                onSubmitEditing={handleAddCustomTag}
-              />
-              <TouchableOpacity style={[wm.customTagBtn, { backgroundColor: colors.primary + '11' }]} onPress={handleAddCustomTag} activeOpacity={0.75}>
-                <KamiText variant="caption" color={colors.primary} bold>+ Add</KamiText>
-              </TouchableOpacity>
-            </View>
-
-            {/* Photo Attachments */}
-            <View style={wm.photoHeader}>
-              <KamiText variant="overline">Photos</KamiText>
-              <TouchableOpacity onPress={handlePickPhotos} style={wm.addPhotoBtn} disabled={picking}>
-                {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>+ Add Photos</KamiText>}
-              </TouchableOpacity>
-            </View>
+          {/* Photo Attachments */}
+          <View style={wm.photoHeader}>
+            <KamiText variant="overline">Photos</KamiText>
+            <TouchableOpacity onPress={handlePickPhotos} style={wm.addPhotoBtn} disabled={picking}>
+              {picking ? <ActivityIndicator size="small" color={colors.primary} /> : <KamiText variant="caption" color={colors.primary} bold>+ Add Photos</KamiText>}
+            </TouchableOpacity>
+          </View>
 
           {localUris.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={wm.photoScroll}>
@@ -308,11 +336,18 @@ export function JournalScreen({ navigation }: Props) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [availableTags, setAvailableTags] = useState<string[]>(JOURNAL_TAGS);
 
+  // Calendar state
+  const [viewMode, setViewMode] = useState<'feed' | 'calendar'>('feed');
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null);
+
   // Couple Space state
   const { couple, coupleJournals } = useCoupleStore();
   const { 
     loadJournals: loadCoupleJournals, 
     addJournal: addCoupleJournal, 
+    updateJournal: updateCoupleJournal,
+    deleteJournal: deleteCoupleJournal,
     addComment: addCoupleComment, 
     toggleReaction 
   } = useCouple();
@@ -358,7 +393,7 @@ export function JournalScreen({ navigation }: Props) {
   // Real-time ephemeral broadcast status when writing a journal or responding to prompt
   useEffect(() => {
     if (user?.activeSpace !== 'couple' || !couple?.id || !user?.id) return;
-    if (isFocused && appState === 'active') {
+    if (isFocused) {
       let action: PartnerActionType = 'reading_journal';
       if (commentsVisible) {
         action = 'commenting_journal';
@@ -379,7 +414,7 @@ export function JournalScreen({ navigation }: Props) {
         broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [isFocused, appState, writeVisible, promptVisible, commentsVisible, user?.activeSpace, couple?.id, user?.id]);
+  }, [isFocused, writeVisible, promptVisible, commentsVisible, user?.activeSpace, couple?.id, user?.id]);
 
   useEffect(() => {
     if (user?.activeSpace === 'couple') {
@@ -403,7 +438,7 @@ export function JournalScreen({ navigation }: Props) {
     }
   }, [search, selectedTag, user?.id, user?.activeSpace, loadJournal]);
 
-  const handleSave = async (body: string, title?: string, tags: string[] = [], localUris: string[] = []) => {
+  const handleSave = async (body: string, title?: string, tags: string[] = [], localUris: string[] = [], moodId: string | null = null) => {
     if (!user?.id) return;
     setWriteSaving(true);
     try {
@@ -434,24 +469,36 @@ export function JournalScreen({ navigation }: Props) {
 
       if (user.activeSpace === 'couple' && couple) {
         if (editing) {
-          const { error } = await supabase
-            .from('couple_journals')
-            .update({ body, title, tags, image_urls: relativePaths, updated_at: new Date().toISOString() })
-            .eq('id', editing.id);
-          if (error) Alert.alert('Kami', error.message);
-          else { setWriteVisible(false); setEditing(null); loadCoupleJournals(); }
+          const r = await updateCoupleJournal(editing.id, body, title, tags, relativePaths, moodId);
+          if (!r.success) {
+            Alert.alert('Kami', r.error);
+          } else {
+            setWriteVisible(false);
+            setEditing(null);
+            await loadCoupleJournals();
+          }
         } else {
-          const r = await addCoupleJournal(couple.id, body, title, tags, relativePaths);
-          if (!r.success) Alert.alert('Kami', r.error);
-          else { setWriteVisible(false); setEditing(null); }
+          const r = await addCoupleJournal(couple.id, body, title, tags, relativePaths, moodId);
+          if (!r.success) {
+            Alert.alert('Kami', r.error);
+          } else {
+            setWriteVisible(false);
+            setEditing(null);
+            await loadCoupleJournals();
+          }
         }
       } else {
         const r = editing
-          ? await editJournalEntry(editing.id, { body, title, tags, imageUrls: relativePaths })
-          : await addJournalEntry({ body, title, tags, imageUrls: relativePaths });
+          ? await editJournalEntry(editing.id, { body, title, tags, imageUrls: relativePaths, moodId: moodId || undefined })
+          : await addJournalEntry({ body, title, tags, imageUrls: relativePaths, moodId: moodId || undefined });
 
-        if (!r.success) { Alert.alert('Kami', r.error); }
-        else { setWriteVisible(false); setEditing(null); }
+        if (!r.success) {
+          Alert.alert('Kami', r.error);
+        } else {
+          setWriteVisible(false);
+          setEditing(null);
+          await loadJournal(search.trim() || undefined, selectedTag || undefined);
+        }
       }
     } catch (e) {
       Alert.alert('Kami', 'Error saving your entry.');
@@ -464,12 +511,19 @@ export function JournalScreen({ navigation }: Props) {
     { text: 'Cancel', style: 'cancel' },
     { text: 'Delete', style: 'destructive', onPress: async () => { 
       if (user?.activeSpace === 'couple') {
-        const { error } = await supabase.from('couple_journals').delete().eq('id', e.id).eq('user_id', user.id);
-        if (error) Alert.alert('Kami', error.message);
-        else loadCoupleJournals();
+        const r = await deleteCoupleJournal(e.id);
+        if (!r.success) {
+          Alert.alert('Kami', r.error);
+        } else {
+          await loadCoupleJournals();
+        }
       } else {
         const r = await removeJournalEntry(e.id); 
-        if (!r.success) Alert.alert('Kami', r.error); 
+        if (!r.success) {
+          Alert.alert('Kami', r.error);
+        } else {
+          await loadJournal(search.trim() || undefined, selectedTag || undefined);
+        }
       }
     } },
   ]);
@@ -500,6 +554,48 @@ export function JournalScreen({ navigation }: Props) {
     setRefreshing(false); 
   };
 
+  // Calendar View calculations
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayIndex = new Date(year, month, 1).getDay();
+
+  const calendarCells: (Date | null)[] = [];
+  for (let i = 0; i < firstDayIndex; i++) {
+    calendarCells.push(null);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    calendarCells.push(new Date(year, month, d));
+  }
+
+  const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const moodColors: Record<string, string> = {
+    '😊': '#FACC15', // Yellow
+    '😔': '#60A5FA', // Blue
+    '🥰': '#F472B6', // Pink
+    '😡': '#F87171', // Red
+    '😌': '#34D399', // Green
+    '🤪': '#A78BFA'  // Purple
+  };
+
+  const handlePrevMonth = () => {
+    setCalendarDate(new Date(year, month - 1, 1));
+    setSelectedDateFilter(null);
+  };
+  const handleNextMonth = () => {
+    setCalendarDate(new Date(year, month + 1, 1));
+    setSelectedDateFilter(null);
+  };
+
+  // Map dates of active list to entries
+  const activeList = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
+  const dateEntriesMap = activeList.reduce((acc, entry) => {
+    const dStr = entry.entryDate ? entry.entryDate.split('T')[0] : new Date(entry.createdAt).toISOString().split('T')[0];
+    if (!acc[dStr]) acc[dStr] = [];
+    acc[dStr].push(entry);
+    return acc;
+  }, {} as Record<string, typeof activeList>);
+
   const { colors } = useTheme();
 
   return (
@@ -508,7 +604,7 @@ export function JournalScreen({ navigation }: Props) {
 
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.pageBg }]}>
-        <View>
+        <View style={{ flex: 1 }}>
           <KamiText variant="overline">Your thoughts</KamiText>
           <KamiText variant="title">Journal</KamiText>
         </View>
@@ -518,42 +614,164 @@ export function JournalScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Search Input */}
-      <View style={s.searchBar}>
-        <Text style={s.searchIcon}>🔍</Text>
-        <TextInput
-          style={s.searchInput}
-          placeholder="Search entries..."
-          placeholderTextColor={Colors.textMuted}
-          value={search}
-          onChangeText={setSearch}
-          clearButtonMode="while-editing"
-        />
+      {/* View Mode Toggle Switch */}
+      <View style={s.viewToggleRow}>
+        <TouchableOpacity
+          style={[
+            s.toggleBtn, 
+            viewMode === 'feed' && [s.toggleBtnActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
+          ]}
+          onPress={() => setViewMode('feed')}
+        >
+          <KamiText variant="caption" color={viewMode === 'feed' ? '#fff' : Colors.textMuted} bold={viewMode === 'feed'}>
+            📰 Feed View
+          </KamiText>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            s.toggleBtn, 
+            viewMode === 'calendar' && [s.toggleBtnActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
+          ]}
+          onPress={() => setViewMode('calendar')}
+        >
+          <KamiText variant="caption" color={viewMode === 'calendar' ? '#fff' : Colors.textMuted} bold={viewMode === 'calendar'}>
+            📅 Calendar View
+          </KamiText>
+        </TouchableOpacity>
       </View>
 
-      {/* Tags Quick Filter */}
-      <View style={s.tagsScrollWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tagsFilterRow}>
-          <TouchableOpacity
-            style={[s.filterChip, selectedTag === null && [s.filterChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]}
-            onPress={() => setSelectedTag(null)}
-          >
-            <KamiText variant="caption" color={selectedTag === null ? colors.primary : Colors.textSecondary} bold={selectedTag === null}>All</KamiText>
-          </TouchableOpacity>
-          {availableTags.map(t => {
-            const active = selectedTag === t;
-            return (
+      {viewMode === 'feed' && (
+        <>
+          {/* Search Input */}
+          <View style={s.searchBar}>
+            <Text style={s.searchIcon}>🔍</Text>
+            <TextInput
+              style={s.searchInput}
+              placeholder="Search entries..."
+              placeholderTextColor={Colors.textMuted}
+              value={search}
+              onChangeText={setSearch}
+              clearButtonMode="while-editing"
+            />
+          </View>
+
+          {/* Tags Quick Filter */}
+          <View style={s.tagsScrollWrapper}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tagsFilterRow}>
               <TouchableOpacity
-                key={t}
-                style={[s.filterChip, active && [s.filterChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]}
-                onPress={() => setSelectedTag(active ? null : t)}
+                style={[s.filterChip, selectedTag === null && [s.filterChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]}
+                onPress={() => setSelectedTag(null)}
               >
-                <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
+                <KamiText variant="caption" color={selectedTag === null ? colors.primary : Colors.textSecondary} bold={selectedTag === null}>All</KamiText>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+              {availableTags.map(t => {
+                const active = selectedTag === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[s.filterChip, active && [s.filterChipActive, { borderColor: colors.primary, backgroundColor: colors.primary + '11' }]]}
+                    onPress={() => setSelectedTag(active ? null : t)}
+                  >
+                    <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold={active}>#{t}</KamiText>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </>
+      )}
+
+      {viewMode === 'calendar' && (
+        <View style={[s.calendarCard, { backgroundColor: Colors.cardBg, borderColor: Colors.border + '44' }]}>
+          {/* Month Navigator */}
+          <View style={s.calHeader}>
+            <TouchableOpacity onPress={handlePrevMonth} style={s.calArrow}>
+              <Text style={{ fontSize: 24, color: colors.primary, lineHeight: 28 }}>‹</Text>
+            </TouchableOpacity>
+            <KamiText variant="label" bold style={s.calMonthTitle}>
+              {calendarDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+            </KamiText>
+            <TouchableOpacity onPress={handleNextMonth} style={s.calArrow}>
+              <Text style={{ fontSize: 24, color: colors.primary, lineHeight: 28 }}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Weekdays */}
+          <View style={s.calWeekdays}>
+            {weekdays.map((wd, i) => (
+              <Text key={i} style={[s.calWeekdayText, { color: Colors.textMuted }]}>{wd}</Text>
+            ))}
+          </View>
+
+          {/* Grid */}
+          <View style={s.calGrid}>
+            {calendarCells.map((date, idx) => {
+              if (!date) {
+                return <View key={`empty-${idx}`} style={s.calCellEmpty} />;
+              }
+
+              const dayNum = date.getDate();
+              const dStr = date.toISOString().split('T')[0];
+              const hasEntries = !!dateEntriesMap[dStr];
+              const dayEntries = dateEntriesMap[dStr] || [];
+              const primaryMood = dayEntries[0]?.moodId;
+              const dotColor = primaryMood ? (moodColors[primaryMood] || '#CBD5E1') : '#CBD5E1';
+              const isSelected = selectedDateFilter === dStr;
+
+              return (
+                <TouchableOpacity
+                  key={dStr}
+                  style={[
+                    s.calCell,
+                    isSelected && { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: colors.primary + '0a' }
+                  ]}
+                  onPress={() => setSelectedDateFilter(isSelected ? null : dStr)}
+                >
+                  <Text style={[s.calCellText, isSelected && { fontWeight: 'bold', color: colors.primary }]}>
+                    {dayNum}
+                  </Text>
+                  {hasEntries && (
+                    <View style={[s.calCellDot, { backgroundColor: dotColor }]} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Emotion count breakdown row */}
+          <View style={s.emotionBreakdownContainer}>
+            <KamiText variant="overline" style={{ fontSize: 9, color: Colors.textMuted }}>Monthly Emotions</KamiText>
+            <View style={s.emotionBreakdownRow}>
+              {Object.entries(moodColors).map(([mood, color]) => {
+                const count = activeList.filter(e => {
+                  const eDate = new Date(e.entryDate || e.createdAt);
+                  return eDate.getFullYear() === year && eDate.getMonth() === month && e.moodId === mood;
+                }).length;
+
+                if (count === 0) return null;
+
+                return (
+                  <View key={mood} style={[s.emotionTag, { backgroundColor: color + '15' }]}>
+                    <KamiText variant="caption" color={color} bold style={{ fontSize: 10 }}>{mood} {count}</KamiText>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Selected Date Header / Clear filter */}
+          {selectedDateFilter && (
+            <View style={s.filterHeaderRow}>
+              <KamiText variant="caption" bold color={colors.primary}>
+                Filtering: {new Date(selectedDateFilter).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+              </KamiText>
+              <TouchableOpacity onPress={() => setSelectedDateFilter(null)}>
+                <KamiText variant="caption" color={colors.primary} bold>Show All</KamiText>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -561,7 +779,7 @@ export function JournalScreen({ navigation }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         {/* Today's prompt card */}
-        {todayPrompt && (
+        {todayPrompt && viewMode === 'feed' && (
           <TouchableOpacity
             style={[s.promptCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}
             onPress={() => setPromptVisible(true)}
@@ -581,29 +799,58 @@ export function JournalScreen({ navigation }: Props) {
         )}
 
         {/* Loading */}
-        {journalLoading === 'loading' && journalEntries.length === 0 && (
+        {journalLoading === 'loading' && activeList.length === 0 && (
           <View style={s.centerState}><ActivityIndicator color={colors.primary} /></View>
         )}
 
         {/* Empty state */}
-        {((user?.activeSpace === 'couple' ? coupleJournals : journalEntries).length === 0) && (
-          <TouchableOpacity style={s.emptyState} onPress={() => { setEditing(null); setWriteVisible(true); }} activeOpacity={0.85}>
-            <Text style={{ fontSize: 48, marginBottom: Space[3] }}>📓</Text>
-            <KamiText variant="subtitle" align="center">No entries found</KamiText>
-            <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-              {search || selectedTag ? 'Clear filters to view your entries.' : 'Write your first entry. No rules, just you.'}
-            </KamiText>
-            <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
-              <KamiText variant="label" color={colors.primary} bold>Start writing ›</KamiText>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {/* Entries */}
         {(() => {
-          const rawList = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
-          const sortedList = [...rawList].sort((a, b) => new Date(b.entryDate || b.createdAt).getTime() - new Date(a.entryDate || a.createdAt).getTime());
+          let listToRender = user?.activeSpace === 'couple' ? coupleJournals : journalEntries;
+          if (viewMode === 'calendar') {
+            if (selectedDateFilter) {
+              listToRender = listToRender.filter(e => {
+                const dStr = e.entryDate ? e.entryDate.split('T')[0] : new Date(e.createdAt).toISOString().split('T')[0];
+                return dStr === selectedDateFilter;
+              });
+            } else {
+              listToRender = listToRender.filter(e => {
+                const eDate = new Date(e.entryDate || e.createdAt);
+                return eDate.getFullYear() === year && eDate.getMonth() === month;
+              });
+            }
+          } else {
+            if (search.trim()) {
+              const q = search.toLowerCase().trim();
+              listToRender = listToRender.filter(e => 
+                (e.title && e.title.toLowerCase().includes(q)) || 
+                (e.body && e.body.toLowerCase().includes(q))
+              );
+            }
+            if (selectedTag) {
+              listToRender = listToRender.filter(e => 
+                e.tags && e.tags.some(t => t.toLowerCase() === selectedTag.toLowerCase())
+              );
+            }
+          }
+
+          if (listToRender.length === 0) {
+            return (
+              <TouchableOpacity style={s.emptyState} onPress={() => { setEditing(null); setWriteVisible(true); }} activeOpacity={0.85}>
+                <Text style={{ fontSize: 48, marginBottom: Space[3] }}>📓</Text>
+                <KamiText variant="subtitle" align="center">No entries found</KamiText>
+                <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
+                  {search || selectedTag || selectedDateFilter ? 'Clear filters to view entries.' : 'Write your first entry. No rules, just you.'}
+                </KamiText>
+                <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+                  <KamiText variant="label" color={colors.primary} bold>Start writing ›</KamiText>
+                </View>
+              </TouchableOpacity>
+            );
+          }
+
+          const sortedList = [...listToRender].sort((a, b) => new Date(b.entryDate || b.createdAt).getTime() - new Date(a.entryDate || a.createdAt).getTime());
           const paginatedList = sortedList.slice(0, visibleEntries);
+
           return (
             <>
               {paginatedList.map((e, idx) => {
@@ -994,5 +1241,102 @@ const s = StyleSheet.create({
     borderColor: Colors.border + '66',
     marginVertical: Space[2],
     ...Shadows.sm,
+  },
+  viewToggleRow: { flexDirection: 'row', marginHorizontal: Space[5], marginVertical: Space[3], gap: Space[2] },
+  toggleBtn: { flex: 1, height: 38, borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border + '55', backgroundColor: Colors.cardBg, alignItems: 'center', justifyContent: 'center' },
+  toggleBtnActive: { borderWidth: 1.5 },
+
+  // Calendar styles
+  calendarCard: {
+    marginHorizontal: Space[5],
+    marginVertical: Space[2],
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    padding: Space[4],
+    ...Shadows.sm,
+  },
+  calHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Space[3],
+  },
+  calMonthTitle: {
+    fontSize: FontSize.base,
+    color: Colors.textPrimary,
+  },
+  calArrow: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: Colors.creamDeep,
+  },
+  calWeekdays: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: Space[2],
+  },
+  calWeekdayText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    width: 36,
+    textAlign: 'center',
+  },
+  calGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    rowGap: 8,
+  },
+  calCell: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    position: 'relative',
+  },
+  calCellEmpty: {
+    width: 36,
+    height: 36,
+  },
+  calCellText: {
+    fontSize: FontSize.sm,
+    color: Colors.textPrimary,
+  },
+  calCellDot: {
+    position: 'absolute',
+    bottom: 4,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  emotionBreakdownContainer: {
+    marginTop: Space[4],
+    borderTopWidth: 1,
+    borderTopColor: Colors.border + '33',
+    paddingTop: Space[3],
+    gap: Space[2],
+  },
+  emotionBreakdownRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Space[2],
+  },
+  emotionTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radii.sm,
+  },
+  filterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Space[3],
+    borderTopWidth: 1,
+    borderTopColor: Colors.border + '33',
+    paddingTop: Space[3],
   },
 });

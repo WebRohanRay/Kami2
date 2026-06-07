@@ -245,7 +245,7 @@ export function GoalsScreen({ navigation }: Props) {
   // Real-time ephemeral broadcast status when adding/editing a goal
   useEffect(() => {
     if (activeSpace !== 'couple' || !couple?.id || !user?.id) return;
-    if (isFocused && appState === 'active') {
+    if (isFocused) {
       const action: PartnerActionType = modalVisible 
         ? (editing ? 'editing_goal' : 'creating_goal') 
         : 'viewing_goals';
@@ -260,7 +260,7 @@ export function GoalsScreen({ navigation }: Props) {
         broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [isFocused, appState, modalVisible, editing, activeSpace, couple?.id, user?.id]);
+  }, [isFocused, modalVisible, editing, activeSpace, couple?.id, user?.id]);
 
   // Dual-mode loaders
   useEffect(() => {

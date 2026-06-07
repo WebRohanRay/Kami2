@@ -7,6 +7,7 @@ import { supabase } from '@shared/lib/supabase';
 import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { navigationRef } from '@core/navigation/navigationRef';
 import { triggerLocalNotificationAsync } from '@infrastructure/notifications/notificationService';
+import { resolveAvatarUrl } from '@infrastructure/profile';
 
 export function CoupleRealtimeListener() {
   const user = useAuthStore(s => s.user);
@@ -309,6 +310,52 @@ export function CoupleRealtimeListener() {
           );
         }
       })
+      // 9. Couple Letter Reactions
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'couple_letter_reactions'
+      }, () => {
+        loadLetters();
+      })
+      // 10. Partner Profile Mood Changes
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'profiles', 
+        filter: `id=eq.${partner?.id}` 
+      }, async (payload) => {
+        const p = payload.new as any;
+        const resolvedAvatar = await resolveAvatarUrl(p.avatar_url);
+        const currentPartner = useCoupleStore.getState().partner;
+        
+        useCoupleStore.getState().setPartner({
+          id: p.id,
+          nickname: p.nickname || 'Partner',
+          email: p.email || '',
+          avatarUrl: resolvedAvatar,
+          lastSeenAt: p.last_seen_at,
+          currentMoodEmoji: p.current_mood_emoji,
+          currentMoodLabel: p.current_mood_label,
+        });
+
+        if (p.current_mood_emoji !== currentPartner?.currentMoodEmoji || p.current_mood_label !== currentPartner?.currentMoodLabel) {
+          if (p.current_mood_emoji || p.current_mood_label) {
+            const moodText = `${p.current_mood_emoji || ''} ${p.current_mood_label || ''}`.trim();
+            setToast({
+              title: 'Mood Update! 🔮',
+              message: `${p.nickname || 'Partner'} is feeling: ${moodText}`,
+              icon: p.current_mood_emoji || '🔮',
+              targetScreen: 'Home'
+            });
+            triggerLocalNotificationAsync(
+              'Partner Mood Update! 🔮',
+              `"${p.nickname || 'Partner'} updated their mood to ${moodText}."`,
+              { screen: 'Home' }
+            );
+          }
+        }
+      })
       .subscribe();
 
     useCoupleStore.getState().setRealtimeChannel(channel);
@@ -471,5 +518,3 @@ const styles = StyleSheet.create({
     marginLeft: Space[2],
   }
 });
-
-export { broadcastPartnerAction } from '../services/broadcastService';

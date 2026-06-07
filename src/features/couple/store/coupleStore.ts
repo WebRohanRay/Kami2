@@ -94,6 +94,7 @@ interface CoupleState {
   setCoupleJournals: (j: CoupleJournal[]) => void;
   prependCoupleJournal: (j: CoupleJournal) => void;
   updateCoupleJournalInList: (j: CoupleJournal) => void;
+  removeCoupleJournalFromList: (id: string) => void;
   setJournalsLoading: (s: LoadingState) => void;
   setJournalsError: (e: string | null) => void;
 
@@ -177,6 +178,9 @@ export const useCoupleStore = create<CoupleState>((set) => ({
   prependCoupleJournal: (j) => set((s) => ({ coupleJournals: [j, ...s.coupleJournals] })),
   updateCoupleJournalInList: (j) => set((s) => ({
     coupleJournals: s.coupleJournals.map((x) => x.id === j.id ? j : x),
+  })),
+  removeCoupleJournalFromList: (id) => set((s) => ({
+    coupleJournals: s.coupleJournals.filter((x) => x.id !== id),
   })),
   setJournalsLoading: (s) => set({ journalsLoading: s }),
   setJournalsError: (e) => set({ journalsError: e }),

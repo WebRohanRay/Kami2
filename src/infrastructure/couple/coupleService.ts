@@ -542,7 +542,8 @@ export async function createCoupleJournal(
   body: string, 
   title?: string, 
   tags: string[] = [], 
-  imageUrls: string[] = []
+  imageUrls: string[] = [],
+  moodId?: string | null
 ): Promise<Result<CoupleJournal>> {
   try {
     const { data: userRes } = await supabase.auth.getUser();
@@ -556,7 +557,8 @@ export async function createCoupleJournal(
         body: body.trim(),
         title: title?.trim() || null,
         tags,
-        image_urls: imageUrls
+        image_urls: imageUrls,
+        mood_id: moodId || null
       })
       .select('*, profiles(nickname, avatar_url)')
       .single();
@@ -583,6 +585,74 @@ export async function createCoupleJournal(
         reactions: []
       }
     };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+/** Update an existing couple journal entry */
+export async function updateCoupleJournal(
+  entryId: string,
+  body: string,
+  title?: string,
+  tags: string[] = [],
+  imageUrls: string[] = [],
+  moodId?: string | null
+): Promise<Result<CoupleJournal>> {
+  try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+
+    const { data, error } = await supabase
+      .from('couple_journals')
+      .update({
+        body: body.trim(),
+        title: title?.trim() || null,
+        tags,
+        image_urls: imageUrls,
+        mood_id: moodId || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', entryId)
+      .select('*, profiles(nickname, avatar_url)')
+      .single();
+
+    if (error) return { success: false, error: friendly(error.message) };
+    return {
+      success: true,
+      data: {
+        id: data.id,
+        coupleId: data.couple_id,
+        userId: data.user_id,
+        title: data.title,
+        body: data.body,
+        moodId: data.mood_id,
+        imageUrls: data.image_urls || [],
+        tags: data.tags || [],
+        entryDate: data.entry_date,
+        isPinned: data.is_pinned,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        userNickname: data.profiles?.nickname || 'You',
+        userAvatarUrl: data.profiles?.avatar_url,
+        comments: [],
+        reactions: []
+      }
+    };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
+/** Delete a couple journal entry */
+export async function deleteCoupleJournal(entryId: string): Promise<Result<void>> {
+  try {
+    const { error } = await supabase
+      .from('couple_journals')
+      .delete()
+      .eq('id', entryId);
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -669,7 +739,7 @@ export async function fetchCoupleMemories(coupleId: string): Promise<Result<Coup
   try {
     const { data, error } = await supabase
       .from('couple_memories')
-      .select('*')
+      .select('*, profiles!couple_memories_last_edited_by_fkey(nickname)')
       .eq('couple_id', coupleId)
       .order('memory_date', { ascending: false });
 
@@ -679,7 +749,7 @@ export async function fetchCoupleMemories(coupleId: string): Promise<Result<Coup
       (data ?? []).map(r => resolveSignedUrls('memory_images', r.image_urls || []))
     );
 
-    const mapped = (data ?? []).map((r, i) => ({
+    const mapped = (data ?? []).map((r: any, i: number) => ({
       id: r.id,
       coupleId: r.couple_id,
       title: r.title,
@@ -687,7 +757,12 @@ export async function fetchCoupleMemories(coupleId: string): Promise<Result<Coup
       imageUrls: resolvedImgsList[i],
       memoryDate: r.memory_date,
       tags: r.tags || [],
-      createdAt: r.created_at
+      createdAt: r.created_at,
+      location: r.location || null,
+      mood: r.mood || null,
+      memoryTime: r.memory_time || null,
+      lastEditedBy: r.last_edited_by || null,
+      lastEditedNickname: r.profiles?.nickname || null
     }));
 
     return { success: true, data: mapped };
@@ -703,7 +778,10 @@ export async function createCoupleMemory(
   description?: string, 
   imageUrls: string[] = [], 
   memoryDate: string = new Date().toISOString().split('T')[0], 
-  tags: string[] = []
+  tags: string[] = [],
+  location?: string,
+  mood?: string,
+  memoryTime?: string
 ): Promise<Result<CoupleMemory>> {
   try {
     const { data, error } = await supabase
@@ -714,9 +792,12 @@ export async function createCoupleMemory(
         description: description?.trim() || null,
         image_urls: imageUrls,
         memory_date: memoryDate,
-        tags
+        tags,
+        location: location || null,
+        mood: mood || null,
+        memory_time: memoryTime || null
       })
-      .select('*')
+      .select('*, profiles!couple_memories_last_edited_by_fkey(nickname)')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -730,7 +811,12 @@ export async function createCoupleMemory(
         imageUrls: data.image_urls || [],
         memoryDate: data.memory_date,
         tags: data.tags || [],
-        createdAt: data.created_at
+        createdAt: data.created_at,
+        location: data.location || null,
+        mood: data.mood || null,
+        memoryTime: data.memory_time || null,
+        lastEditedBy: data.last_edited_by || null,
+        lastEditedNickname: data.profiles?.nickname || null
       }
     };
   } catch (e) {
@@ -745,9 +831,15 @@ export async function updateCoupleMemory(
   description?: string, 
   imageUrls: string[] = [], 
   memoryDate?: string, 
-  tags: string[] = []
+  tags: string[] = [],
+  location?: string,
+  mood?: string,
+  memoryTime?: string
 ): Promise<Result<CoupleMemory>> {
   try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+
     const { data, error } = await supabase
       .from('couple_memories')
       .update({
@@ -755,10 +847,14 @@ export async function updateCoupleMemory(
         description: description?.trim() || null,
         image_urls: imageUrls,
         memory_date: memoryDate,
-        tags
+        tags,
+        location: location || null,
+        mood: mood || null,
+        memory_time: memoryTime || null,
+        last_edited_by: userRes.user.id
       })
       .eq('id', memoryId)
-      .select('*')
+      .select('*, profiles!couple_memories_last_edited_by_fkey(nickname)')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -772,7 +868,12 @@ export async function updateCoupleMemory(
         imageUrls: data.image_urls || [],
         memoryDate: data.memory_date,
         tags: data.tags || [],
-        createdAt: data.created_at
+        createdAt: data.created_at,
+        location: data.location || null,
+        mood: data.mood || null,
+        memoryTime: data.memory_time || null,
+        lastEditedBy: data.last_edited_by || null,
+        lastEditedNickname: data.profiles?.nickname || null
       }
     };
   } catch (e) {
@@ -987,29 +1088,36 @@ export async function deleteCoupleGoal(goalId: string): Promise<Result<void>> {
 export async function fetchCoupleLetters(coupleId: string): Promise<Result<CoupleLetter[]>> {
   try {
     const { data, error } = await supabase
-      .from('couple_letters')
-      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived, profiles(nickname), couple_letter_reactions(user_id, emoji)')
-      .eq('couple_id', coupleId)
-      .order('deliver_at', { ascending: true });
+      .rpc('fetch_couple_letters_secure', { p_couple_id: coupleId });
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const mapped = (data ?? []).map((r: any) => {
+    const resolvedImgsList = await Promise.all(
+      (data ?? []).map((r: any) => r.image_urls && r.image_urls.length > 0 ? resolveSignedUrls('letter_images', r.image_urls) : Promise.resolve([]))
+    );
+
+    const mapped = (data ?? []).map((r: any, i: number) => {
       const unlockTime = new Date(r.deliver_at).getTime();
       return {
         id: r.id,
         coupleId: r.couple_id,
         senderId: r.sender_id,
         subject: r.subject,
+        body: r.body || null,
         deliverAt: r.deliver_at,
         isUnlocked: Date.now() >= unlockTime,
         createdAt: r.created_at,
-        senderNickname: r.profiles?.nickname,
+        senderNickname: r.sender_nickname,
         isRead: r.is_read,
         isFavorite: r.is_favorite,
         isDraft: r.is_draft,
         isArchived: r.is_archived,
-        reactions: (r.couple_letter_reactions ?? []).map((rx: any) => ({
+        parentLetterId: r.parent_letter_id,
+        deliveredAt: r.delivered_at,
+        readAt: r.read_at,
+        updatedAt: r.updated_at,
+        imageUrls: resolvedImgsList[i],
+        reactions: (r.reactions ?? []).map((rx: any) => ({
           userId: rx.user_id,
           emoji: rx.emoji
         }))
@@ -1029,7 +1137,8 @@ export async function createCoupleLetter(
   body: string, 
   deliverAt: string, 
   imageUrls: string[] = [],
-  isDraft: boolean = false
+  isDraft: boolean = false,
+  parentLetterId?: string
 ): Promise<Result<CoupleLetter>> {
   try {
     const { data: userRes } = await supabase.auth.getUser();
@@ -1044,9 +1153,10 @@ export async function createCoupleLetter(
         body: body.trim(),
         deliver_at: deliverAt,
         image_urls: imageUrls,
-        is_draft: isDraft
+        is_draft: isDraft,
+        parent_letter_id: parentLetterId || null
       })
-      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
+      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived, parent_letter_id, delivered_at, read_at, updated_at')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -1064,7 +1174,11 @@ export async function createCoupleLetter(
         isRead: data.is_read,
         isFavorite: data.is_favorite,
         isDraft: data.is_draft,
-        isArchived: data.is_archived
+        isArchived: data.is_archived,
+        parentLetterId: data.parent_letter_id,
+        deliveredAt: data.delivered_at,
+        readAt: data.read_at,
+        updatedAt: data.updated_at
       }
     };
   } catch (e) {
@@ -1273,7 +1387,7 @@ export async function updateCoupleLetter(
       .from('couple_letters')
       .update(updatePayload)
       .eq('id', letterId)
-      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
+      .select('id, couple_id, sender_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived, parent_letter_id, delivered_at, read_at, updated_at')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -1291,7 +1405,11 @@ export async function updateCoupleLetter(
         isRead: data.is_read,
         isFavorite: data.is_favorite,
         isDraft: data.is_draft,
-        isArchived: data.is_archived
+        isArchived: data.is_archived,
+        parentLetterId: data.parent_letter_id,
+        deliveredAt: data.delivered_at,
+        readAt: data.read_at,
+        updatedAt: data.updated_at
       }
     };
   } catch (e) {

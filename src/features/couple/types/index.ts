@@ -70,6 +70,11 @@ export interface CoupleMemory {
   memoryDate: string;
   tags: string[];
   createdAt: string;
+  location?: string | null;
+  mood?: string | null;
+  memoryTime?: string | null;
+  lastEditedBy?: string | null;
+  lastEditedNickname?: string | null;
 }
 
 export interface CoupleGoal {
@@ -103,6 +108,10 @@ export interface CoupleLetter {
   isDraft?: boolean;
   isArchived?: boolean;
   reactions?: { userId: string; emoji: string }[];
+  parentLetterId?: string | null;
+  deliveredAt?: string | null;
+  readAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface CoupleDailyQuestion {

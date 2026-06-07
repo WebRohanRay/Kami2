@@ -1,8 +1,8 @@
 /**
  * FutureScreen.tsx
  *
- * Letters to your future self.
- * Seam and lock letters with text and photo attachments.
+ * Letters to your future self and partner.
+ * Seal and lock letters with text and photo attachments.
  * Body content and images are kept sealed on the database level until the unlock date.
  */
 
@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import KamiText from '@shared/ui/atoms/KamiText';
-import KamiButton from '@shared/ui/atoms/KamiButton';
 import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
 import type { MainTabScreenProps } from '@core/navigation/types';
@@ -30,16 +29,6 @@ import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme } from '@shared/hooks';
 
 type Props = MainTabScreenProps<'Future'>;
-
-const DELIVERY_OPTIONS = [
-  { label: 'Send Now',  days: 0   },
-  { label: '1 month',   days: 30  },
-  { label: '3 months',  days: 90  },
-  { label: '6 months',  days: 180 },
-  { label: '1 year',    days: 365 },
-  { label: '2 years',   days: 730 },
-  { label: '5 years',   days: 1825},
-];
 
 const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
   const r = Math.random() * 16 | 0;
@@ -59,85 +48,105 @@ function getRelativePathFromSignedUrl(url: string): string {
   return pathWithQuery.split('?')[0];
 }
 
-function daysUntil(iso: string) {
-  const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
-  if (d <= 0) return 'Ready to read ✨';
-  if (d === 1) return 'Opens tomorrow';
-  if (d < 30)  return `Opens in ${d} days`;
-  if (d < 365) return `Opens in ${Math.floor(d / 30)} months`;
-  return `Opens in ${Math.floor(d / 365)} year${Math.floor(d / 365) > 1 ? 's' : ''}`;
-}
-
 function checkUnlocked(l: Letter | CoupleLetter) {
   return Date.now() >= new Date(l.deliverAt).getTime();
 }
 
-function getNextAnniversaryDays(anniversaryDate: string): number {
-  const ann = new Date(anniversaryDate);
-  const now = new Date();
-  const nextAnn = new Date(now.getFullYear(), ann.getMonth(), ann.getDate());
-  if (nextAnn.getTime() < now.getTime()) {
-    nextAnn.setFullYear(now.getFullYear() + 1);
-  }
-  const diff = nextAnn.getTime() - now.getTime();
-  return Math.max(1, Math.ceil(diff / 86400000));
+function formatTimestamp(isoString: string | null | undefined): string | null {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  if (d.getFullYear() <= 1970) return 'Delivered instantly';
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) + ' • ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
-function getNextNewYearDays(): number {
-  const now = new Date();
-  const nextYear = now.getFullYear() + 1;
-  const nextNY = new Date(nextYear, 0, 1);
-  const diff = nextNY.getTime() - now.getTime();
-  return Math.max(1, Math.ceil(diff / 86400000));
+function formatCountdown(deliverAtIso: string): string {
+  const diffMs = new Date(deliverAtIso).getTime() - Date.now();
+  if (diffMs <= 0) return 'Unlocked';
+
+  const totalSecs = Math.floor(diffMs / 1000);
+  const secs = totalSecs % 60;
+  const totalMins = Math.floor(totalSecs / 60);
+  const mins = totalMins % 60;
+  const totalHours = Math.floor(totalMins / 60);
+  const hours = totalHours % 24;
+  const totalDays = Math.floor(totalHours / 24);
+
+  let days = totalDays;
+  let months = 0;
+  let years = 0;
+
+  if (days >= 365) {
+    years = Math.floor(days / 365);
+    days = days % 365;
+  }
+  if (days >= 30) {
+    months = Math.floor(days / 30);
+    days = days % 30;
+  }
+
+  if (years > 0) {
+    const yStr = `${years} Year${years > 1 ? 's' : ''}`;
+    const mStr = months > 0 ? ` ${months} Month${months > 1 ? 's' : ''}` : '';
+    return `Unlocks in ${yStr}${mStr}`;
+  }
+  if (months > 0) {
+    const mStr = `${months} Month${months > 1 ? 's' : ''}`;
+    const dStr = days > 0 ? ` ${days} Day${days > 1 ? 's' : ''}` : '';
+    return `Unlocks in ${mStr}${dStr}`;
+  }
+  if (days > 0) {
+    const dStr = `${days} Day${days > 1 ? 's' : ''}`;
+    const hStr = hours > 0 ? ` ${hours} Hour${hours > 1 ? 's' : ''}` : '';
+    const minStr = mins > 0 ? ` ${mins} Minute${mins > 1 ? 's' : ''}` : '';
+    return `Unlocks in ${dStr}${hStr}${minStr}`;
+  }
+  if (hours > 0) {
+    const hStr = `${hours} Hour${hours > 1 ? 's' : ''}`;
+    const minStr = mins > 0 ? ` ${mins} Minute${mins > 1 ? 's' : ''}` : '';
+    const sStr = secs > 0 ? ` ${secs} Second${secs > 1 ? 's' : ''}` : '';
+    return `Unlocks in ${hStr}${minStr}${sStr}`;
+  }
+  if (mins > 0) {
+    const minStr = `${mins} Minute${mins > 1 ? 's' : ''}`;
+    const sStr = secs > 0 ? ` ${secs} Second${secs > 1 ? 's' : ''}` : '';
+    return `Unlocks in ${minStr}${sStr}`;
+  }
+  return `Unlocks in ${secs} Second${secs !== 1 ? 's' : ''}`;
 }
 
 // ─── Write modal ──────────────────────────────────────────────────────────────
 const WriteModal: React.FC<{
   visible: boolean; 
   onClose: () => void;
-  onSave: (subject: string, body: string, daysFromNow: number, imageUris: string[], isDraft?: boolean, updateId?: string) => Promise<void>; 
+  onSave: (subject: string, body: string, deliverAt: string, imageUris: string[], isDraft?: boolean, updateId?: string) => Promise<void>; 
   saving: boolean;
   draftLetter?: Letter | CoupleLetter | null;
-  anniversaryDate?: string | null;
+  replyToLetter?: Letter | CoupleLetter | null;
   activeSpace?: 'personal' | 'couple';
-}> = ({ visible, onClose, onSave, saving, draftLetter, anniversaryDate, activeSpace }) => {
+}> = ({ visible, onClose, onSave, saving, draftLetter, replyToLetter, activeSpace }) => {
   const [subject,  setSubject]  = useState('');
   const [body,     setBody]     = useState('');
-  const [delivery, setDelivery] = useState({ label: '1 year', days: 365 });
-  const [customMonth, setCustomMonth] = useState('');
+  const [deliveryType, setDeliveryType] = useState<'instant' | 'scheduled'>('instant');
   const [customDay, setCustomDay] = useState('');
+  const [customMonth, setCustomMonth] = useState('');
   const [customYear, setCustomYear] = useState('');
-  const [isCustom, setIsCustom] = useState(false);
+  const [customHour, setCustomHour] = useState('12');
+  const [customMin, setCustomMin] = useState('00');
+  const [customAmPm, setCustomAmPm] = useState('PM');
   const [localUris, setLocalUris] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const { colors } = useTheme();
 
-  const getDeliveryOptions = () => {
-    const opts = [
-      { label: 'Send Now ✉️', days: 0 },
-      { label: '1 month', days: 30 },
-      { label: '3 months', days: 90 },
-      { label: '1 year', days: 365 },
-    ];
-    if (activeSpace === 'couple' && anniversaryDate) {
-      const annDays = getNextAnniversaryDays(anniversaryDate);
-      if (annDays > 0) {
-        opts.push({ label: 'Anniversary 💖', days: annDays });
-      }
-    }
-    const nyDays = getNextNewYearDays();
-    opts.push({ label: 'New Year 🎆', days: nyDays });
-    return opts;
-  };
-
   const reset = () => {
     setSubject('');
     setBody('');
-    setDelivery({ label: '1 year', days: 365 });
-    setCustomMonth('');
+    setDeliveryType('instant');
     setCustomDay('');
+    setCustomMonth('');
     setCustomYear('');
-    setIsCustom(false);
+    setCustomHour('12');
+    setCustomMin('00');
+    setCustomAmPm('PM');
     setLocalUris([]);
   };
 
@@ -148,40 +157,51 @@ const WriteModal: React.FC<{
         setBody(draftLetter.body ?? '');
         setLocalUris(draftLetter.imageUrls ?? []);
         
-        // Calculate days remaining if locked, else send now
-        const diffMs = new Date(draftLetter.deliverAt).getTime() - Date.now();
-        const diffDays = Math.max(0, Math.ceil(diffMs / 86400000));
-        setDelivery({ label: diffDays === 0 ? 'Send Now ✉️' : 'Draft lock', days: diffDays });
+        const deliverDate = new Date(draftLetter.deliverAt);
+        if (deliverDate.getFullYear() <= 1970) {
+          setDeliveryType('instant');
+        } else {
+          setDeliveryType('scheduled');
+          setCustomDay(deliverDate.getDate().toString());
+          setCustomMonth((deliverDate.getMonth() + 1).toString());
+          setCustomYear(deliverDate.getFullYear().toString());
+          
+          let h = deliverDate.getHours();
+          const isPm = h >= 12;
+          if (h > 12) h -= 12;
+          if (h === 0) h = 12;
+          setCustomHour(h.toString());
+          setCustomMin(deliverDate.getMinutes().toString().padStart(2, '0'));
+          setCustomAmPm(isPm ? 'PM' : 'AM');
+        }
+      } else if (replyToLetter) {
+        reset();
+        setSubject(`Re: ${replyToLetter.subject}`);
+        setDeliveryType('instant');
       } else {
         reset();
       }
     }
-  }, [visible, draftLetter]);
+  }, [visible, draftLetter, replyToLetter]);
 
-  const handleCustomDateChange = (mStr: string, dStr: string, yStr: string) => {
-    const mm = mStr.replace(/[^0-9]/g, '');
-    const dd = dStr.replace(/[^0-9]/g, '');
-    const yyyy = yStr.replace(/[^0-9]/g, '');
-
-    const m = parseInt(mm, 10);
-    const d = parseInt(dd, 10);
-    const y = parseInt(yyyy, 10);
-
-    if (!isNaN(m) && !isNaN(d) && !isNaN(y)) {
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 2026) {
-        const targetDate = new Date(y, m - 1, d);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        targetDate.setHours(0, 0, 0, 0);
-        const diffTime = targetDate.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / 86400000);
-        if (diffDays > 0) {
-          setDelivery({ label: `Custom: ${targetDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`, days: diffDays });
-          return;
-        }
-      }
+  const getDeliverAtString = () => {
+    if (deliveryType === 'instant') {
+      return '1970-01-01T00:00:00.000Z'; // backdated to deliver instantly
     }
-    setDelivery({ label: 'Custom Date', days: -1 });
+    const d = parseInt(customDay, 10);
+    const m = parseInt(customMonth, 10);
+    const y = parseInt(customYear, 10);
+    let h = parseInt(customHour, 10) || 12;
+    const min = parseInt(customMin, 10) || 0;
+    
+    if (customAmPm === 'PM' && h < 12) h += 12;
+    if (customAmPm === 'AM' && h === 12) h = 0;
+
+    if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+      const date = new Date(y, m - 1, d, h, min, 0);
+      return date.toISOString();
+    }
+    return '';
   };
 
   const handlePickPhotos = async () => {
@@ -199,6 +219,9 @@ const WriteModal: React.FC<{
     setLocalUris(prev => prev.filter((_, i) => i !== index));
   };
 
+  const deliverAtVal = getDeliverAtString();
+  const isValidDate = deliveryType === 'instant' || !!deliverAtVal;
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { reset(); onClose(); }}>
       <SafeAreaView style={[wm.root, { backgroundColor: colors.pageBg }]}>
@@ -206,82 +229,40 @@ const WriteModal: React.FC<{
           <TouchableOpacity onPress={() => { reset(); onClose(); }} hitSlop={8}>
             <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
-          <KamiText variant="overline" bold>{draftLetter ? 'Edit Draft' : 'Write a letter'}</KamiText>
+          <KamiText variant="overline" bold>{draftLetter ? 'Edit Draft' : replyToLetter ? 'Reply Thread' : 'Write a letter'}</KamiText>
           <View style={{ width: 44 }} />
         </View>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={wm.content}>
-          {/* Delivery time */}
-          <KamiText variant="overline" style={wm.label}>Deliver in</KamiText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={wm.deliveryRow}>
-              {getDeliveryOptions().map(o => (
-                <TouchableOpacity
-                  key={o.label}
-                  style={[
-                    wm.deliveryChip,
-                    { backgroundColor: colors.creamDeep },
-                    !isCustom && delivery.days === o.days && [
-                      wm.deliveryChipOn,
-                      { borderColor: colors.primary, backgroundColor: colors.primary + '18' }
-                    ]
-                  ]}
-                  onPress={() => {
-                    setIsCustom(false);
-                    setDelivery(o);
-                  }}
-                >
-                  <KamiText
-                    variant="caption"
-                    color={!isCustom && delivery.days === o.days ? colors.primary : Colors.textMuted}
-                    bold={!isCustom && delivery.days === o.days}
-                  >
-                    {o.label}
-                  </KamiText>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[
-                  wm.deliveryChip,
-                  { backgroundColor: colors.creamDeep },
-                  isCustom && [
-                    wm.deliveryChipOn,
-                    { borderColor: colors.primary, backgroundColor: colors.primary + '18' }
-                  ]
-                ]}
-                onPress={() => {
-                  setIsCustom(true);
-                  handleCustomDateChange(customMonth, customDay, customYear);
-                }}
-              >
-                <KamiText
-                  variant="caption"
-                  color={isCustom ? colors.primary : Colors.textMuted}
-                  bold={isCustom}
-                >
-                  Custom Date
-                </KamiText>
-              </TouchableOpacity>
+          {replyToLetter && (
+            <View style={[wm.replyLabelBox, { backgroundColor: colors.primary + '0f', borderColor: colors.primary + '22' }]}>
+              <KamiText variant="caption" color={colors.primary} bold>Replying to Partner's Letter:</KamiText>
+              <KamiText variant="body" numberOfLines={2} style={{ fontSize: FontSize.sm, fontStyle: 'italic' }}>
+                "{replyToLetter.subject}"
+              </KamiText>
             </View>
-          </ScrollView>
+          )}
 
-          {isCustom && (
-            <View>
-              <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[1] }}>Unlock Date (MM / DD / YYYY)</KamiText>
+          {/* Delivery selection */}
+          <KamiText variant="overline" style={wm.label}>Delivery Schedule</KamiText>
+          <View style={wm.deliveryToggleRow}>
+            <TouchableOpacity 
+              style={[wm.deliveryToggleBtn, deliveryType === 'instant' && [wm.deliveryToggleBtnOn, { backgroundColor: colors.primary }]]}
+              onPress={() => setDeliveryType('instant')}
+            >
+              <KamiText variant="caption" color={deliveryType === 'instant' ? '#fff' : Colors.textMuted} bold={deliveryType === 'instant'}>Instant ✉️</KamiText>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[wm.deliveryToggleBtn, deliveryType === 'scheduled' && [wm.deliveryToggleBtnOn, { backgroundColor: colors.primary }]]}
+              onPress={() => setDeliveryType('scheduled')}
+            >
+              <KamiText variant="caption" color={deliveryType === 'scheduled' ? '#fff' : Colors.textMuted} bold={deliveryType === 'scheduled'}>Schedule 🔒</KamiText>
+            </TouchableOpacity>
+          </View>
+
+          {deliveryType === 'scheduled' && (
+            <View style={wm.schedulerContainer}>
+              <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[1] }}>Unlock Date (DD / MM / YYYY)</KamiText>
               <View style={wm.customDateRow}>
-                <TextInput
-                  style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
-                  placeholder="MM"
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  value={customMonth}
-                  onChangeText={(val) => {
-                    const cleaned = val.replace(/[^0-9]/g, '');
-                    setCustomMonth(cleaned);
-                    handleCustomDateChange(cleaned, customDay, customYear);
-                  }}
-                />
-                <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
                 <TextInput
                   style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
                   placeholder="DD"
@@ -289,54 +270,85 @@ const WriteModal: React.FC<{
                   keyboardType="number-pad"
                   maxLength={2}
                   value={customDay}
-                  onChangeText={(val) => {
-                    const cleaned = val.replace(/[^0-9]/g, '');
-                    setCustomDay(cleaned);
-                    handleCustomDateChange(customMonth, cleaned, customYear);
-                  }}
+                  onChangeText={setCustomDay}
                 />
                 <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
                 <TextInput
-                  style={[wm.customInput, { flex: 2, backgroundColor: colors.creamDeep }]}
+                  style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
+                  placeholder="MM"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  value={customMonth}
+                  onChangeText={setCustomMonth}
+                />
+                <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
+                <TextInput
+                  style={[wm.customInput, { flex: 2.5, backgroundColor: colors.creamDeep }]}
                   placeholder="YYYY"
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="number-pad"
                   maxLength={4}
                   value={customYear}
-                  onChangeText={(val) => {
-                    const cleaned = val.replace(/[^0-9]/g, '');
-                    setCustomYear(cleaned);
-                    handleCustomDateChange(customMonth, customDay, cleaned);
-                  }}
+                  onChangeText={setCustomYear}
                 />
+              </View>
+
+              <KamiText variant="caption" color={Colors.textMuted} style={{ marginTop: Space[2], marginBottom: Space[1] }}>Unlock Time</KamiText>
+              <View style={wm.customDateRow}>
+                <TextInput
+                  style={[wm.customInput, { flex: 2, backgroundColor: colors.creamDeep }]}
+                  placeholder="HH"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  value={customHour}
+                  onChangeText={setCustomHour}
+                />
+                <KamiText variant="body" color={Colors.textMuted}>:</KamiText>
+                <TextInput
+                  style={[wm.customInput, { flex: 2, backgroundColor: colors.creamDeep }]}
+                  placeholder="MM"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  value={customMin}
+                  onChangeText={setCustomMin}
+                />
+                <TouchableOpacity
+                  style={[wm.customInput, { flex: 2.5, backgroundColor: colors.creamDeep, justifyContent: 'center' }]}
+                  onPress={() => setCustomAmPm(prev => prev === 'AM' ? 'PM' : 'AM')}
+                >
+                  <KamiText variant="body" align="center" bold>{customAmPm}</KamiText>
+                </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* Unlock date display */}
+          {/* Unlock Preview timestamp */}
           <View style={[wm.unlockDate, { backgroundColor: colors.creamDeep }]}>
-            <Text style={{ fontSize: 20 }}>{delivery.days === 0 ? '✉️' : '🔒'}</Text>
-            <KamiText variant="body" color={colors.primary} bold>
-              {delivery.days > 0 ? (
-                `Unlocks on ${new Date(Date.now() + delivery.days * 86400000).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`
-              ) : delivery.days === 0 ? (
+            <Text style={{ fontSize: 20 }}>{deliveryType === 'instant' ? '✉️' : '🔒'}</Text>
+            <KamiText variant="body" color={colors.primary} bold style={{ flex: 1 }}>
+              {deliveryType === 'instant' ? (
                 'Delivers immediately'
+              ) : deliverAtVal ? (
+                `Unlocks on ${new Date(deliverAtVal).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
               ) : (
-                'Please enter a valid date'
+                'Please enter a valid future date and time'
               )}
             </KamiText>
           </View>
 
           {/* Subject */}
           <KamiText variant="overline" style={wm.label}>Subject</KamiText>
-          <TextInput style={[wm.input, { backgroundColor: '#FAF8F5', borderColor: '#E5DEC9' }]} placeholder="To my future self…" placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
+          <TextInput style={[wm.input, { backgroundColor: '#FAF8F5', borderColor: '#E5DEC9' }]} placeholder="Subject..." placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
 
           {/* Body */}
           <KamiText variant="overline" style={wm.label}>Your letter *</KamiText>
           <View style={wm.paperWrapper}>
             <TextInput
               style={[wm.bodyInput, { backgroundColor: '#FFFDF6', color: '#4A3B32', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]} 
-              placeholder="Dear future me,&#10;&#10;I hope you're well. Right now I'm thinking about…"
+              placeholder="Dear partner,&#10;&#10;I want to tell you that…"
               placeholderTextColor="rgba(74, 59, 50, 0.4)" 
               value={body} 
               onChangeText={setBody}
@@ -371,7 +383,7 @@ const WriteModal: React.FC<{
             </ScrollView>
           )}
 
-          {/* Submit Actions */}
+          {/* Action buttons */}
           <View style={{ flexDirection: 'row', gap: Space[2], marginTop: Space[6] }}>
             <TouchableOpacity
               style={[{ borderColor: colors.primary, backgroundColor: '#fff', flex: 1, height: 50, borderRadius: Radii.button, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' }]}
@@ -379,7 +391,7 @@ const WriteModal: React.FC<{
               onPress={() => {
                 if (!body.trim()) return;
                 Keyboard.dismiss();
-                onSave(subject.trim(), body.trim(), delivery.days >= 0 ? delivery.days : 365, localUris, true, draftLetter?.id).then(reset);
+                onSave(subject.trim(), body.trim(), deliverAtVal, localUris, true, draftLetter?.id).then(reset);
               }}
             >
               <KamiText variant="label" color={colors.primary} bold>Save Draft 📝</KamiText>
@@ -387,18 +399,18 @@ const WriteModal: React.FC<{
 
             <TouchableOpacity
               style={[{ backgroundColor: colors.primary, flex: 1.5, height: 50, borderRadius: Radii.button, alignItems: 'center', justifyContent: 'center' }]}
-              disabled={!body.trim() || delivery.days < 0 || saving}
+              disabled={!body.trim() || !isValidDate || saving}
               onPress={() => {
-                if (!body.trim() || delivery.days < 0) return;
+                if (!body.trim() || !isValidDate) return;
                 Keyboard.dismiss();
-                onSave(subject.trim(), body.trim(), delivery.days, localUris, false, draftLetter?.id).then(reset);
+                onSave(subject.trim(), body.trim(), deliverAtVal, localUris, false, draftLetter?.id).then(reset);
               }}
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <KamiText variant="label" color="#fff" bold>
-                  {delivery.days === 0 ? "Send Now ✉️" : "Seal & Send 🔒"}
+                  {deliveryType === 'instant' ? "Send Now ✉️" : "Seal & Send 🔒"}
                 </KamiText>
               )}
             </TouchableOpacity>
@@ -408,29 +420,6 @@ const WriteModal: React.FC<{
     </Modal>
   );
 };
-const wm = StyleSheet.create({
-  root:         { flex: 1, backgroundColor: Colors.pageBg },
-  toolbar:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
-  content:      { padding: Space[5], gap: Space[3], paddingBottom: Space[10] },
-  label:        { marginBottom: Space[1] },
-  deliveryRow:  { flexDirection: 'row', gap: Space[2], paddingVertical: Space[2] },
-  deliveryChip: { paddingHorizontal: Space[4], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.creamDeep },
-  deliveryChipOn:{ borderColor: Colors.primary, backgroundColor: Colors.primary + '18' },
-  customDateRow:{ flexDirection: 'row', alignItems: 'center', gap: Space[2], marginTop: Space[1], marginBottom: Space[2] },
-  customInput:  { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border, textAlign: 'center' },
-  unlockDate:   { flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: Colors.rose100, borderRadius: Radii.card, padding: Space[3], marginVertical: Space[1] },
-  input:        { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border },
-  bodyInput:    { paddingHorizontal: Space[4], paddingLeft: Space[6], paddingVertical: Space[3], fontSize: FontSize.base, color: '#4A3B32', minHeight: 220, lineHeight: 28, fontStyle: 'italic', borderLeftWidth: 1.5, borderLeftColor: '#fca5a5' },
-  paperWrapper: { position: 'relative', borderRadius: Radii.card, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden' },
-  photoHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Space[4], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[3] },
-  addPhotoBtn:  { paddingVertical: Space[1], paddingHorizontal: Space[2] },
-  photoScroll:  { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
-  photoRow:     { flexDirection: 'row', gap: Space[3] },
-  photoWrap:    { position: 'relative' },
-  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm },
-  removePhotoBadge:{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
-  submitBtn:    { marginTop: Space[6] },
-});
 
 // ─── Read modal (calls RPC to pull locked body/attachments) ───────────────────
 const ReadModal: React.FC<{
@@ -444,11 +433,20 @@ const ReadModal: React.FC<{
 }> = ({ visible, letter, onClose, activeSpace, onToggleFavorite, onToggleArchive, onToggleReaction }) => {
   const [content, setContent] = useState<{ body: string; imageUrls: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [countdownText, setCountdownText] = useState('');
   const { colors } = useTheme();
   const user = useAuthStore(s => s.user);
 
+  const isUnlocked = letter ? checkUnlocked(letter) : false;
+
   useEffect(() => {
-    if (visible && letter) {
+    if (!visible || !letter) {
+      setContent(null);
+      return;
+    }
+
+    if (isUnlocked) {
+      // Already unlocked, fetch details
       setLoading(true);
       const fetchPromise = activeSpace === 'couple'
         ? coupleService.fetchCoupleLetterDetails(letter.id)
@@ -460,70 +458,158 @@ const ReadModal: React.FC<{
         else Alert.alert('Kami', r.error);
       });
     } else {
-      setContent(null);
+      // Locked: start local countdown ticking
+      const updateCountdown = () => {
+        const hasUnlocked = checkUnlocked(letter);
+        if (hasUnlocked) {
+          clearInterval(interval);
+          setLoading(true);
+          const fetchPromise = activeSpace === 'couple'
+            ? coupleService.fetchCoupleLetterDetails(letter.id)
+            : futureService.fetchLetter(letter.id);
+          fetchPromise.then(r => {
+            setLoading(false);
+            if (r.success) setContent(r.data);
+            else Alert.alert('Kami', r.error);
+          });
+        } else {
+          setCountdownText(formatCountdown(letter.deliverAt));
+        }
+      };
+
+      updateCountdown();
+      const interval = setInterval(updateCountdown, 1000);
+      return () => clearInterval(interval);
     }
-  }, [visible, letter]);
+  }, [visible, letter, isUnlocked]);
+
+  if (!letter) return null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[rm.root, { backgroundColor: colors.pageBg }]}>
         <View style={rm.toolbar}>
-          {letter ? (
-            <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
-              <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} style={rm.favToggleBtn} hitSlop={8}>
-                <KamiText variant="label" color={letter.isFavorite ? colors.primary : Colors.textMuted} bold={!!letter.isFavorite}>
-                  {letter.isFavorite ? '🎀 Favorited' : '♡ Favorite'}
-                </KamiText>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onToggleArchive?.(letter)} style={rm.favToggleBtn} hitSlop={8}>
-                <KamiText variant="label" color={letter.isArchived ? colors.primary : Colors.textMuted} bold={!!letter.isArchived}>
-                  {letter.isArchived ? '📦 Archived' : '📥 Archive'}
-                </KamiText>
-              </TouchableOpacity>
-            </View>
-          ) : <View />}
-          <KamiText variant="overline">Your letter</KamiText>
+          <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} style={rm.favToggleBtn} hitSlop={8}>
+              <KamiText variant="label" color={letter.isFavorite ? colors.primary : Colors.textMuted} bold={!!letter.isFavorite}>
+                {letter.isFavorite ? '★ Favorited' : '☆ Favorite'}
+              </KamiText>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onToggleArchive?.(letter)} style={rm.favToggleBtn} hitSlop={8}>
+              <KamiText variant="label" color={letter.isArchived ? colors.primary : Colors.textMuted} bold={!!letter.isArchived}>
+                {letter.isArchived ? '📦 Archived' : '📥 Archive'}
+              </KamiText>
+            </TouchableOpacity>
+          </View>
+          <KamiText variant="overline">Letter Preview</KamiText>
           <TouchableOpacity onPress={onClose} hitSlop={8}><KamiText variant="label" color={Colors.textMuted}>Close</KamiText></TouchableOpacity>
         </View>
-        {loading && (
-          <View style={rm.center}><ActivityIndicator color={colors.primary} /></View>
-        )}
-        {!loading && letter && content && (
-          <View style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={rm.content}>
-              <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
-                <Text style={rm.envelopeEmoji}>{letter.isFavorite ? '🎀' : '📄'}</Text>
-                <KamiText variant="overline" align="center" style={{ marginTop: Space[2] }}>
-                  Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+
+        {!isUnlocked && !content ? (
+          /* Locked Letter Preview Layout */
+          <ScrollView contentContainerStyle={[rm.content, { justifyContent: 'center', alignItems: 'center', flex: 1 }]}>
+            <View style={rm.lockedCenterContainer}>
+              <View style={rm.lockedWaxSeal}>
+                <Text style={{ fontSize: 44 }}>🔒</Text>
+              </View>
+              <KamiText variant="title" bold style={{ marginTop: Space[4], color: '#4A3B32' }}>{letter.subject}</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[1] }}>
+                {'senderNickname' in letter ? `From: ${letter.senderNickname}` : 'For yourself'}
+              </KamiText>
+
+              <View style={[rm.lockedCountdownBox, { backgroundColor: colors.primary + '0a', borderColor: colors.primary + '18' }]}>
+                <KamiText variant="overline" color={colors.primary} bold>TIME CAPSULE LOCKED</KamiText>
+                <KamiText variant="title" bold color={colors.primary} style={rm.lockedCountdownTick}>
+                  {countdownText || 'Calculating...'}
                 </KamiText>
-                {activeSpace === 'couple' && 'senderId' in letter && (
-                  <KamiText variant="caption" align="center" color={Colors.textMuted} style={{ marginTop: Space[1] }}>
-                    {(letter as CoupleLetter).senderId === user?.id
-                      ? 'From: You'
-                      : `From: ${(letter as CoupleLetter).senderNickname || 'Partner'}`}
+              </View>
+
+              {/* Metadata Details list */}
+              <View style={rm.metadataBox}>
+                <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                  Created: {formatTimestamp(letter.createdAt)}
+                </KamiText>
+                <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                  Scheduled Unlock: {formatTimestamp(letter.deliverAt)}
+                </KamiText>
+                {'deliveredAt' in letter && letter.deliveredAt && (
+                  <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                    Delivered: {formatTimestamp(letter.deliveredAt)}
                   </KamiText>
                 )}
               </View>
-              <KamiText variant="title" style={{ marginBottom: Space[3] }}>{letter.subject}</KamiText>
-              <KamiText variant="body" style={{ lineHeight: 28, fontFamily: FontFamily.display }}>{content.body}</KamiText>
-              
-              {content.imageUrls.length > 0 && (
-                <View style={rm.photoSection}>
-                  <KamiText variant="overline" style={{ marginBottom: Space[2] }}>Attached Photos</KamiText>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={rm.photoScroll}>
-                    <View style={rm.photoRow}>
-                      {content.imageUrls.map((url, i) => (
-                        <Image key={i} source={{ uri: url }} style={rm.attachedImage} />
-                      ))}
+            </View>
+          </ScrollView>
+        ) : (
+          /* Unlocked Letter Full View */
+          <View style={{ flex: 1 }}>
+            {loading ? (
+              <View style={rm.center}><ActivityIndicator color={colors.primary} /></View>
+            ) : (
+              content && (
+                <ScrollView contentContainerStyle={rm.content}>
+                  <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
+                    <Text style={rm.envelopeEmoji}>{letter.isFavorite ? '🎀' : '📄'}</Text>
+                    <KamiText variant="overline" align="center" style={{ marginTop: Space[2] }}>
+                      Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </KamiText>
+                    {activeSpace === 'couple' && 'senderId' in letter && (
+                      <KamiText variant="caption" align="center" color={Colors.textMuted} style={{ marginTop: Space[1] }}>
+                        {(letter as CoupleLetter).senderId === user?.id
+                          ? 'From: You'
+                          : `From: ${(letter as CoupleLetter).senderNickname || 'Partner'}`}
+                      </KamiText>
+                    )}
+                  </View>
+                  <KamiText variant="title" style={{ marginBottom: Space[3] }}>{letter.subject}</KamiText>
+                  <KamiText variant="body" style={{ lineHeight: 28, fontFamily: FontFamily.display }}>{content.body}</KamiText>
+                  
+                  {content.imageUrls.length > 0 && (
+                    <View style={rm.photoSection}>
+                      <KamiText variant="overline" style={{ marginBottom: Space[2] }}>Attached Photos</KamiText>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={rm.photoScroll}>
+                        <View style={rm.photoRow}>
+                          {content.imageUrls.map((url, i) => (
+                            <Image key={i} source={{ uri: url }} style={rm.attachedImage} />
+                          ))}
+                        </View>
+                      </ScrollView>
                     </View>
-                  </ScrollView>
-                </View>
-              )}
-            </ScrollView>
+                  )}
+
+                  {/* Metadata display */}
+                  <View style={[rm.metadataBox, { marginTop: Space[5], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[3] }]}>
+                    <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                      Created: {formatTimestamp(letter.createdAt)}
+                    </KamiText>
+                    {new Date(letter.deliverAt).getFullYear() > 1970 && (
+                      <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                        Scheduled Unlock: {formatTimestamp(letter.deliverAt)}
+                      </KamiText>
+                    )}
+                    {'deliveredAt' in letter && letter.deliveredAt && (
+                      <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                        Delivered: {formatTimestamp(letter.deliveredAt)}
+                      </KamiText>
+                    )}
+                    {'readAt' in letter && letter.readAt && (
+                      <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                        Read: {formatTimestamp(letter.readAt)}
+                      </KamiText>
+                    )}
+                    {'updatedAt' in letter && letter.updatedAt && (
+                      <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                        Last Updated: {formatTimestamp(letter.updatedAt)}
+                      </KamiText>
+                    )}
+                  </View>
+                </ScrollView>
+              )
+            )}
 
             {activeSpace === 'couple' && (
               <View style={[rm.reactionBar, { borderTopColor: Colors.border + '33', backgroundColor: colors.creamDeep }]}>
-                {['❤️', '😊', '🥰', '😮', '😢', '👍'].map(emoji => {
+                {['❤️', '🥹', '🥰', '😭', '🔥'].map(emoji => {
                   const coupleLetter = letter as CoupleLetter;
                   const userReaction = coupleLetter.reactions?.find(r => r.userId === user?.id && r.emoji === emoji);
                   const count = coupleLetter.reactions?.filter(r => r.emoji === emoji).length || 0;
@@ -553,40 +639,6 @@ const ReadModal: React.FC<{
     </Modal>
   );
 };
-const rm = StyleSheet.create({
-  root:        { flex: 1, backgroundColor: Colors.pageBg },
-  toolbar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
-  content:     { padding: Space[5], paddingBottom: Space[10] },
-  envelope:    { alignItems: 'center', backgroundColor: Colors.rose100, borderRadius: Radii.card, padding: Space[5], marginBottom: Space[5] },
-  envelopeEmoji:{ fontSize: 48 },
-  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: Space[10] },
-  photoSection:{ marginTop: Space[5], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[4] },
-  photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5] },
-  photoRow:    { flexDirection: 'row', gap: Space[3] },
-  attachedImage:{ width: 140, height: 140, borderRadius: Radii.card },
-  favToggleBtn:{ paddingVertical: Space[1], paddingHorizontal: Space[2] },
-  reactionBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: Space[3],
-    paddingHorizontal: Space[4],
-    borderTopWidth: 1,
-  },
-  reactionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: Space[3],
-    paddingVertical: Space[2],
-    borderRadius: Radii.full,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  reactionBtnActive: {
-    borderColor: Colors.primary,
-  },
-});
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export function FutureScreen({ navigation }: Props) {
@@ -595,6 +647,8 @@ export function FutureScreen({ navigation }: Props) {
   const coupleStore = useCoupleStore();
   const coupleActions = useCouple();
   const couple = coupleStore.couple;
+  const partner = coupleStore.partner;
+  const partnerName = partner?.nickname || 'Partner';
 
   const { colors } = useTheme();
 
@@ -604,6 +658,7 @@ export function FutureScreen({ navigation }: Props) {
   const [writeOpen,  setWriteOpen]  = useState(false);
   const [readOpen,   setReadOpen]   = useState(false);
   const [reading,    setReading]    = useState<Letter | CoupleLetter | null>(null);
+  const [replyTo,    setReplyTo]    = useState<Letter | CoupleLetter | null>(null);
   const [saving,     setSaving]     = useState(false);
 
   const [visibleCount, setVisibleCount] = useState(10);
@@ -615,10 +670,11 @@ export function FutureScreen({ navigation }: Props) {
     setVisibleCount(10);
   }, [activeSpace, filterTab]);
 
+  // Tick interval running every 1 second to update counts and states dynamically
   useEffect(() => {
     const interval = setInterval(() => {
       setTick(t => t + 1);
-    }, 10000);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -630,7 +686,6 @@ export function FutureScreen({ navigation }: Props) {
     return () => sub.remove();
   }, []);
 
-  // Focus listener to refresh data on navigate focus
   useEffect(() => {
     const unsubscribeFocus = navigation.addListener('focus', () => {
       setIsFocused(true);
@@ -649,12 +704,13 @@ export function FutureScreen({ navigation }: Props) {
     };
   }, [navigation, activeSpace]);
 
-  // Real-time ephemeral broadcast status when entering/leaving screen or writing/reading
+  const draftLetter = editingDraft;
+
   useEffect(() => {
     if (activeSpace !== 'couple' || !couple?.id || !user?.id) return;
-    if (isFocused && appState === 'active') {
+    if (isFocused) {
       const action: PartnerActionType = writeOpen 
-        ? (editingDraft ? 'editing_draft' : 'writing_letter') 
+        ? (draftLetter ? 'editing_draft' : 'writing_letter') 
         : readOpen 
           ? 'reading_letter' 
           : 'viewing_letters';
@@ -670,9 +726,8 @@ export function FutureScreen({ navigation }: Props) {
         broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [activeSpace, couple?.id, user?.id, isFocused, appState, writeOpen, readOpen, editingDraft]);
+  }, [activeSpace, couple?.id, user?.id, isFocused, writeOpen, readOpen, draftLetter]);
 
-  // Dual-mode loaders
   useEffect(() => {
     if (activeSpace === 'couple') {
       if (couple?.id) {
@@ -694,7 +749,7 @@ export function FutureScreen({ navigation }: Props) {
   const handleSave = async (
     subject: string, 
     body: string, 
-    daysFromNow: number, 
+    deliverAt: string, 
     localUris: string[] = [], 
     isDraft = false, 
     updateId?: string
@@ -703,7 +758,6 @@ export function FutureScreen({ navigation }: Props) {
     setSaving(true);
     try {
       const targetId = updateId || uuid();
-      const deliverAt = new Date(Date.now() + daysFromNow * 86400000).toISOString();
       const finalSubject = subject.trim() || (activeSpace === 'couple' ? 'Love Letter' : 'To my future self');
 
       const remoteUrls = localUris.filter(u => u.startsWith('http'));
@@ -741,12 +795,14 @@ export function FutureScreen({ navigation }: Props) {
           else {
             setWriteOpen(false);
             setEditingDraft(null);
+            setReplyTo(null);
           }
         } else {
-          const r = await coupleActions.addLetter(couple.id, finalSubject, body, deliverAt, finalImageUrls, isDraft);
+          const r = await coupleActions.addLetter(couple.id, finalSubject, body, deliverAt, finalImageUrls, isDraft, replyTo?.id);
           if (!r.success) { Alert.alert('Kami', r.error); }
           else {
             setWriteOpen(false);
+            setReplyTo(null);
           }
         }
       } else {
@@ -809,15 +865,10 @@ export function FutureScreen({ navigation }: Props) {
       return;
     }
 
-    if (!checkUnlocked(l)) {
-      Alert.alert('🔒 Sealed envelope', `This letter is locked and cannot be read until ${new Date(l.deliverAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}.`);
-      return;
-    }
     setReading(l); 
     setReadOpen(true);
 
-    // Mark as read automatically on open if not already read
-    if (!l.isRead) {
+    if (checkUnlocked(l) && !l.isRead) {
       if (activeSpace === 'couple') {
         const res = await coupleService.markCoupleLetterRead(l.id);
         if (res.success) {
@@ -921,7 +972,7 @@ export function FutureScreen({ navigation }: Props) {
 
   const currentLetters = activeSpace === 'couple' ? coupleStore.coupleLetters : letters;
 
-  // Apply filters
+  // Filter letters list
   const filteredLetters = currentLetters.filter(l => {
     const isUnlocked = checkUnlocked(l);
     if (filterTab === 'inbox') {
@@ -952,7 +1003,19 @@ export function FutureScreen({ navigation }: Props) {
     return new Date(b.deliverAt).getTime() - new Date(a.deliverAt).getTime();
   });
 
-  const paginatedLetters = sortedLetters.slice(0, visibleCount);
+  // Group thread replies for nested display
+  const rootLetters = sortedLetters.filter(l => !('parentLetterId' in l && (l as any).parentLetterId));
+  const orphanReplies = sortedLetters.filter(l => 'parentLetterId' in l && (l as any).parentLetterId && !sortedLetters.some(r => r.id === (l as any).parentLetterId));
+  const displayRoots = [...rootLetters, ...orphanReplies].slice(0, visibleCount);
+
+  const repliesMap = sortedLetters.reduce((acc, l) => {
+    const parentId = 'parentLetterId' in l ? (l as any).parentLetterId : null;
+    if (parentId) {
+      if (!acc[parentId]) acc[parentId] = [];
+      acc[parentId].push(l);
+    }
+    return acc;
+  }, {} as Record<string, typeof sortedLetters>);
 
   return (
     <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
@@ -964,19 +1027,15 @@ export function FutureScreen({ navigation }: Props) {
           <KamiText variant="overline">{activeSpace === 'couple' ? 'Sealed capsules' : 'Letters to yourself'}</KamiText>
           <KamiText variant="title">{activeSpace === 'couple' ? 'Love Letters' : 'Future'}</KamiText>
         </View>
-        <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => setWriteOpen(true)}>
+        <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setReplyTo(null); setWriteOpen(true); }}>
           <Text style={[s.writePlus, { color: colors.primary }]}>+</Text>
           <KamiText variant="label" color={colors.primary} bold>Write</KamiText>
         </TouchableOpacity>
       </View>
 
-      {/* Segmented Filter Row */}
+      {/* Segmented filter */}
       <View style={{ height: 48, marginBottom: Space[2] }}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          contentContainerStyle={s.filterScroll}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterScroll}>
           {(['inbox', 'scheduled', 'drafts', 'favorites', 'archive'] as const).map(tab => (
             <TouchableOpacity
               key={tab}
@@ -987,12 +1046,7 @@ export function FutureScreen({ navigation }: Props) {
               ]}
               onPress={() => setFilterTab(tab)}
             >
-              <KamiText
-                variant="caption"
-                color={filterTab === tab ? '#fff' : Colors.textMuted}
-                bold={filterTab === tab}
-                style={{ textTransform: 'capitalize' }}
-              >
+              <KamiText variant="caption" color={filterTab === tab ? '#fff' : Colors.textMuted} bold={filterTab === tab} style={{ textTransform: 'capitalize' }}>
                 {tab}
               </KamiText>
             </TouchableOpacity>
@@ -1005,55 +1059,17 @@ export function FutureScreen({ navigation }: Props) {
         contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        {((loading && activeSpace === 'personal') ||
-          (coupleStore.lettersLoading === 'loading' && activeSpace === 'couple')) && sortedLetters.length === 0 && (
+        {((loading && activeSpace === 'personal') || (coupleStore.lettersLoading === 'loading' && activeSpace === 'couple')) && sortedLetters.length === 0 && (
           <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
         )}
 
-        {((!loading && activeSpace === 'personal') ||
-          (coupleStore.lettersLoading !== 'loading' && activeSpace === 'couple')) && sortedLetters.length === 0 && (
-          <TouchableOpacity style={s.emptyState} onPress={() => setWriteOpen(true)} activeOpacity={0.85}>
+        {((!loading && activeSpace === 'personal') || (coupleStore.lettersLoading !== 'loading' && activeSpace === 'couple')) && sortedLetters.length === 0 && (
+          <TouchableOpacity style={s.emptyState} onPress={() => { setReplyTo(null); setWriteOpen(true); }} activeOpacity={0.85}>
             <Text style={{ fontSize: 56, marginBottom: Space[3] }}>💌</Text>
-            {filterTab === 'inbox' && (
-              <>
-                <KamiText variant="subtitle" align="center">Your Inbox is empty</KamiText>
-                <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-                  No unlocked letters are ready to read. Check the Scheduled tab or seal a new letter today.
-                </KamiText>
-              </>
-            )}
-            {filterTab === 'scheduled' && (
-              <>
-                <KamiText variant="subtitle" align="center">No Scheduled Letters</KamiText>
-                <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-                  No letters are currently locked. Write a time capsule to open on a special future date!
-                </KamiText>
-              </>
-            )}
-            {filterTab === 'drafts' && (
-              <>
-                <KamiText variant="subtitle" align="center">No Drafts</KamiText>
-                <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-                  You don't have any letters in progress. Start writing and save it as a draft!
-                </KamiText>
-              </>
-            )}
-            {filterTab === 'favorites' && (
-              <>
-                <KamiText variant="subtitle" align="center">No Favorites</KamiText>
-                <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-                  Mark letters with a star to pin your favorite memories here.
-                </KamiText>
-              </>
-            )}
-            {filterTab === 'archive' && (
-              <>
-                <KamiText variant="subtitle" align="center">No Archived Letters</KamiText>
-                <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-                  Archive letters to clean up your main inbox while keeping them safe forever.
-                </KamiText>
-              </>
-            )}
+            <KamiText variant="subtitle" align="center">Your Box is empty</KamiText>
+            <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
+              No letters found under this filter. Tap below to seal a new letter today.
+            </KamiText>
             <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
               <KamiText variant="label" color={colors.primary} bold>Write a letter ›</KamiText>
             </View>
@@ -1061,17 +1077,49 @@ export function FutureScreen({ navigation }: Props) {
         )}
 
         {sortedLetters.length > 0 && (
-          <View style={{ gap: Space[3], marginTop: Space[2] }}>
-            {paginatedLetters.map(l => (
-              <LetterCard 
-                key={l.id} 
-                letter={l} 
-                onOpen={() => handleOpen(l)} 
-                onDelete={() => handleDelete(l)} 
-                onToggleFavorite={handleToggleFavorite}
-                activeSpace={activeSpace}
-              />
-            ))}
+          <View style={{ gap: Space[4], marginTop: Space[2] }}>
+            {displayRoots.map(l => {
+              const replies = repliesMap[l.id] || [];
+              return (
+                <View key={l.id} style={s.threadContainer}>
+                  {/* Root Letter bubble */}
+                  <LetterCard 
+                    letter={l} 
+                    onOpen={() => handleOpen(l)} 
+                    onDelete={() => handleDelete(l)} 
+                    onToggleFavorite={handleToggleFavorite}
+                    onReact={handleToggleReaction}
+                    onReply={() => { setReplyTo(l); setWriteOpen(true); }}
+                    activeSpace={activeSpace}
+                    currentUser={user}
+                  />
+
+                  {/* Render nested replies with vertical line */}
+                  {replies.length > 0 && (
+                    <View style={s.repliesSection}>
+                      <View style={[s.treeLine, { borderColor: colors.primary + '33' }]} />
+                      <View style={{ flex: 1, gap: Space[3] }}>
+                        {replies.map(reply => (
+                          <LetterCard 
+                            key={reply.id} 
+                            letter={reply} 
+                            onOpen={() => handleOpen(reply)} 
+                            onDelete={() => handleDelete(reply)} 
+                            onToggleFavorite={handleToggleFavorite}
+                            onReact={handleToggleReaction}
+                            onReply={() => { setReplyTo(reply); setWriteOpen(true); }}
+                            activeSpace={activeSpace}
+                            currentUser={user}
+                            isReply
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            
             {sortedLetters.length > visibleCount && (
               <TouchableOpacity
                 style={[s.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
@@ -1089,11 +1137,11 @@ export function FutureScreen({ navigation }: Props) {
 
       <WriteModal
         visible={writeOpen}
-        onClose={() => { setWriteOpen(false); setEditingDraft(null); }}
+        onClose={() => { setWriteOpen(false); setEditingDraft(null); setReplyTo(null); }}
         onSave={handleSave}
         saving={saving}
         draftLetter={editingDraft}
-        anniversaryDate={couple?.anniversaryDate}
+        replyToLetter={replyTo}
         activeSpace={activeSpace}
       />
       <ReadModal 
@@ -1109,181 +1157,297 @@ export function FutureScreen({ navigation }: Props) {
   );
 }
 
+// ─── Letter Card bubble ───────────────────────────────────────────────────────
 const LetterCard: React.FC<{ 
   letter: Letter | CoupleLetter; 
   onOpen: () => void; 
   onDelete: () => void;
   onToggleFavorite?: (l: Letter | CoupleLetter) => void;
+  onReact?: (letterId: string, emoji: string) => void;
+  onReply?: () => void;
   activeSpace: 'personal' | 'couple';
-}> = ({ letter, onOpen, onDelete, onToggleFavorite, activeSpace }) => {
+  currentUser: any;
+  isReply?: boolean;
+}> = ({ letter, onOpen, onDelete, onToggleFavorite, onReact, onReply, activeSpace, currentUser, isReply }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
-  const user = useAuthStore(s => s.user);
-
-  const coupleLetter = 'coupleId' in letter ? (letter as CoupleLetter) : null;
-  const senderText = coupleLetter
-    ? coupleLetter.senderId === user?.id
-      ? 'From: You'
-      : `From: ${coupleLetter.senderNickname || 'Partner'}`
-    : null;
-
   const isUnlocked = checkUnlocked(letter);
 
+  const coupleLetter = 'coupleId' in letter ? (letter as CoupleLetter) : null;
+  const isMe = coupleLetter ? coupleLetter.senderId === currentUser?.id : true;
+
   return (
-    <TouchableOpacity activeOpacity={1} onPress={onOpen}
-      onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
-      onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
-    >
-      <Animated.View style={[
-        s.envelopeCard,
-        isUnlocked ? s.envelopeUnlocked : s.envelopeSealed,
-        { transform: [{ scale: sc }] }
-      ]}>
-        {/* Envelope stamp/seal indicator on the left */}
-        <View style={s.envelopeStampCol}>
-          {isUnlocked ? (
-            <View style={[s.openedLetterIcon, { backgroundColor: colors.primary + '11' }]}>
-              <Text style={{ fontSize: 22 }}>📄</Text>
-            </View>
-          ) : (
-            <View style={s.waxSealCircle}>
-              <View style={s.waxSealInner}>
-                <Text style={s.waxSealSymbol}>⚜️</Text>
+    <View style={[
+      s.bubbleRow, 
+      isMe ? s.bubbleRowRight : s.bubbleRowLeft,
+      isReply && { paddingLeft: Space[2] }
+    ]}>
+      {/* Sender photo if received */}
+      {!isMe && coupleLetter && !isReply && (
+        <View style={[s.bubbleAvatar, { backgroundColor: colors.primary + '18' }]}>
+          <KamiText variant="caption" color={colors.primary} bold>
+            {coupleLetter.senderNickname ? coupleLetter.senderNickname.substring(0, 1).toUpperCase() : 'P'}
+          </KamiText>
+        </View>
+      )}
+
+      <View style={{ flex: 1, maxWidth: '85%' }}>
+        <TouchableOpacity activeOpacity={0.9} onPress={onOpen}
+          onPressIn={() => Animated.spring(sc, { toValue: 0.98, useNativeDriver: true, speed: 60 }).start()}
+          onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
+        >
+          <Animated.View style={[
+            s.bubbleCard,
+            isMe ? [s.bubbleCardSent, { backgroundColor: colors.primary + '11', borderColor: colors.primary + '22' }] : [s.bubbleCardReceived, { backgroundColor: '#FFFDFB', borderColor: 'rgba(0, 0, 0, 0.06)' }],
+            !isUnlocked && s.bubbleCardLocked,
+            { transform: [{ scale: sc }] }
+          ]}>
+            {/* Header info */}
+            <View style={s.bubbleHeaderRow}>
+              <KamiText variant="caption" color={Colors.textMuted} bold>
+                {isMe ? 'You' : coupleLetter?.senderNickname || 'Partner'}
+              </KamiText>
+              
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[2] }}>
+                <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} hitSlop={8} style={s.favBtnMini}>
+                  <Text style={{ fontSize: 13, color: letter.isFavorite ? colors.primary : '#cbd5e1' }}>
+                    {letter.isFavorite ? '★' : '☆'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onDelete} hitSlop={8} style={s.delBtnMini}>
+                  <Text style={{ fontSize: 10, color: Colors.textMuted }}>✕</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          )}
-        </View>
 
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={s.cardRow}>
-            <KamiText variant="label" numberOfLines={1} style={[s.letterSubject, { color: '#4A3B32' }]} bold>{letter.subject}</KamiText>
-            <View style={s.cardActions}>
-              <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} hitSlop={8} style={s.favBtn}>
-                <Text style={{ fontSize: 16, color: letter.isFavorite ? colors.primary : '#cbd5e1' }}>
-                  {letter.isFavorite ? '★' : '☆'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onDelete} hitSlop={8} style={s.delBtn}>
-                <Text style={{ fontSize: 12, color: Colors.textMuted }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          {senderText && (
-            <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: -2, marginBottom: 2 }}>
-              {senderText}
+            {/* Subject */}
+            <KamiText variant="label" bold style={s.bubbleSubject} color={isMe ? colors.primaryDark : '#4A3B32'}>
+              {letter.subject}
             </KamiText>
-          )}
-          
-          <View style={s.letterMetaRow}>
-            <Text style={{ fontSize: 11 }}>{isUnlocked ? '🔓' : '🔒'}</Text>
-            <KamiText variant="caption" color={isUnlocked ? colors.primary : Colors.textMuted} bold={isUnlocked}>
-              {daysUntil(letter.deliverAt)}
-            </KamiText>
-          </View>
-          
-          <KamiText variant="caption" color={Colors.textMuted}>
-            Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-          </KamiText>
-          
-          {isUnlocked && !letter.isRead && (
-            <View style={[s.newBadge, { backgroundColor: colors.primary }]}>
-              <KamiText variant="caption" color="#fff" bold style={{ fontSize: 8 }}>NEW</KamiText>
+
+            {/* Body preview / Sealed state */}
+            {isUnlocked ? (
+              <KamiText variant="body" color={Colors.textSecondary} numberOfLines={isReply ? 3 : 4} style={s.bubbleExcerpt}>
+                {letter.body || 'No content preview available.'}
+              </KamiText>
+            ) : (
+              /* Sealed Envelope UI */
+              <View style={[s.bubbleLockedBox, { backgroundColor: 'rgba(153, 27, 27, 0.04)', borderColor: 'rgba(153, 27, 27, 0.12)' }]}>
+                <View style={s.bubbleWaxSeal}>
+                  <Text style={{ fontSize: 13, color: '#fff' }}>⚜️</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <KamiText variant="caption" color="#7f1d1d" bold style={{ fontSize: 9 }}>SEALED TIME CAPSULE</KamiText>
+                  <KamiText variant="caption" color="#7f1d1d" style={{ fontSize: 9 }}>
+                    {formatCountdown(letter.deliverAt)}
+                  </KamiText>
+                </View>
+              </View>
+            )}
+
+            {/* Date timestamp */}
+            <View style={s.bubbleFooterRow}>
+              <Text style={{ fontSize: 9, color: Colors.textMuted }}>
+                {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </Text>
+              {isUnlocked && !letter.isRead && !isMe && (
+                <View style={[s.newDot, { backgroundColor: colors.primary }]} />
+              )}
             </View>
-          )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
+
+            {/* One Tap reactions (only if unlocked) */}
+            {isUnlocked && activeSpace === 'couple' && (
+              <View style={[s.bubbleReactionsBar, { borderTopColor: Colors.border + '11' }]}>
+                {['❤️', '🥹', '🥰', '😭', '🔥'].map(emoji => {
+                  const reactions = coupleLetter?.reactions || [];
+                  const userReaction = reactions.find(r => r.userId === currentUser?.id && r.emoji === emoji);
+                  const count = reactions.filter(r => r.emoji === emoji).length;
+                  return (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={[
+                        s.bubbleReactionChip,
+                        userReaction && [s.bubbleReactionChipActive, { backgroundColor: colors.primary + '18', borderColor: colors.primary }]
+                      ]}
+                      onPress={() => onReact?.(letter.id, emoji)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ fontSize: 13 }}>{emoji}</Text>
+                      {count > 0 && (
+                        <Text style={{ fontSize: 9, color: userReaction ? colors.primary : Colors.textMuted, fontWeight: 'bold' }}>{count}</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Reply thread button */}
+            {isUnlocked && !isMe && activeSpace === 'couple' && onReply && (
+              <TouchableOpacity style={[s.replyBtnBubble, { borderColor: colors.primary + '33' }]} onPress={onReply}>
+                <KamiText variant="caption" color={colors.primary} bold>↩ Reply</KamiText>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: Colors.pageBg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
   writeBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
   writePlus:{ fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
   
-  // Segmented filter tabs
   filterScroll: { flexDirection: 'row', paddingHorizontal: Space[5], gap: Space[2], alignItems: 'center' },
   filterTab: { height: 36, paddingHorizontal: Space[4], borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border + '55', backgroundColor: Colors.cardBg, alignItems: 'center', justifyContent: 'center' },
   filterTabActive: { borderWidth: 1.5 },
 
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[2], gap: Space[4] },
-  center: { paddingVertical: Space[10], alignItems: 'center' },
+  center: { paddingVertical: Space[10], alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
   emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  envelopeCard: {
-    flexDirection: 'row',
-    gap: Space[4],
-    borderRadius: 20,
-    padding: Space[4],
-    borderWidth: 1.5,
-    ...Shadows.md,
-    backgroundColor: '#FAF8F2', // warm scrapbook paper background
-    elevation: 2,
+
+  threadContainer: {
+    gap: Space[2]
   },
-  envelopeSealed: {
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+  repliesSection: {
+    flexDirection: 'row',
+    paddingLeft: Space[6]
+  },
+  treeLine: {
+    width: 2,
+    borderLeftWidth: 1.5,
+    borderStyle: 'dashed',
+    marginRight: Space[3],
+    marginTop: -Space[3],
+    marginBottom: Space[3]
+  },
+
+  // Conversation styling
+  bubbleRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginVertical: Space[1],
+    gap: Space[2]
+  },
+  bubbleRowRight: {
+    justifyContent: 'flex-end',
+  },
+  bubbleRowLeft: {
+    justifyContent: 'flex-start',
+  },
+  bubbleAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.05)'
+  },
+  bubbleCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: Space[4],
+    ...Shadows.sm,
+    gap: 6
+  },
+  bubbleCardSent: {
+    borderBottomRightRadius: 4,
+  },
+  bubbleCardReceived: {
+    borderBottomLeftRadius: 4,
+  },
+  bubbleCardLocked: {
     borderStyle: 'dashed',
   },
-  envelopeUnlocked: {
-    borderColor: 'rgba(201, 104, 130, 0.22)',
-    backgroundColor: '#FFFDF9', // open paper background
-  },
-  envelopeStampCol: {
+  bubbleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 48,
+    width: '100%'
   },
-  openedLetterIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
+  favBtnMini: {
+    padding: 2
   },
-  waxSealCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#991b1b', // crimson red wax
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#7f1d1d',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 3,
+  delBtnMini: {
+    padding: 2
   },
-  waxSealInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#b91c1c',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  waxSealSymbol: {
-    color: '#FCD34D', // gold seal symbol
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  letterSubject: {
-    fontSize: FontSize.sm + 1,
+  bubbleSubject: {
+    fontSize: FontSize.base,
     fontFamily: FontFamily.display,
   },
-  letterMetaRow: {
+  bubbleExcerpt: {
+    lineHeight: 20,
+    fontSize: FontSize.sm
+  },
+  bubbleFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4
+  },
+  newDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4
+  },
+  bubbleLockedBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Space[2],
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    padding: Space[2]
   },
-  cardRow:  { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  favBtn:   { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '33' },
-  delBtn:   { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '33' },
+  bubbleWaxSeal: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#991b1b',
+    borderWidth: 1,
+    borderColor: '#7f1d1d',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  replyBtnBubble: {
+    alignSelf: 'flex-start',
+    marginTop: Space[2],
+    paddingVertical: Space[1],
+    paddingHorizontal: Space[3],
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    backgroundColor: '#fff'
+  },
+
+  bubbleReactionsBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    paddingTop: Space[2],
+    borderTopWidth: 1,
+    marginTop: Space[2]
+  },
+  bubbleReactionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: Radii.full,
+    paddingHorizontal: Space[2],
+    paddingVertical: 1
+  },
+  bubbleReactionChipActive: {
+    borderWidth: 1
+  },
+
   loadMoreBtn: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1295,12 +1459,86 @@ const s = StyleSheet.create({
     marginVertical: Space[2],
     ...Shadows.sm,
   },
-  newBadge: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    borderRadius: Radii.sm,
-    paddingHorizontal: Space[1] + 1,
-    paddingVertical: 1,
+});
+
+const wm = StyleSheet.create({
+  root:         { flex: 1, backgroundColor: Colors.pageBg },
+  toolbar:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  content:      { padding: Space[5], gap: Space[3], paddingBottom: Space[10] },
+  label:        { marginBottom: Space[1] },
+  replyLabelBox: { padding: Space[3], borderRadius: Radii.md, borderWidth: 1, gap: 2, marginBottom: Space[2] },
+  deliveryToggleRow: { flexDirection: 'row', gap: Space[2], marginVertical: Space[1] },
+  deliveryToggleBtn: { flex: 1, height: 40, borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.creamDeep, justifyContent: 'center', alignItems: 'center' },
+  deliveryToggleBtnOn: { borderWidth: 0 },
+  schedulerContainer: { gap: Space[1], marginVertical: Space[1] },
+  customDateRow:{ flexDirection: 'row', alignItems: 'center', gap: Space[2], marginTop: Space[1], marginBottom: Space[2] },
+  customInput:  { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border, textAlign: 'center' },
+  unlockDate:   { flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: Colors.rose100, borderRadius: Radii.card, padding: Space[3], marginVertical: Space[1] },
+  input:        { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border },
+  bodyInput:    { paddingHorizontal: Space[4], paddingLeft: Space[6], paddingVertical: Space[3], fontSize: FontSize.base, color: '#4A3B32', minHeight: 220, lineHeight: 28, fontStyle: 'italic', borderLeftWidth: 1.5, borderLeftColor: '#fca5a5' },
+  paperWrapper: { position: 'relative', borderRadius: Radii.card, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden' },
+  photoHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Space[4], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[3] },
+  addPhotoBtn:  { paddingVertical: Space[1], paddingHorizontal: Space[2] },
+  photoScroll:  { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
+  photoRow:     { flexDirection: 'row', gap: Space[3] },
+  photoWrap:    { position: 'relative' },
+  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm },
+  removePhotoBadge:{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
+});
+
+const rm = StyleSheet.create({
+  root:        { flex: 1, backgroundColor: Colors.pageBg },
+  toolbar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  content:     { padding: Space[5], paddingBottom: Space[10] },
+  envelope:    { alignItems: 'center', backgroundColor: Colors.rose100, borderRadius: Radii.card, padding: Space[5], marginBottom: Space[5] },
+  envelopeEmoji:{ fontSize: 48 },
+  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: Space[10] },
+  photoSection:{ marginTop: Space[5], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[4] },
+  photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5] },
+  photoRow:    { flexDirection: 'row', gap: Space[3] },
+  attachedImage:{ width: 140, height: 140, borderRadius: Radii.card },
+  favToggleBtn:{ paddingVertical: Space[1], paddingHorizontal: Space[2] },
+  reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: Space[3], paddingHorizontal: Space[4], borderTopWidth: 1 },
+  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: 'transparent' },
+  reactionBtnActive: { borderColor: Colors.primary },
+
+  // Locked preview
+  lockedCenterContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Space[5] },
+  lockedWaxSeal: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#991b1b',
+    borderWidth: 3,
+    borderColor: '#7f1d1d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5
   },
+  lockedCountdownBox: {
+    marginTop: Space[5],
+    paddingVertical: Space[4],
+    paddingHorizontal: Space[6],
+    borderRadius: Radii.card,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    gap: Space[2]
+  },
+  lockedCountdownTick: {
+    fontSize: FontSize.lg + 2,
+    fontFamily: FontFamily.body
+  },
+  metadataBox: {
+    marginTop: Space[5],
+    alignItems: 'center',
+    gap: Space[1]
+  },
+  metaLine: {
+    fontSize: 10,
+    lineHeight: 14
+  }
 });
