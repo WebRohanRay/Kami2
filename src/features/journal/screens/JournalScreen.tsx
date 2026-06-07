@@ -10,7 +10,7 @@ import {
   ActivityIndicator, Alert, Animated, Keyboard, Modal,
   Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
-  Image, StatusBar as RNStatusBar,
+  Image, StatusBar as RNStatusBar, AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useHome }      from '@features/home/hooks';
@@ -23,10 +23,10 @@ import type { JournalEntry } from '@features/home/types';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
-import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCoupleStore, PartnerActionType } from '@features/couple/store/coupleStore';
 import { useCouple }      from '@features/couple/hooks/useCouple';
 import { supabase }       from '@shared/lib/supabase';
-import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
+import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 
 type Props = MainTabScreenProps<'Journal'>;
 
@@ -327,6 +327,12 @@ export function JournalScreen({ navigation }: Props) {
   }, [user?.activeSpace]);
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
+  const [appState, setAppState] = useState(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => setAppState(next));
+    return () => sub.remove();
+  }, []);
 
   // Focus listener to auto-refresh data when focused
   useEffect(() => {
@@ -351,21 +357,29 @@ export function JournalScreen({ navigation }: Props) {
 
   // Real-time ephemeral broadcast status when writing a journal or responding to prompt
   useEffect(() => {
-    if (user?.activeSpace === 'couple' && couple?.id && user?.id) {
-      if (isFocused) {
-        const action = writeVisible || promptVisible ? 'writing_journal' : 'reading_journal';
-        useCoupleStore.getState().setMyActiveAction(action);
-        broadcastPartnerAction(couple.id, user.id, action);
-      } else {
-        const store = useCoupleStore.getState();
-        const cleared1 = store.clearMyActiveAction('writing_journal');
-        const cleared2 = store.clearMyActiveAction('reading_journal');
-        if (cleared1 || cleared2) {
-          broadcastPartnerAction(couple.id, user.id, 'idle');
-        }
+    if (user?.activeSpace !== 'couple' || !couple?.id || !user?.id) return;
+    if (isFocused && appState === 'active') {
+      let action: PartnerActionType = 'reading_journal';
+      if (commentsVisible) {
+        action = 'commenting_journal';
+      } else if (writeVisible) {
+        action = 'writing_journal';
+      } else if (promptVisible) {
+        action = 'answering_prompt';
+      }
+      useCoupleStore.getState().setMyActiveAction(action);
+      broadcastPartnerAction(couple.id, user.id, action);
+    } else {
+      const store = useCoupleStore.getState();
+      const cleared1 = store.clearMyActiveAction('writing_journal');
+      const cleared2 = store.clearMyActiveAction('answering_prompt');
+      const cleared3 = store.clearMyActiveAction('commenting_journal');
+      const cleared4 = store.clearMyActiveAction('reading_journal');
+      if (cleared1 || cleared2 || cleared3 || cleared4) {
+        broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [isFocused, writeVisible, promptVisible, user?.activeSpace, couple?.id, user?.id]);
+  }, [isFocused, appState, writeVisible, promptVisible, commentsVisible, user?.activeSpace, couple?.id, user?.id]);
 
   useEffect(() => {
     if (user?.activeSpace === 'couple') {
@@ -735,16 +749,30 @@ const EntryCard: React.FC<{
                 return (
                   <TouchableOpacity 
                     key={emoji} 
-                    style={[s.reactionBtn, active && { backgroundColor: colors.primary + '22', borderColor: colors.primary }]}
+                    style={[
+                      s.premiumReactionBtn, 
+                      active && [s.premiumReactionBtnActive, { backgroundColor: colors.primary + '18', borderColor: colors.primary }]
+                    ]}
                     onPress={() => onReact?.(entry.id, emoji)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={{ fontSize: 11 }}>{emoji} {count > 0 ? count : ''}</Text>
+                    <Text style={{ fontSize: 14 }}>{emoji}</Text>
+                    {count > 0 && (
+                      <KamiText variant="caption" color={active ? colors.primary : Colors.textSecondary} bold style={{ fontSize: 10 }}>
+                        {count}
+                      </KamiText>
+                    )}
                   </TouchableOpacity>
                 );
               })}
               
-              <TouchableOpacity style={[s.reactionBtn, { paddingHorizontal: Space[3] }]} onPress={() => onOpenComments?.(entry)}>
-                <Text style={{ fontSize: 11 }}>💬 {(entry.comments ?? []).length}</Text>
+              <TouchableOpacity style={[s.premiumReactionBtn, { paddingHorizontal: Space[3] }]} onPress={() => onOpenComments?.(entry)}>
+                <Text style={{ fontSize: 14 }}>💬</Text>
+                {(entry.comments ?? []).length > 0 && (
+                  <KamiText variant="caption" color={Colors.textSecondary} bold style={{ fontSize: 10 }}>
+                    {(entry.comments ?? []).length}
+                  </KamiText>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -761,6 +789,7 @@ const CommentsModal: React.FC<{
   onAddComment: (entryId: string, text: string) => Promise<void>;
 }> = ({ visible, entry, onClose, onAddComment }) => {
   const { colors } = useTheme();
+  const user = useAuthStore(s => s.user);
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -786,17 +815,37 @@ const CommentsModal: React.FC<{
                 No comments yet. Leave a sweet note!
               </KamiText>
             ) : (
-              (entry.comments ?? []).map((c: any) => (
-                <View key={c.id} style={cm.commentCard}>
-                  <View style={cm.commentMeta}>
-                    <KamiText variant="label" bold>{c.userNickname}</KamiText>
-                    <KamiText variant="caption" color={Colors.textMuted}>
-                      {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </KamiText>
+              (entry.comments ?? []).map((c: any) => {
+                const isMe = c.userId === user?.id;
+                return (
+                  <View 
+                    key={c.id} 
+                    style={[
+                      cm.commentBubbleWrap, 
+                      isMe ? cm.commentBubbleWrapRight : cm.commentBubbleWrapLeft
+                    ]}
+                  >
+                    <View 
+                      style={[
+                        cm.commentBubble, 
+                        isMe 
+                          ? [cm.commentBubbleRight, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '22' }] 
+                          : [cm.commentBubbleLeft, { backgroundColor: '#F1F5F9', borderColor: 'rgba(0,0,0,0.03)' }]
+                      ]}
+                    >
+                      <View style={cm.commentBubbleHeader}>
+                        <KamiText variant="caption" color={isMe ? colors.primaryDark : Colors.textPrimary} bold style={{ fontSize: 10 }}>
+                          {isMe ? 'You' : c.userNickname}
+                        </KamiText>
+                        <KamiText variant="caption" color={Colors.textMuted} style={{ fontSize: 8 }}>
+                          {new Date(c.createdAt).toLocaleDateString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </KamiText>
+                      </View>
+                      <KamiText variant="body" color={Colors.textSecondary} style={{ fontSize: FontSize.sm, lineHeight: 18 }}>{c.body}</KamiText>
+                    </View>
                   </View>
-                  <KamiText variant="body" color={Colors.textSecondary} style={{ marginTop: 2 }}>{c.body}</KamiText>
-                </View>
-              ))
+                );
+              })
             )}
           </View>
         </ScrollView>
@@ -839,6 +888,39 @@ const cm = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', padding: Space[3], gap: Space[2], borderTopWidth: 1 },
   input: { flex: 1, height: 42, borderRadius: Radii.input, borderWidth: 1, paddingHorizontal: Space[3], color: Colors.textPrimary, fontSize: FontSize.sm },
   sendBtn: { paddingVertical: Space[2] + 2, paddingHorizontal: Space[4], borderRadius: Radii.full },
+
+  // Bubble comments styling
+  commentBubbleWrap: {
+    width: '100%',
+    flexDirection: 'row',
+    marginVertical: 4,
+  },
+  commentBubbleWrapRight: {
+    justifyContent: 'flex-end',
+  },
+  commentBubbleWrapLeft: {
+    justifyContent: 'flex-start',
+  },
+  commentBubble: {
+    maxWidth: '85%',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: Space[3],
+    paddingVertical: Space[2],
+  },
+  commentBubbleRight: {
+    borderBottomRightRadius: 4,
+  },
+  commentBubbleLeft: {
+    borderBottomLeftRadius: 4,
+  },
+  commentBubbleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Space[3],
+    marginBottom: 2,
+  },
 });
 
 export default JournalScreen;
@@ -871,8 +953,8 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: Space[10], paddingHorizontal: Space[5] },
   emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
 
-  entryCard: { backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], gap: Space[3], borderWidth: 1, borderColor: Colors.border + '44', ...Shadows.sm },
-  entryCardPinned: { borderColor: Colors.primary + '55', backgroundColor: Colors.creamMid + '22' },
+  entryCard: { backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], gap: Space[3], borderWidth: 1.5, borderColor: 'rgba(201, 104, 130, 0.12)', ...Shadows.md, elevation: 2 },
+  entryCardPinned: { borderColor: Colors.primary + '77', backgroundColor: '#FFFDFD', shadowColor: Colors.primary, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
   entryHeader:{ flexDirection: 'row', alignItems: 'center', gap: Space[2] },
   entryActions:{ flexDirection: 'row', gap: Space[2] },
   entryBody:  { lineHeight: 22 },
@@ -888,7 +970,20 @@ const s = StyleSheet.create({
 
   // Couple Space journal card styles
   coupleActionsRow: { flexDirection: 'row', alignItems: 'center', paddingTop: Space[3], borderTopWidth: 1, marginTop: Space[2] },
-  reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 6, borderRadius: Radii.sm, borderWidth: 1, borderColor: Colors.border + '44', backgroundColor: Colors.creamDeep + '11' },
+  premiumReactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: Radii.full,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: '#FAF9F6',
+  },
+  premiumReactionBtnActive: {
+    borderColor: Colors.primary,
+  },
   loadMoreBtn: {
     alignItems: 'center',
     justifyContent: 'center',

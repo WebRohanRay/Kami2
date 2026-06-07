@@ -1,9 +1,6 @@
 import React, { useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import {
-  NavigationContainer,
-  createNavigationContainerRef,
-} from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '@features/auth';
 import { useAuth }      from '@features/auth';
@@ -13,9 +10,9 @@ import MainNavigator     from './MainNavigator';
 import { useDeepLink }   from './useDeepLink';
 import type { RootStackParamList } from './types';
 import { CoupleRealtimeListener } from '@features/couple/components/CoupleRealtimeListener';
+import { navigationRef } from './navigationRef';
 
 const Stack  = createNativeStackNavigator<RootStackParamList>();
-export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const Splash: React.FC = () => (
   <View style={s.splash}>

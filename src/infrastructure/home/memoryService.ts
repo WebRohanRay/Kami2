@@ -46,11 +46,11 @@ export async function fetchMemories(searchQuery?: string): Promise<Result<Memory
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const mapped: Memory[] = [];
-    for (const row of (data ?? [])) {
-      const resolved = await resolveSignedUrls('memory_images', row.image_urls || []);
-      mapped.push(mapMemory(row, resolved));
-    }
+    const resolvedImgsList = await Promise.all(
+      (data ?? []).map(row => resolveSignedUrls('memory_images', row.image_urls || []))
+    );
+
+    const mapped = (data ?? []).map((row, i) => mapMemory(row, resolvedImgsList[i]));
 
     return { success: true, data: mapped };
   } catch (e) {

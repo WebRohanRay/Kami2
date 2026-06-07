@@ -10,7 +10,7 @@ import {
   ActivityIndicator, Alert, Animated, Keyboard, Modal,
   Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
-  Image, StatusBar as RNStatusBar,
+  Image, StatusBar as RNStatusBar, AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import KamiText from '@shared/ui/atoms/KamiText';
@@ -21,7 +21,7 @@ import type { Memory } from '@features/home/types';
 import type { CoupleMemory } from '@features/couple/types';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
-import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
+import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import * as memoryService from '@infrastructure/home/memoryService';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
@@ -201,6 +201,12 @@ export function MemoriesScreen({ navigation }: Props) {
   const [selectedStar, setSelectedStar] = useState<Memory | CoupleMemory | null>(null);
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
+  const [appState, setAppState] = useState(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => setAppState(next));
+    return () => sub.remove();
+  }, []);
 
   // Focus auto-refresh and presence action broadcast
   useEffect(() => {
@@ -225,7 +231,7 @@ export function MemoriesScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (activeSpace === 'couple' && couple?.id && user?.id) {
-      if (isFocused) {
+      if (isFocused && appState === 'active') {
         const action = modalOpen 
           ? 'writing_memory' 
           : selectedStar 
@@ -243,7 +249,7 @@ export function MemoriesScreen({ navigation }: Props) {
         }
       }
     }
-  }, [activeSpace, couple?.id, user?.id, isFocused, modalOpen, selectedStar]);
+  }, [activeSpace, couple?.id, user?.id, isFocused, appState, modalOpen, selectedStar]);
 
   useEffect(() => {
     if (activeSpace === 'couple') {
@@ -569,6 +575,11 @@ export function MemoriesScreen({ navigation }: Props) {
   );
 };
 
+const getRotationAngle = (id: string) => {
+  const charCodeSum = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return charCodeSum % 2 === 0 ? '1.2deg' : '-1.2deg';
+};
+
 const CoupleMemoryTimelineCard: React.FC<{
   memory: CoupleMemory;
   isLast: boolean;
@@ -582,8 +593,10 @@ const CoupleMemoryTimelineCard: React.FC<{
     <View style={s.timelineRow}>
       {/* Left Timeline Guide */}
       <View style={s.timelineLeft}>
-        <View style={[s.timelineDot, { backgroundColor: colors.primary }]} />
-        {!isLast && <View style={[s.timelineLine, { backgroundColor: Colors.border }]} />}
+        <View style={[s.premiumTimelineDot, { borderColor: colors.primaryLight, backgroundColor: '#fff' }]}>
+          <View style={[s.premiumTimelineDotInner, { backgroundColor: colors.primary }]} />
+        </View>
+        {!isLast && <View style={[s.premiumTimelineLine, { borderColor: colors.primaryLight + '55' }]} />}
       </View>
 
       {/* Card Content */}
@@ -592,7 +605,7 @@ const CoupleMemoryTimelineCard: React.FC<{
           onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
           onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
         >
-          <Animated.View style={[s.card, { transform: [{ scale: sc }] }]}>
+          <Animated.View style={[s.card, { transform: [{ scale: sc }, { rotate: getRotationAngle(memory.id) }] }]}>
             <View style={{ flex: 1, gap: 4 }}>
               <View style={s.cardTop}>
                 <KamiText variant="label" numberOfLines={1} style={{ flex: 1 }}>{memory.title}</KamiText>
@@ -684,8 +697,36 @@ const s = StyleSheet.create({
   timelineContainer: { paddingLeft: Space[1] },
   timelineRow: { flexDirection: 'row' },
   timelineLeft: { alignItems: 'center', width: 24, marginRight: Space[2] },
-  timelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 18, zIndex: 2 },
-  timelineLine: { width: 2, flex: 1, marginTop: 4, marginBottom: -18 },
+  premiumTimelineDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    zIndex: 2,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  premiumTimelineDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  premiumTimelineLine: {
+    width: 0,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    flex: 1,
+    marginTop: 4,
+    marginBottom: -22,
+    alignSelf: 'center',
+    zIndex: 1,
+  },
   tagRow: { flexDirection: 'row', gap: Space[1] },
   tagBadge: { paddingHorizontal: Space[2], paddingVertical: 2, borderRadius: Radii.full },
 });
@@ -697,7 +738,7 @@ const MemoryCard: React.FC<{ memory: Memory; onEdit: () => void; onDelete: () =>
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
-      <Animated.View style={[s.card, { transform: [{ scale: sc }] }]}>
+      <Animated.View style={[s.card, { transform: [{ scale: sc }, { rotate: getRotationAngle(memory.id) }] }]}>
         <View style={{ flexDirection: 'row', gap: Space[3] }}>
           <View style={s.cardLeft}>
             <Text style={{ fontSize: 32 }}>{memory.emoji}</Text>

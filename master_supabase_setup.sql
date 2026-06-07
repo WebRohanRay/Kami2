@@ -213,6 +213,10 @@ CREATE TABLE public.future_letters (
   body          TEXT NOT NULL,
   deliver_at    TIMESTAMPTZ NOT NULL,
   image_urls    TEXT[] NOT NULL DEFAULT '{}',
+  is_draft      BOOLEAN DEFAULT FALSE,
+  is_read       BOOLEAN DEFAULT FALSE,
+  is_favorite   BOOLEAN DEFAULT FALSE,
+  is_archived   BOOLEAN DEFAULT FALSE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -317,7 +321,10 @@ CREATE TABLE public.couple_letters (
   body          TEXT NOT NULL,
   deliver_at    TIMESTAMPTZ NOT NULL,
   image_urls    TEXT[] DEFAULT '{}',
-  is_unlocked   BOOLEAN DEFAULT FALSE,
+  is_draft      BOOLEAN DEFAULT FALSE,
+  is_read       BOOLEAN DEFAULT FALSE,
+  is_favorite   BOOLEAN DEFAULT FALSE,
+  is_archived   BOOLEAN DEFAULT FALSE,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -346,6 +353,28 @@ CREATE TABLE public.relationship_events (
   event_type    TEXT CHECK (event_type IN ('anniversary', 'birthday', 'date_night', 'trip', 'other')) DEFAULT 'other',
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Couple reactions tables
+CREATE TABLE public.couple_letter_reactions (
+  letter_id     UUID NOT NULL REFERENCES public.couple_letters(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji         TEXT NOT NULL,
+  PRIMARY KEY (letter_id, user_id, emoji)
+);
+
+CREATE TABLE public.couple_memory_reactions (
+  memory_id     UUID NOT NULL REFERENCES public.couple_memories(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji         TEXT NOT NULL,
+  PRIMARY KEY (memory_id, user_id, emoji)
+);
+
+CREATE TABLE public.couple_goal_reactions (
+  goal_id       UUID NOT NULL REFERENCES public.couple_goals(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji         TEXT NOT NULL,
+  PRIMARY KEY (goal_id, user_id, emoji)
 );
 
 
@@ -391,7 +420,7 @@ CREATE TRIGGER restore_deleted_couple_space_trigger
   BEFORE UPDATE ON public.couples
   FOR EACH ROW EXECUTE PROCEDURE public.restore_deleted_couple_space();
 
--- Decrypt/select sealed capsule letters RPC
+-- Decrypt/select sealed capsule letters RPC (for solo mode letters)
 CREATE OR REPLACE FUNCTION public.fetch_unlocked_letter(p_letter_id UUID)
 RETURNS TABLE (body TEXT, image_urls TEXT[]) AS $$
 BEGIN
@@ -406,6 +435,81 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION public.fetch_unlocked_letter(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.fetch_unlocked_letter(UUID) TO authenticated;
+
+-- Decrypt/select sealed couple capsule letters RPC
+CREATE OR REPLACE FUNCTION public.fetch_unlocked_couple_letter(p_letter_id UUID)
+RETURNS TABLE (body TEXT, image_urls TEXT[]) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT cl.body, cl.image_urls
+  FROM couple_letters cl
+  WHERE cl.id = p_letter_id
+    AND (cl.deliver_at <= NOW() OR cl.is_draft = TRUE)
+    AND EXISTS (
+      SELECT 1 FROM public.couple_members
+      WHERE couple_members.couple_id = cl.couple_id AND couple_members.user_id = auth.uid()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.fetch_unlocked_couple_letter(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fetch_unlocked_couple_letter(UUID) TO authenticated;
+
+-- Secure Atomic Accept Couple Invitation transaction handler
+CREATE OR REPLACE FUNCTION public.accept_couple_invitation(
+  p_invitation_id UUID,
+  p_couple_name TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_sender_id UUID;
+  v_receiver_id UUID;
+  v_status TEXT;
+  v_couple_id UUID;
+BEGIN
+  -- 1. Fetch and lock invitation row
+  SELECT sender_id, receiver_id, status 
+  INTO v_sender_id, v_receiver_id, v_status
+  FROM public.couple_invitations
+  WHERE id = p_invitation_id
+  FOR UPDATE;
+
+  -- 2. Validate
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invitation not found.';
+  END IF;
+
+  IF v_status != 'pending' THEN
+    RAISE EXCEPTION 'Invitation is not pending.';
+  END IF;
+
+  -- Verify current user is receiver
+  IF v_receiver_id != auth.uid() THEN
+    RAISE EXCEPTION 'You are not the receiver of this invitation.';
+  END IF;
+
+  -- 3. Insert Couple
+  INSERT INTO public.couples (name) 
+  VALUES (p_couple_name) 
+  RETURNING id INTO v_couple_id;
+
+  -- 4. Insert Members (unique constraint on user_id ensures no double coupling)
+  INSERT INTO public.couple_members (couple_id, user_id) 
+  VALUES (v_couple_id, v_sender_id), (v_couple_id, v_receiver_id);
+
+  -- 5. Update invitation status
+  UPDATE public.couple_invitations 
+  SET status = 'accepted' 
+  WHERE id = p_invitation_id;
+
+  RETURN v_couple_id;
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE EXCEPTION 'One of the partners is already connected to another couple.';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.accept_couple_invitation(UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.accept_couple_invitation(UUID, TEXT) TO authenticated;
 
 -- Tamper-proof streaks logic
 CREATE OR REPLACE FUNCTION public.update_streak_on_checkin()
@@ -496,11 +600,6 @@ GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
 -- ─── 5. ROW LEVEL SECURITY (RLS) POLICIES ───────────────────
 -- Profiles
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can view partner profile" ON public.profiles;
-
 CREATE POLICY "profiles_select" ON public.profiles FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "profiles_insert" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "profiles_update" ON public.profiles FOR UPDATE USING (auth.uid() = id);
@@ -537,6 +636,7 @@ CREATE POLICY "memories_owner_all" ON public.memories FOR ALL USING (auth.uid() 
 -- Future Letters (solo)
 ALTER TABLE public.future_letters ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "future_letters_owner_all" ON public.future_letters FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+-- Revoke column-level reads of letters to enforce the sealed time capsule duration constraint
 REVOKE SELECT (body, image_urls) ON public.future_letters FROM authenticated;
 
 -- Couples
@@ -546,7 +646,7 @@ CREATE POLICY "couples_update" ON public.couples FOR UPDATE USING (public.is_cou
 CREATE POLICY "couples_insert" ON public.couples FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "couples_delete" ON public.couples FOR DELETE USING (public.is_couple_member(id));
 
--- Couple Members (recursion-free selector)
+-- Couple Members
 ALTER TABLE public.couple_members ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "couple_members_select" ON public.couple_members FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "couple_members_insert" ON public.couple_members FOR INSERT WITH CHECK (user_id = auth.uid() OR EXISTS (SELECT 1 FROM public.couples WHERE couples.id = couple_id AND couples.creator_id = auth.uid()));
@@ -554,44 +654,75 @@ CREATE POLICY "couple_members_delete" ON public.couple_members FOR DELETE USING 
 
 -- Couple Invitations
 ALTER TABLE public.couple_invitations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "invitations_access" ON public.couple_invitations FOR ALL USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+CREATE POLICY "invitations_select" ON public.couple_invitations FOR SELECT USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+CREATE POLICY "invitations_insert" ON public.couple_invitations FOR INSERT WITH CHECK (auth.uid() = sender_id);
+CREATE POLICY "invitations_update" ON public.couple_invitations FOR UPDATE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+CREATE POLICY "invitations_delete" ON public.couple_invitations FOR DELETE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
 
 -- Couple Journals
 ALTER TABLE public.couple_journals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_journals_access" ON public.couple_journals FOR ALL USING (public.is_couple_member(couple_id));
+CREATE POLICY "couple_journals_all" ON public.couple_journals FOR ALL 
+  USING (public.is_couple_member(couple_id)) 
+  WITH CHECK (public.is_couple_member(couple_id));
 
 -- Couple Comments & Reactions
 ALTER TABLE public.couple_journal_comments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_comments_access" ON public.couple_journal_comments FOR ALL USING (EXISTS (
-  SELECT 1 FROM public.couple_journals 
-  WHERE couple_journals.id = entry_id AND public.is_couple_member(couple_journals.couple_id)
-));
+CREATE POLICY "couple_comments_all" ON public.couple_journal_comments FOR ALL 
+  USING (EXISTS (SELECT 1 FROM public.couple_journals WHERE couple_journals.id = entry_id AND public.is_couple_member(couple_journals.couple_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.couple_journals WHERE couple_journals.id = entry_id AND public.is_couple_member(couple_journals.couple_id)));
 
 ALTER TABLE public.couple_journal_reactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_reactions_access" ON public.couple_journal_reactions FOR ALL USING (EXISTS (
-  SELECT 1 FROM public.couple_journals 
-  WHERE couple_journals.id = entry_id AND public.is_couple_member(couple_journals.couple_id)
-));
+CREATE POLICY "couple_reactions_all" ON public.couple_journal_reactions FOR ALL 
+  USING (EXISTS (SELECT 1 FROM public.couple_journals WHERE couple_journals.id = entry_id AND public.is_couple_member(couple_journals.couple_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.couple_journals WHERE couple_journals.id = entry_id AND public.is_couple_member(couple_journals.couple_id)));
 
 -- Couple Memories, Goals, Letters, Answers, Events
 ALTER TABLE public.couple_memories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_memories_access" ON public.couple_memories FOR ALL USING (public.is_couple_member(couple_id));
+CREATE POLICY "couple_memories_all" ON public.couple_memories FOR ALL 
+  USING (public.is_couple_member(couple_id)) 
+  WITH CHECK (public.is_couple_member(couple_id));
 
 ALTER TABLE public.couple_goals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_goals_access" ON public.couple_goals FOR ALL USING (public.is_couple_member(couple_id));
+CREATE POLICY "couple_goals_all" ON public.couple_goals FOR ALL 
+  USING (public.is_couple_member(couple_id)) 
+  WITH CHECK (public.is_couple_member(couple_id));
 
 ALTER TABLE public.couple_letters ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "couple_letters_insert" ON public.couple_letters FOR INSERT WITH CHECK (public.is_couple_member(couple_id) AND auth.uid() = sender_id);
 CREATE POLICY "couple_letters_select" ON public.couple_letters FOR SELECT USING (public.is_couple_member(couple_id));
+CREATE POLICY "couple_letters_update" ON public.couple_letters FOR UPDATE USING (public.is_couple_member(couple_id));
 CREATE POLICY "couple_letters_delete" ON public.couple_letters FOR DELETE USING (public.is_couple_member(couple_id) AND auth.uid() = sender_id);
+-- Revoke column-level reads of letters to enforce the sealed time capsule duration constraint
 REVOKE SELECT (body, image_urls) ON public.couple_letters FROM authenticated;
 
+ALTER TABLE public.couple_daily_questions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "couple_questions_select" ON public.couple_daily_questions FOR SELECT USING (auth.role() = 'authenticated');
 
 ALTER TABLE public.couple_answers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_answers_access" ON public.couple_answers FOR ALL USING (public.is_couple_member(couple_id));
+CREATE POLICY "couple_answers_all" ON public.couple_answers FOR ALL 
+  USING (public.is_couple_member(couple_id)) 
+  WITH CHECK (public.is_couple_member(couple_id) AND auth.uid() = user_id);
 
 ALTER TABLE public.relationship_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "relationship_events_access" ON public.relationship_events FOR ALL USING (public.is_couple_member(couple_id));
+CREATE POLICY "relationship_events_all" ON public.relationship_events FOR ALL 
+  USING (public.is_couple_member(couple_id)) 
+  WITH CHECK (public.is_couple_member(couple_id));
+
+-- Couple Letter, Memory, and Goal Reactions RLS
+ALTER TABLE public.couple_letter_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "couple_letter_reactions_all" ON public.couple_letter_reactions FOR ALL 
+  USING (EXISTS (SELECT 1 FROM public.couple_letters WHERE couple_letters.id = letter_id AND public.is_couple_member(couple_letters.couple_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.couple_letters WHERE couple_letters.id = letter_id AND public.is_couple_member(couple_letters.couple_id)));
+
+ALTER TABLE public.couple_memory_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "couple_memory_reactions_all" ON public.couple_memory_reactions FOR ALL 
+  USING (EXISTS (SELECT 1 FROM public.couple_memories WHERE couple_memories.id = memory_id AND public.is_couple_member(couple_memories.couple_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.couple_memories WHERE couple_memories.id = memory_id AND public.is_couple_member(couple_memories.couple_id)));
+
+ALTER TABLE public.couple_goal_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "couple_goal_reactions_all" ON public.couple_goal_reactions FOR ALL 
+  USING (EXISTS (SELECT 1 FROM public.couple_goals WHERE couple_goals.id = goal_id AND public.is_couple_member(couple_goals.couple_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.couple_goals WHERE couple_goals.id = goal_id AND public.is_couple_member(couple_goals.couple_id)));
 
 
 -- ─── 6. STORAGE BUCKETS & STORAGE POLICIES ─────────────────
@@ -609,55 +740,30 @@ ON CONFLICT (id) DO UPDATE SET
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- Storage security policies
-DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
-DROP POLICY IF EXISTS "Users can update own avatar" ON storage.objects;
-DROP POLICY IF EXISTS "Users can read own avatar" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete own avatar" ON storage.objects;
-
 CREATE POLICY "Users can upload own avatar" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own avatar" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can read own avatar" ON storage.objects FOR SELECT USING (bucket_id = 'avatars' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
 CREATE POLICY "Users can delete own avatar" ON storage.objects FOR DELETE USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Journal storage policies
-DROP POLICY IF EXISTS "Users can read own journal images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can insert own journal images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can update own journal images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete own journal images" ON storage.objects;
-
 CREATE POLICY "Users can read own journal images" ON storage.objects FOR SELECT USING (bucket_id = 'journal_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
 CREATE POLICY "Users can insert own journal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own journal images" ON storage.objects FOR UPDATE USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own journal images" ON storage.objects FOR DELETE USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Letters storage policies
-DROP POLICY IF EXISTS "Users can read own letter images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can insert own letter images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can update own letter images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete own letter images" ON storage.objects;
-
 CREATE POLICY "Users can read own letter images" ON storage.objects FOR SELECT USING (bucket_id = 'letter_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
 CREATE POLICY "Users can insert own letter images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own letter images" ON storage.objects FOR UPDATE USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own letter images" ON storage.objects FOR DELETE USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Memories storage policies
-DROP POLICY IF EXISTS "Users can read own memory images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can insert own memory images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can update own memory images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete own memory images" ON storage.objects;
-
 CREATE POLICY "Users can read own memory images" ON storage.objects FOR SELECT USING (bucket_id = 'memory_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
 CREATE POLICY "Users can insert own memory images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own memory images" ON storage.objects FOR UPDATE USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own memory images" ON storage.objects FOR DELETE USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Goals storage policies
-DROP POLICY IF EXISTS "Users can read own goal images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can insert own goal images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can update own goal images" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete own goal images" ON storage.objects;
-
 CREATE POLICY "Users can read own goal images" ON storage.objects FOR SELECT USING (bucket_id = 'goal_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
 CREATE POLICY "Users can insert own goal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own goal images" ON storage.objects FOR UPDATE USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
@@ -666,13 +772,25 @@ CREATE POLICY "Users can delete own goal images" ON storage.objects FOR DELETE U
 
 -- ─── 7. GIN SEARCH INDEXES & OPTIMIZATIONS ──────────────────
 ALTER TABLE journal_entries ADD COLUMN IF NOT EXISTS fts tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') || ' ' || body)) STORED;
-CREATE INDEX IF NOT EXISTS idx_journal_entries_fts ON journal_entries USING gin(fts);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_fts ON journal_entries USING GIN(fts);
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 CREATE INDEX IF NOT EXISTS idx_prompt_responses_prompt_id ON prompt_responses(prompt_id);
 CREATE INDEX IF NOT EXISTS idx_future_letters_user_deliver ON future_letters(user_id, deliver_at ASC);
 CREATE INDEX IF NOT EXISTS idx_memories_user_date ON memories(user_id, memory_date DESC);
 CREATE INDEX IF NOT EXISTS idx_journal_user_date ON journal_entries(user_id, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_mood_logs_user_date ON mood_logs(user_id, logged_date DESC);
+
+-- Unique performance indexes for couple feature lookups
+CREATE INDEX IF NOT EXISTS idx_couple_members_user ON couple_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_couple_letters_couple_deliver ON couple_letters(couple_id, deliver_at ASC);
+CREATE INDEX IF NOT EXISTS idx_couple_journals_couple_date ON couple_journals(couple_id, entry_date DESC);
+CREATE INDEX IF NOT EXISTS idx_couple_memories_couple_date ON couple_memories(couple_id, memory_date DESC);
+CREATE INDEX IF NOT EXISTS idx_relationship_events_couple_date ON relationship_events(couple_id, event_date ASC);
+CREATE INDEX IF NOT EXISTS idx_couple_journal_comments_entry ON couple_journal_comments(entry_id);
+CREATE INDEX IF NOT EXISTS idx_couple_journal_reactions_entry ON couple_journal_reactions(entry_id);
+CREATE INDEX IF NOT EXISTS idx_couple_letter_reactions_letter ON couple_letter_reactions(letter_id);
+CREATE INDEX IF NOT EXISTS idx_couple_memory_reactions_memory ON couple_memory_reactions(memory_id);
+CREATE INDEX IF NOT EXISTS idx_couple_goal_reactions_goal ON couple_goal_reactions(goal_id);
 
 
 -- ─── 8. REALTIME REPLICATION ENABLEMENT ─────────────────────
@@ -745,6 +863,18 @@ BEGIN
   BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE couple_invitations;
   EXCEPTION WHEN duplicate_object THEN NULL; END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE couple_letter_reactions;
+  EXCEPTION WHEN duplicate_object THEN NULL; END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE couple_memory_reactions;
+  EXCEPTION WHEN duplicate_object THEN NULL; END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE couple_goal_reactions;
+  EXCEPTION WHEN duplicate_object THEN NULL; END;
 END $$;
 
 
@@ -788,21 +918,3 @@ ON CONFLICT DO NOTHING;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO postgres, anon, authenticated, service_role;
-
--- Letter read status & favorites extensions
-ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.couple_letters ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
-
-ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.future_letters ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
-
--- Update RLS policies to allow updating letters
-DROP POLICY IF EXISTS "couple_letters_update" ON public.couple_letters;
-CREATE POLICY "couple_letters_update" ON public.couple_letters
-  FOR UPDATE USING (public.is_couple_member(couple_id));
-
-DROP POLICY IF EXISTS "future_letters_update" ON public.future_letters;
-CREATE POLICY "future_letters_update" ON public.future_letters
-  FOR UPDATE USING (auth.uid() = user_id);
-
-

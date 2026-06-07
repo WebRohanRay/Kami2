@@ -8,23 +8,33 @@ import type {
 type LoadingState = 'idle' | 'loading' | 'refreshing' | 'error';
 
 export type PartnerActionType = 
-  | 'writing_letter' 
-  | 'reading_memories' 
-  | 'creating_goal' 
-  | 'reading_letter' 
-  | 'writing_journal' 
-  | 'sending_love' 
-  | 'writing_memory' 
-  | 'viewing_memory' 
-  | 'reading_journal'
-  | 'viewing_goals'
-  | 'viewing_letters'
+  // Letters / Future screen
+  | 'writing_letter'       // composing a brand new letter  
+  | 'editing_draft'        // editing an existing saved draft
+  | 'reading_letter'       // reading an unlocked letter
+  | 'viewing_letters'      // browsing the letters list
+  // Journal screen
+  | 'writing_journal'      // composing a new or editing an existing journal entry
+  | 'answering_prompt'     // responding to the daily reflection prompt
+  | 'commenting_journal'   // writing a comment on partner's journal entry
+  | 'reading_journal'      // browsing the journal feed
+  // Memories screen
+  | 'writing_memory'       // creating or editing a memory card
+  | 'viewing_memory'       // looking at a specific memory detail
+  | 'reading_memories'     // browsing the memories timeline
+  // Goals screen
+  | 'creating_goal'        // composing a brand new goal
+  | 'editing_goal'         // editing an existing goal
+  | 'viewing_goals'        // browsing the goals list
+  // Home screen
+  | 'sending_love'         // tapped the love/heart button
+  | 'answering_question'   // responding to today's couple daily question
   | 'idle';
 
 interface CoupleState {
   // ── Connection & Meta ───────────────────────────────────
   couple: Couple | null;
-  partner: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null } | null;
+  partner: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null; currentMoodEmoji?: string | null; currentMoodLabel?: string | null } | null;
   receivedInvitations: CoupleInvitation[];
   sentInvitations: CoupleInvitation[];
   metaLoading: LoadingState;
@@ -75,7 +85,7 @@ interface CoupleState {
 
   // ── Setters ─────────────────────────────────────────────
   setCouple: (c: Couple | null) => void;
-  setPartner: (p: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null } | null) => void;
+  setPartner: (p: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null; currentMoodEmoji?: string | null; currentMoodLabel?: string | null } | null) => void;
   setReceivedInvitations: (invites: CoupleInvitation[]) => void;
   setSentInvitations: (invites: CoupleInvitation[]) => void;
   setMetaLoading: (s: LoadingState) => void;

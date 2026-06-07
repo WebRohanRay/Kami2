@@ -127,6 +127,10 @@ export async function deleteImages(
   entityId: string
 ): Promise<void> {
   try {
+    if (!userId?.trim() || userId.includes('..') || userId.includes('/') || userId.includes('\\')) {
+      console.warn('deleteImages: Invalid or empty userId');
+      return;
+    }
     const folderPath = `${userId}/${entityId}`;
 
     // List all files in the directory
@@ -163,7 +167,7 @@ export async function resolveSignedUrls(
   try {
     const { data, error } = await supabase.storage
       .from(bucketName)
-      .createSignedUrls(paths, 31536000); // 1 year expiry
+      .createSignedUrls(paths, 3600); // 1 hour expiry
 
     if (error || !data) {
       console.error(`resolveSignedUrls error in ${bucketName}:`, error);

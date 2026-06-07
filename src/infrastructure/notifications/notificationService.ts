@@ -66,8 +66,12 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     // EAS Project ID is required to retrieve the push token
     const projectId =
       Constants.expoConfig?.extra?.eas?.projectId ??
-      Constants.easConfig?.projectId ??
-      'f298b22a-0745-413d-bf90-5156a5d009ff';
+      Constants.easConfig?.projectId;
+
+    if (!projectId) {
+      console.warn('EAS Project ID not configured. Push notifications unavailable.');
+      return null;
+    }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
 

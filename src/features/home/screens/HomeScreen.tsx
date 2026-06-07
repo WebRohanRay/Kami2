@@ -23,24 +23,26 @@ import {
   View,
   Keyboard,
   StatusBar as RNStatusBar,
+  AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore, useAuth }  from '@features/auth';
-import { useHome }       from '../hooks';
-import { useHomeStore }  from '../store';
-import { useShallow }    from 'zustand/react/shallow';
-import KamiText          from '@shared/ui/atoms/KamiText';
-import KamiButton          from '@shared/ui/atoms/KamiButton';
+import { useAuthStore, useAuth } from '@features/auth';
+import { useHome } from '../hooks';
+import { useHomeStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import KamiText from '@shared/ui/atoms/KamiText';
+import KamiButton from '@shared/ui/atoms/KamiButton';
 import {
   Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Sizing, Space,
 } from '@shared/constants';
 import type { MainTabScreenProps } from '@core/navigation/types';
-import { useTheme }      from '@shared/hooks';
+import { useTheme } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
-import { useCouple }      from '@features/couple/hooks/useCouple';
-import { supabase }       from '@shared/lib/supabase';
-import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
+import { useCouple } from '@features/couple/hooks/useCouple';
+import { supabase } from '@shared/lib/supabase';
+import { resolveAvatarUrl } from '@infrastructure/profile';
+import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 
 function getRelationshipDuration(anniversaryDate: string | null): string {
   if (!anniversaryDate) return 'Connected';
@@ -77,14 +79,14 @@ type Props = MainTabScreenProps<'Home'>;
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const MOODS = [
-  { id: 'joyful',     emoji: '✨', label: 'Joyful'     },
-  { id: 'calm',       emoji: '🌸', label: 'Calm'       },
-  { id: 'hopeful',    emoji: '🌅', label: 'Hopeful'    },
-  { id: 'grateful',   emoji: '🌺', label: 'Grateful'   },
+  { id: 'joyful', emoji: '✨', label: 'Joyful' },
+  { id: 'calm', emoji: '🌸', label: 'Calm' },
+  { id: 'hopeful', emoji: '🌅', label: 'Hopeful' },
+  { id: 'grateful', emoji: '🌺', label: 'Grateful' },
   { id: 'reflective', emoji: '🌙', label: 'Reflective' },
-  { id: 'tired',      emoji: '☁️', label: 'Tired'      },
-  { id: 'anxious',    emoji: '🌊', label: 'Anxious'    },
-  { id: 'sad',        emoji: '🍂', label: 'Sad'        },
+  { id: 'tired', emoji: '☁️', label: 'Tired' },
+  { id: 'anxious', emoji: '🌊', label: 'Anxious' },
+  { id: 'sad', emoji: '🍂', label: 'Sad' },
 ];
 
 function greetingTime() {
@@ -117,7 +119,7 @@ const Tap: React.FC<{ onPress?: () => void; style?: object; children: React.Reac
     <TouchableOpacity
       activeOpacity={1} onPress={onPress} disabled={!onPress}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
-      onPressOut={() => Animated.spring(sc, { toValue: 1,    useNativeDriver: true, speed: 40 }).start()}
+      onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
       <Animated.View style={[style, { transform: [{ scale: sc }] }]}>{children}</Animated.View>
     </TouchableOpacity>
@@ -168,14 +170,14 @@ const MoodModal: React.FC<{
   );
 };
 const mm = StyleSheet.create({
-  root:  { flex: 1, backgroundColor: Colors.pageBg, paddingHorizontal: Space[5] },
-  handle:{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginTop: Space[3], marginBottom: Space[4] },
-  top:   { alignItems: 'center', gap: Space[2], marginBottom: Space[5] },
+  root: { flex: 1, backgroundColor: Colors.pageBg, paddingHorizontal: Space[5] },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginTop: Space[3], marginBottom: Space[4] },
+  top: { alignItems: 'center', gap: Space[2], marginBottom: Space[5] },
   emoji: { fontSize: 56 },
   input: { backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], fontSize: FontSize.base, color: Colors.textPrimary, height: 140, borderWidth: 1.5, borderColor: Colors.border, textAlignVertical: 'top' },
-  btns:  { flexDirection: 'row', gap: Space[3], marginTop: Space[5] },
-  skip:  { flex: 1, height: 52, borderRadius: Radii.button, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  save:  { flex: 2, height: 52, borderRadius: Radii.button, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  btns: { flexDirection: 'row', gap: Space[3], marginTop: Space[5] },
+  skip: { flex: 1, height: 52, borderRadius: Radii.button, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
+  save: { flex: 2, height: 52, borderRadius: Radii.button, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
@@ -184,28 +186,28 @@ export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const { todayMood, recentMoods, streak, journalEntries, goals, todayPrompt, promptResponse } =
     useHomeStore(useShallow((s) => ({
-      todayMood:      s.todayMood,
-      recentMoods:    s.recentMoods,
-      streak:         s.streak,
+      todayMood: s.todayMood,
+      recentMoods: s.recentMoods,
+      streak: s.streak,
       journalEntries: s.journalEntries,
-      goals:          s.goals,
-      todayPrompt:    s.todayPrompt,
+      goals: s.goals,
+      todayPrompt: s.todayPrompt,
       promptResponse: s.promptResponse,
     })));
   const { logMood, refresh } = useHome();
 
-  const name    = firstName(user?.nickname, user?.email);
-  const daysIn  = daysSince((user as any)?.createdAt);
+  const name = firstName(user?.nickname, user?.email);
+  const daysIn = daysSince((user as any)?.createdAt);
 
-  const [pending,    setPending]    = useState<typeof MOODS[0] | null>(null);
-  const [moodModal,  setMoodModal]  = useState(false);
+  const [pending, setPending] = useState<typeof MOODS[0] | null>(null);
+  const [moodModal, setMoodModal] = useState(false);
   const [moodSaving, setMoodSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const { updateProfile } = useAuth();
 
   // Couple Space Hooks & State
-  const { 
+  const {
     couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories, setPartner,
     homeAlerts, removeHomeAlert, partnerAction, coupleLetters
   } = useCoupleStore();
@@ -214,6 +216,26 @@ export function HomeScreen({ navigation }: Props) {
   const [answerInput, setAnswerInput] = useState('');
   const [submittingAnswerState, setSubmittingAnswerState] = useState(false);
   const [loveSending, setLoveSending] = useState(false);
+  const [isFocused, setIsFocused] = useState(navigation.isFocused());
+  const [questionAnswering, setQuestionAnswering] = useState(false);
+
+  const [carouselWidth, setCarouselWidth] = useState(0);
+  const [activeLetterSlide, setActiveLetterSlide] = useState(0);
+  const [appState, setAppState] = useState(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (status) => setAppState(status));
+    return () => sub.remove();
+  }, []);
+
+  const handleLetterScroll = (event: any) => {
+    const slideWidth = event.nativeEvent.layoutMeasurement.width;
+    if (slideWidth > 0) {
+      const offset = event.nativeEvent.contentOffset.x;
+      const index = Math.round(offset / slideWidth);
+      setActiveLetterSlide(index);
+    }
+  };
 
   // Trigger periodic tick to refresh online status calculations locally
   const [tick, setTick] = useState(0);
@@ -227,15 +249,45 @@ export function HomeScreen({ navigation }: Props) {
 
   // Focus listener to refresh data automatically when user comes to this screen
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      setIsFocused(true);
       if (user?.activeSpace === 'couple') {
         loadCoupleAll();
       } else {
         refresh();
       }
     });
-    return unsubscribe;
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setIsFocused(false);
+    });
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
   }, [navigation, user?.activeSpace, loadCoupleAll, refresh]);
+
+  // Real-time ephemeral broadcast status when answering today's daily question
+  useEffect(() => {
+    if (user?.activeSpace !== 'couple' || !couple?.id || !user?.id) return;
+    if (isFocused && appState === 'active') {
+      if (questionAnswering) {
+        useCoupleStore.getState().setMyActiveAction('answering_question');
+        broadcastPartnerAction(couple.id, user.id, 'answering_question');
+      } else {
+        const store = useCoupleStore.getState();
+        const cleared = store.clearMyActiveAction('answering_question');
+        if (cleared) {
+          broadcastPartnerAction(couple.id, user.id, 'idle');
+        }
+      }
+    } else {
+      const store = useCoupleStore.getState();
+      const cleared = store.clearMyActiveAction('answering_question');
+      if (cleared) {
+        broadcastPartnerAction(couple.id, user.id, 'idle');
+      }
+    }
+  }, [isFocused, appState, questionAnswering, user?.activeSpace, couple?.id, user?.id]);
 
   // Initial load
   useEffect(() => {
@@ -339,7 +391,7 @@ export function HomeScreen({ navigation }: Props) {
     };
   }, [partnerAction]);
 
-  // Realtime subscription for partner's lastSeenAt updates
+  // Realtime subscription for partner's lastSeenAt and mood updates
   useEffect(() => {
     if (user?.activeSpace !== 'couple' || !partner?.id) return;
 
@@ -348,14 +400,17 @@ export function HomeScreen({ navigation }: Props) {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${partner.id}` },
-        (payload) => {
+        async (payload) => {
           const p = payload.new as any;
+          const resolvedAvatar = await resolveAvatarUrl(p.avatar_url);
           setPartner({
             id: p.id,
             nickname: p.nickname || 'Partner',
             email: p.email || '',
-            avatarUrl: p.avatar_url,
+            avatarUrl: resolvedAvatar,
             lastSeenAt: p.last_seen_at,
+            currentMoodEmoji: p.current_mood_emoji,
+            currentMoodLabel: p.current_mood_label,
           });
         }
       )
@@ -375,18 +430,18 @@ export function HomeScreen({ navigation }: Props) {
     setMoodModal(false);
     if (!r.success) Alert.alert('Kami', r.error);
   };
-  
-  const handleRefresh = async () => { 
-    setRefreshing(true); 
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
     if (user?.activeSpace === 'couple') {
       await loadCoupleAll();
     } else {
-      await refresh(); 
+      await refresh();
     }
-    setRefreshing(false); 
+    setRefreshing(false);
   };
 
-  const activeGoals    = goals.filter(g => g.status === 'active');
+  const activeGoals = goals.filter(g => g.status === 'active');
   const completedToday = goals.filter(g => g.progress === 100).length;
 
   const activeCoupleGoals = coupleGoals.filter(g => g.status === 'active');
@@ -406,7 +461,7 @@ export function HomeScreen({ navigation }: Props) {
     const partnerAnswer = dailyAnswers.find(a => a.userId === partner?.id);
     const bothAnswered = myAnswer && partnerAnswer;
 
-    const relationshipDays = couple.anniversaryDate 
+    const relationshipDays = couple.anniversaryDate
       ? Math.max(1, Math.ceil((Date.now() - new Date(couple.anniversaryDate).getTime()) / 86400000))
       : 1;
 
@@ -449,7 +504,7 @@ export function HomeScreen({ navigation }: Props) {
       const isLocked = !checkUnlocked(l);
       dynamicTimeline.push({
         id: `letter-${l.id}`,
-        title: isLocked 
+        title: isLocked
           ? (l.senderId === user?.id ? 'Letter Sealed 🔒' : 'Letter Scheduled 🔒')
           : (l.senderId === user?.id ? 'Letter Opened' : 'Letter Opened ✉️'),
         time: getTimeAgo(l.createdAt),
@@ -483,16 +538,17 @@ export function HomeScreen({ navigation }: Props) {
     // Sort chronologically (newest first)
     dynamicTimeline.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-    // Dynamic Latest Letter Excerpt
-    const latestLetterFromPartner = coupleLetters
-      .filter(l => l.senderId !== user?.id && l.isUnlocked && !l.isDraft && !l.isArchived)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-    const letterExcerpt = latestLetterFromPartner && latestLetterFromPartner.body
-      ? (latestLetterFromPartner.body.length > 55 ? `“${latestLetterFromPartner.body.substring(0, 52)}...”` : `“${latestLetterFromPartner.body}”`)
-      : null;
-    const letterTimeAgo = latestLetterFromPartner
-      ? `Written ${getTimeAgo(latestLetterFromPartner.createdAt)}`
-      : null;
+    // Filter and sort letters for carousel (unlocked or locked/sealed, non-draft, non-archived)
+    const lettersForSlide = coupleLetters
+      .filter(l => !l.isDraft && !l.isArchived)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const friendlyDaysUntil = (iso: string) => {
+      const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
+      if (d <= 0) return 'Unlocked ✨';
+      if (d === 1) return 'Tomorrow';
+      return `${d} days left`;
+    };
 
     // Dynamic Latest Active Goal details
     const activeCoupleGoalsList = coupleGoals.filter(g => g.status === 'active');
@@ -519,16 +575,21 @@ export function HomeScreen({ navigation }: Props) {
     const getPresenceDescription = () => {
       switch (partnerAction) {
         case 'writing_letter': return `${partnerName} is writing a letter... ✍️`;
+        case 'editing_draft': return `${partnerName} is editing a draft... ✍️`;
         case 'reading_memories': return `${partnerName} is viewing memories... 📸`;
         case 'creating_goal': return `${partnerName} is composing a goal... 🎯`;
+        case 'editing_goal': return `${partnerName} is updating a goal... 🎯`;
         case 'reading_letter': return `${partnerName} is reading your letter... ❤️`;
         case 'writing_journal': return `${partnerName} is writing journal... 📓`;
+        case 'answering_prompt': return `${partnerName} is answering a prompt... 💭`;
+        case 'commenting_journal': return `${partnerName} is leaving a comment... 💬`;
         case 'sending_love': return `${partnerName} sent you love! ❤️`;
         case 'writing_memory': return `${partnerName} is sharing a memory... 📸`;
         case 'viewing_memory': return `${partnerName} is viewing a memory... 📸`;
         case 'reading_journal': return `${partnerName} is reading journal... 📓`;
         case 'viewing_goals': return `${partnerName} is viewing goals... 🎯`;
         case 'viewing_letters': return `${partnerName} is viewing letters... ✉️`;
+        case 'answering_question': return `${partnerName} is answering today's question... 💕`;
         default: return isPartnerOnline ? `${partnerName} is online` : '';
       }
     };
@@ -631,7 +692,7 @@ export function HomeScreen({ navigation }: Props) {
 
         {/* ── 1. FLOATING ISLAND HEADER ──────────────── */}
         <View style={hsStyles.floatingHeader}>
-          <TouchableOpacity 
+          <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => navigation.navigate('Settings')}
             style={hsStyles.headerAvatarGroup}
@@ -653,7 +714,7 @@ export function HomeScreen({ navigation }: Props) {
                 <Text style={{ fontSize: 10, color: colors.primary, fontWeight: 'bold' }}>{initial(partnerName)}</Text>
               </View>
             )}
-            
+
             {/* Status dot on the partner avatar */}
             <View style={[hsStyles.headerOnlineBadge, { backgroundColor: isPartnerOnline ? '#22c55e' : '#94a3b8' }]} />
           </TouchableOpacity>
@@ -667,14 +728,14 @@ export function HomeScreen({ navigation }: Props) {
           </View>
 
           <View style={hsStyles.headerActionsRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={hsStyles.headerActionCircle}
               onPress={() => Alert.alert('Search', 'Search couple space...')}
             >
               <Text style={{ fontSize: 15 }}>🔍</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={hsStyles.headerActionCircle}
               onPress={() => {
                 if (homeAlerts.length > 0) {
@@ -719,16 +780,34 @@ export function HomeScreen({ navigation }: Props) {
                   <KamiText style={hsStyles.presenceSub}>{partnerAction !== 'idle' ? 'Active now' : 'Online'}</KamiText>
                 </View>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[hsStyles.presenceViewBtn, { backgroundColor: colors.primary + '11' }]}
                 onPress={() => {
-                  if (partnerAction === 'writing_letter' || partnerAction === 'reading_letter' || partnerAction === 'viewing_letters') {
+                  if (
+                    partnerAction === 'writing_letter' || 
+                    partnerAction === 'editing_draft' || 
+                    partnerAction === 'reading_letter' || 
+                    partnerAction === 'viewing_letters'
+                  ) {
                     navigation.navigate('Future');
-                  } else if (partnerAction === 'reading_memories' || partnerAction === 'viewing_memory' || partnerAction === 'writing_memory') {
+                  } else if (
+                    partnerAction === 'reading_memories' || 
+                    partnerAction === 'viewing_memory' || 
+                    partnerAction === 'writing_memory'
+                  ) {
                     navigation.navigate('Memories');
-                  } else if (partnerAction === 'creating_goal' || partnerAction === 'viewing_goals') {
+                  } else if (
+                    partnerAction === 'creating_goal' || 
+                    partnerAction === 'editing_goal' || 
+                    partnerAction === 'viewing_goals'
+                  ) {
                     navigation.navigate('Goals');
-                  } else if (partnerAction === 'writing_journal' || partnerAction === 'reading_journal') {
+                  } else if (
+                    partnerAction === 'writing_journal' || 
+                    partnerAction === 'answering_prompt' || 
+                    partnerAction === 'commenting_journal' || 
+                    partnerAction === 'reading_journal'
+                  ) {
                     navigation.navigate('Journal');
                   }
                 }}
@@ -766,7 +845,7 @@ export function HomeScreen({ navigation }: Props) {
                 <KamiText style={hsStyles.heroTitleText}>{heroContent.title}</KamiText>
                 <KamiText style={[hsStyles.heroTitleScript, { color: colors.primaryLight }]}>{heroContent.script}</KamiText>
                 <KamiText style={hsStyles.heroTimeText}>{heroContent.time}</KamiText>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={hsStyles.heroCtaBtn}
                   onPress={() => navigation.navigate('Future')}
                 >
@@ -778,7 +857,7 @@ export function HomeScreen({ navigation }: Props) {
 
           {/* ── 4. QUICK ACTIONS SECTION ────────────────── */}
           <View style={hsStyles.quickActionsRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={hsStyles.quickCardCol}
               onPress={() => navigation.navigate('Future')}
             >
@@ -788,7 +867,7 @@ export function HomeScreen({ navigation }: Props) {
               <KamiText style={hsStyles.quickCardLabel} bold>Write Letter</KamiText>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={hsStyles.quickCardCol}
               onPress={() => navigation.navigate('Memories')}
             >
@@ -798,7 +877,7 @@ export function HomeScreen({ navigation }: Props) {
               <KamiText style={hsStyles.quickCardLabel} bold>Add Memory</KamiText>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={hsStyles.quickCardCol}
               onPress={() => navigation.navigate('Goals')}
             >
@@ -808,7 +887,7 @@ export function HomeScreen({ navigation }: Props) {
               <KamiText style={hsStyles.quickCardLabel} bold>New Goal</KamiText>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={hsStyles.quickCardCol}
               onPress={handleSendLove}
               disabled={loveSending}
@@ -818,6 +897,86 @@ export function HomeScreen({ navigation }: Props) {
               </View>
               <KamiText style={hsStyles.quickCardLabel} bold>Send Love</KamiText>
             </TouchableOpacity>
+          </View>
+
+          {/* ── NEW: COUPLE MOOD RING WIDGET ───────────── */}
+          <View style={hsStyles.moodRingCard}>
+            <View style={hsStyles.widgetTopRow}>
+              <KamiText style={hsStyles.widgetHeader} bold>Couple Mood Ring</KamiText>
+              <Text style={{ fontSize: 13 }}>🔮</Text>
+            </View>
+
+            <View style={hsStyles.moodRingAvatarsRow}>
+              {/* Left: You */}
+              <View style={hsStyles.moodRingUserCol}>
+                {user?.avatarUrl ? (
+                  <Image source={{ uri: user.avatarUrl }} style={hsStyles.moodRingAvatar} />
+                ) : (
+                  <View style={[hsStyles.moodRingAvatar, { backgroundColor: colors.creamDeep, alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold' }}>{initial(name)}</Text>
+                  </View>
+                )}
+                <KamiText variant="caption" color={Colors.textMuted} bold style={{ marginTop: 4 }}>You</KamiText>
+                <View style={[hsStyles.moodRingStatusPill, { backgroundColor: colors.primary + '11' }]}>
+                  <Text style={{ fontSize: 16 }}>{user?.currentMoodEmoji || '❓'}</Text>
+                  <KamiText variant="caption" color={colors.primary} bold style={{ fontSize: 10 }}>
+                    {user?.currentMoodEmoji ? user.currentMoodLabel : 'Set mood'}
+                  </KamiText>
+                </View>
+              </View>
+
+              {/* Center Connect Line */}
+              <View style={hsStyles.moodRingCenterLine}>
+                <Text style={{ fontSize: 16, color: colors.primary }}>💖</Text>
+              </View>
+
+              {/* Right: Partner */}
+              <View style={hsStyles.moodRingUserCol}>
+                {partner?.avatarUrl ? (
+                  <Image source={{ uri: partner.avatarUrl }} style={hsStyles.moodRingAvatar} />
+                ) : (
+                  <View style={[hsStyles.moodRingAvatar, { backgroundColor: colors.creamDeep, alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold' }}>{initial(partnerName)}</Text>
+                  </View>
+                )}
+                <KamiText variant="caption" color={Colors.textMuted} bold style={{ marginTop: 4 }}>{partnerName}</KamiText>
+                <View style={[hsStyles.moodRingStatusPill, { backgroundColor: '#F1F5F9' }]}>
+                  <Text style={{ fontSize: 16 }}>{partner?.currentMoodEmoji || '❓'}</Text>
+                  <KamiText variant="caption" color={Colors.textSecondary} bold style={{ fontSize: 10 }}>
+                    {partner?.currentMoodEmoji ? partner.currentMoodLabel : 'No mood set'}
+                  </KamiText>
+                </View>
+              </View>
+            </View>
+
+            {/* Quick Share Mood Chips */}
+            <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(0, 0, 0, 0.05)', paddingTop: Space[3], marginTop: Space[2] }}>
+              <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[2] }}>How are you feeling right now?</KamiText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={hsStyles.moodRingChipsRow}>
+                {MOODS.map(m => {
+                  const isCurrent = user?.currentMoodEmoji === m.emoji;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      onPress={async () => {
+                        await updateProfile({ currentMoodEmoji: m.emoji, currentMoodLabel: m.label });
+                        Alert.alert('Mood Updated 🌸', `You shared that you feel ${m.label} ${m.emoji}.`);
+                      }}
+                      style={[
+                        hsStyles.moodRingChip,
+                        { borderColor: isCurrent ? colors.primary : Colors.border + '55' },
+                        isCurrent && { backgroundColor: colors.primary + '11' }
+                      ]}
+                    >
+                      <Text style={{ fontSize: 16 }}>{m.emoji}</Text>
+                      <KamiText variant="caption" color={isCurrent ? colors.primary : Colors.textSecondary} bold={isCurrent}>
+                        {m.label}
+                      </KamiText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
           </View>
 
           {/* ── 5. OUR JOURNEY TIMELINE ─────────────────── */}
@@ -874,7 +1033,7 @@ export function HomeScreen({ navigation }: Props) {
                 <View style={hsStyles.flashbackContentBottom}>
                   <KamiText style={hsStyles.flashbackTitleText}>{flashbackTitle} ❤️</KamiText>
                   <KamiText style={hsStyles.flashbackDescText}>{flashbackDesc}</KamiText>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={hsStyles.flashbackCta}
                     onPress={() => navigation.navigate('Memories')}
                   >
@@ -887,40 +1046,104 @@ export function HomeScreen({ navigation }: Props) {
 
           {/* ── 7 & 8. WIDGETS ROW SPLIT ────────────────── */}
           <View style={hsStyles.widgetsSplitRow}>
-            {/* Latest Letter Excerpt Widget */}
-            <View style={hsStyles.tornPaperWidget}>
-              <View style={hsStyles.widgetTopRow}>
-                <KamiText style={hsStyles.widgetHeader} bold>Latest Letter</KamiText>
+            {/* Swipeable Letters Carousel Widget */}
+            <View style={[hsStyles.tornPaperWidget, { padding: 0 }]}>
+              <View style={[hsStyles.widgetTopRow, { paddingHorizontal: Space[4], paddingTop: Space[4] }]}>
+                <KamiText style={hsStyles.widgetHeader} bold>Letter Box</KamiText>
                 <Text style={{ fontSize: 13 }}>✉️</Text>
               </View>
-              {letterExcerpt ? (
-                <View style={{ gap: Space[2], flex: 1 }}>
-                  <View style={hsStyles.toLabelRow}>
-                    <Text style={{ fontSize: 10 }}>❤️</Text>
-                    <KamiText style={hsStyles.toLabelText} bold>To: My Love</KamiText>
-                  </View>
-                  <KamiText style={hsStyles.letterExcerptText}>
-                    {letterExcerpt}
-                  </KamiText>
-                  <KamiText style={hsStyles.letterWrittenText}>
-                    {letterTimeAgo}
-                  </KamiText>
+
+              {lettersForSlide.length > 0 ? (
+                <View 
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
+                >
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={handleLetterScroll}
+                    scrollEventThrottle={16}
+                    contentContainerStyle={{ alignItems: 'center' }}
+                  >
+                    {lettersForSlide.map((l) => {
+                      const isUnlocked = checkUnlocked(l);
+                      const isMe = l.senderId === user?.id;
+                      const senderLabel = isMe
+                        ? `To: ${partnerName}`
+                        : `From: ${partnerName}`;
+                      
+                      const excerpt = isUnlocked
+                        ? (l.body ? (l.body.length > 45 ? `“${l.body.substring(0, 42)}...”` : `“${l.body}”`) : 'No content')
+                        : 'A surprise sealed envelope. Ready to read in the future!';
+
+                      return (
+                        <View 
+                          key={l.id} 
+                          style={{ 
+                            width: carouselWidth || 160, 
+                            paddingHorizontal: Space[4], 
+                            paddingBottom: Space[2],
+                            justifyContent: 'center',
+                            gap: Space[2]
+                          }}
+                        >
+                          <View style={hsStyles.toLabelRow}>
+                            <Text style={{ fontSize: 10 }}>{isUnlocked ? '❤️' : '🔒'}</Text>
+                            <KamiText style={[hsStyles.toLabelText, { color: isMe ? colors.primary : Colors.textMuted }]} bold>
+                              {senderLabel}
+                            </KamiText>
+                          </View>
+                          <KamiText style={[hsStyles.letterExcerptText, !isUnlocked && { fontStyle: 'italic', color: Colors.textMuted }]}>
+                            {excerpt}
+                          </KamiText>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                            <KamiText style={hsStyles.letterWrittenText}>
+                              {isUnlocked ? `Written ${getTimeAgo(l.createdAt)}` : friendlyDaysUntil(l.deliverAt)}
+                            </KamiText>
+                            <TouchableOpacity
+                              onPress={() => navigation.navigate('Future')}
+                              hitSlop={8}
+                            >
+                              <KamiText style={{ fontSize: 11, color: colors.primary, fontWeight: 'bold' }}>
+                                {isUnlocked ? 'Read →' : 'View 🔒'}
+                              </KamiText>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
               ) : (
-                <View style={{ flex: 1, justifyContent: 'center', paddingVertical: Space[2] }}>
+                <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: Space[4], paddingBottom: Space[4] }}>
                   <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
                     No letters opened yet. Write a time capsule to surprise your partner!
                   </KamiText>
+                  <TouchableOpacity
+                    style={[hsStyles.widgetFooterCta, { marginTop: Space[2] }]}
+                    onPress={() => navigation.navigate('Future')}
+                  >
+                    <KamiText style={[hsStyles.widgetCtaText, { color: colors.primary }]} bold>
+                      Write Letter →
+                    </KamiText>
+                  </TouchableOpacity>
                 </View>
               )}
-              <TouchableOpacity 
-                style={hsStyles.widgetFooterCta}
-                onPress={() => navigation.navigate('Future')}
-              >
-                <KamiText style={[hsStyles.widgetCtaText, { color: colors.primary }]} bold>
-                  {letterExcerpt ? 'Read Letter →' : 'Write Letter →'}
-                </KamiText>
-              </TouchableOpacity>
+
+              {lettersForSlide.length > 1 && (
+                <View style={[hsStyles.carouselDots, { paddingBottom: Space[3] }]}>
+                  {lettersForSlide.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        hsStyles.carouselDot,
+                        { backgroundColor: i === activeLetterSlide ? colors.primary : Colors.border }
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
 
             {/* Our Goal Widget Card */}
@@ -935,7 +1158,7 @@ export function HomeScreen({ navigation }: Props) {
                     <KamiText style={hsStyles.goalWidgetTitle} bold>{goalTitle}</KamiText>
                     <KamiText style={hsStyles.goalWidgetDaysLeft}>{goalTimeRemainingText}</KamiText>
                   </View>
-                  
+
                   <View style={hsStyles.goalWidgetMiddle}>
                     <View style={hsStyles.avatarOverlapRow}>
                       {user?.avatarUrl ? (
@@ -977,7 +1200,7 @@ export function HomeScreen({ navigation }: Props) {
                 </View>
               )}
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={hsStyles.widgetFooterCta}
                 onPress={() => navigation.navigate('Goals')}
               >
@@ -988,48 +1211,85 @@ export function HomeScreen({ navigation }: Props) {
             </View>
           </View>
 
-          {/* Today's Daily Question (Retained functionality, styled nicely) */}
+          {/* Today's Daily Question (Redesigned, premium, elegant) */}
           {todayQuestion && (
-            <View style={[s.card, { borderColor: colors.primary + '33', marginTop: Space[4] }]}>
-              <View style={s.cardHeader}>
-                <View style={s.cardTitleRow}>
-                  <Text style={[s.cardIcon, { color: colors.primary }]}>✍️</Text>
-                  <KamiText variant="subtitle" bold>Today's Daily Question</KamiText>
-                </View>
+            <View style={hsStyles.dailyQuestionCard}>
+              {/* Header */}
+              <View style={hsStyles.widgetTopRow}>
+                <KamiText style={hsStyles.widgetHeader} bold>Daily Reflection 💭</KamiText>
+                {bothAnswered && (
+                  <View style={[hsStyles.completedBadge, { backgroundColor: colors.primary + '15' }]}>
+                    <KamiText variant="caption" color={colors.primary} bold>COMPLETED</KamiText>
+                  </View>
+                )}
               </View>
 
-              <View style={[s.promptCard, { borderColor: colors.primaryLight + '22', backgroundColor: colors.creamDeep + '22', padding: Space[4], gap: Space[1] }]}>
-                <KamiText variant="body" style={s.promptText} numberOfLines={3}>
+              {/* Question Text Box */}
+              <View style={[hsStyles.questionPromptBox, { backgroundColor: colors.creamDeep + '22', borderColor: colors.primaryLight + '22' }]}>
+                <KamiText variant="body" style={hsStyles.questionPromptText}>
                   “{todayQuestion.content}”
                 </KamiText>
               </View>
 
+              {/* Answers / Inputs */}
               {bothAnswered ? (
-                <View style={{ gap: Space[3], marginTop: Space[2] }}>
-                  <View style={[s.bubbleMine, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primaryLight + '44' }]}>
-                    <KamiText variant="caption" color={colors.primaryDark} bold>You answered:</KamiText>
-                    <KamiText variant="body" style={{ marginTop: 2, color: Colors.textPrimary }}>{myAnswer.response}</KamiText>
+                <View style={{ gap: Space[4], marginTop: Space[1] }}>
+                  {/* Mine */}
+                  <View style={hsStyles.bubbleContainer}>
+                    <View style={hsStyles.bubbleMetaRow}>
+                      {user?.avatarUrl ? (
+                        <Image source={{ uri: user.avatarUrl }} style={hsStyles.bubbleAvatar} />
+                      ) : (
+                        <View style={[hsStyles.bubbleAvatar, { backgroundColor: colors.creamDeep, alignItems: 'center', justifyContent: 'center' }]}>
+                          <KamiText style={{ fontSize: 9, color: colors.primary }} bold>Y</KamiText>
+                        </View>
+                      )}
+                      <KamiText variant="caption" color={Colors.textMuted} bold>You</KamiText>
+                    </View>
+                    <View style={[s.bubbleMine, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primaryLight + '44', alignSelf: 'flex-start' }]}>
+                      <KamiText variant="body" style={{ color: Colors.textPrimary, fontSize: 13, lineHeight: 18 }}>{myAnswer.response}</KamiText>
+                    </View>
                   </View>
-                  <View style={[s.bubblePartner, { backgroundColor: '#F8FAFC', borderColor: Colors.border + '44' }]}>
-                    <KamiText variant="caption" color={Colors.textMuted} bold>{partnerName} answered:</KamiText>
-                    <KamiText variant="body" style={{ marginTop: 2, color: Colors.textPrimary }}>{partnerAnswer.response}</KamiText>
+
+                  {/* Partner */}
+                  <View style={hsStyles.bubbleContainer}>
+                    <View style={hsStyles.bubbleMetaRow}>
+                      {partner?.avatarUrl ? (
+                        <Image source={{ uri: partner.avatarUrl }} style={hsStyles.bubbleAvatar} />
+                      ) : (
+                        <View style={[hsStyles.bubbleAvatar, { backgroundColor: colors.creamDeep, alignItems: 'center', justifyContent: 'center' }]}>
+                          <KamiText style={{ fontSize: 9, color: colors.primary }} bold>{partnerName[0]}</KamiText>
+                        </View>
+                      )}
+                      <KamiText variant="caption" color={Colors.textMuted} bold>{partnerName}</KamiText>
+                    </View>
+                    <View style={[s.bubblePartner, { backgroundColor: '#F8FAFC', borderColor: Colors.border + '44', alignSelf: 'flex-start' }]}>
+                      <KamiText variant="body" style={{ color: Colors.textPrimary, fontSize: 13, lineHeight: 18 }}>{partnerAnswer.response}</KamiText>
+                    </View>
                   </View>
                 </View>
               ) : myAnswer ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.success + '15', borderRadius: Radii.full, paddingHorizontal: Space[3], paddingVertical: Space[1], alignSelf: 'flex-start', marginTop: Space[2] }}>
-                  <Text style={{ fontSize: 11, color: Colors.success }}>✓</Text>
-                  <KamiText variant="caption" color={Colors.success} bold>You answered — Waiting for partner</KamiText>
+                <View style={hsStyles.waitingContainer}>
+                  <View style={[hsStyles.statusBadge, { backgroundColor: Colors.success + '15' }]}>
+                    <Text style={{ fontSize: 12, color: Colors.success }}>✓</Text>
+                    <KamiText variant="caption" color={Colors.success} bold>Answered</KamiText>
+                  </View>
+                  <KamiText variant="caption" color={Colors.textMuted} style={{ marginTop: 6, textAlign: 'center' }}>
+                    Waiting for {partnerName} to answer to reveal responses...
+                  </KamiText>
                 </View>
               ) : (
-                <View style={{ gap: Space[2], marginTop: Space[1] }}>
+                <View style={{ gap: Space[3], marginTop: Space[1] }}>
                   <TextInput
                     style={[s.answerInput, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11' }]}
-                    placeholder="Type your response to reveal..."
+                    placeholder="Type your response to reveal partner's answer..."
                     placeholderTextColor={Colors.textMuted}
                     value={answerInput}
                     onChangeText={setAnswerInput}
                     multiline
                     numberOfLines={3}
+                    onFocus={() => setQuestionAnswering(true)}
+                    onBlur={() => setQuestionAnswering(false)}
                   />
                   <KamiButton
                     label="Submit Answer"
@@ -1040,6 +1300,7 @@ export function HomeScreen({ navigation }: Props) {
                       await submitAnswer(todayQuestion.id, couple.id, answerInput.trim());
                       setAnswerInput('');
                       setSubmittingAnswerState(false);
+                      setQuestionAnswering(false);
                     }}
                   />
                 </View>
@@ -1057,23 +1318,48 @@ export function HomeScreen({ navigation }: Props) {
     <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
 
-      {/* ── TOP HEADER ───────────────────────────────────── */}
-      <View style={[s.topBar, { backgroundColor: colors.pageBg }]}>
-        <View style={{ flex: 1 }}>
-          <KamiText style={[s.kamiLogo, { color: colors.primary }]}>Kami</KamiText>
-          <KamiText variant="caption" color={Colors.textMuted} style={s.greeting}>
-            {greetingTime()}, {name} 🌸
-          </KamiText>
-        </View>
-        <View style={s.topBarRight}>
-          <TouchableOpacity style={[s.avatarWrap, { borderColor: colors.primary, backgroundColor: colors.creamDeep }]} onPress={() => navigation.navigate('Settings')}>
-            {user?.avatarUrl
-              ? <Image source={{ uri: user.avatarUrl }} style={s.avatarImg} />
-              : <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
-            }
+      {/* ── HERO HEADER SECTION ──────────────────────── */}
+      <LinearGradient
+        colors={[colors.primary + '1a', colors.primary + '02']}
+        style={s.singlesHero}
+      >
+        <View style={s.singlesHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <KamiText style={[s.kamiLogo, { color: colors.primary }]} bold>Kami</KamiText>
+            <KamiText variant="body" color={Colors.textSecondary} style={{ fontWeight: '500', marginTop: 2 }}>
+              {greetingTime()}, {name} 🌸
+            </KamiText>
+          </View>
+          <TouchableOpacity
+            style={[s.avatarWrap, { borderColor: colors.primary, backgroundColor: '#fff' }]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={s.avatarImg} />
+            ) : (
+              <Text style={[s.avatarLetter, { color: colors.primary }]}>{initial(name)}</Text>
+            )}
           </TouchableOpacity>
         </View>
-      </View>
+
+        {/* Dashboard Quick Stats Card */}
+        <View style={s.singlesStatsRow}>
+          <View style={s.singlesStatCard}>
+            <Text style={{ fontSize: 22 }}>🔥</Text>
+            <View>
+              <KamiText style={s.singlesStatNum} bold>{streak?.currentStreak ?? 0}</KamiText>
+              <KamiText variant="caption" color={Colors.textMuted}>Day Streak</KamiText>
+            </View>
+          </View>
+          <View style={s.singlesStatCard}>
+            <Text style={{ fontSize: 22 }}>🌸</Text>
+            <View>
+              <KamiText style={s.singlesStatNum} bold>{streak?.totalCheckins ?? 0}</KamiText>
+              <KamiText variant="caption" color={Colors.textMuted}>Check-ins</KamiText>
+            </View>
+          </View>
+        </View>
+      </LinearGradient>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1081,80 +1367,62 @@ export function HomeScreen({ navigation }: Props) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
 
-        {/* ── STREAK BANNER ────────────────────────────── */}
-        <View style={s.streakBanner}>
-          <View style={s.streakItem}>
-            <View style={[s.streakIconContainer, { backgroundColor: colors.creamDeep }]}>
-              <Text style={s.streakEmoji}>🔥</Text>
-            </View>
-            <View>
-              <KamiText style={s.streakNum}>{streak?.currentStreak ?? 0}</KamiText>
-              <KamiText variant="caption" color={Colors.textMuted} style={s.streakLabel}>days streak</KamiText>
-            </View>
-          </View>
-          <View style={s.streakDivider} />
-          <View style={s.streakItem}>
-            <View style={[s.streakIconContainer, { backgroundColor: colors.creamDeep }]}>
-              <Text style={s.streakEmoji}>🌸</Text>
-            </View>
-            <View>
-              <KamiText style={s.streakNum}>{streak?.totalCheckins ?? 0}</KamiText>
-              <KamiText variant="caption" color={Colors.textMuted} style={s.streakLabel}>total check-ins</KamiText>
-            </View>
-          </View>
-        </View>
-
-        {/* ── MOOD CHECK-IN ────────────────────────────── */}
-        <View style={s.card}>
+        {/* ── MOOD SANCTUARY ────────────────────────────── */}
+        <View style={s.singlesSectionCard}>
           <View style={s.cardHeader}>
             <View style={s.cardTitleRow}>
               <Text style={[s.cardIcon, { color: colors.primary }]}>✦</Text>
-              <KamiText variant="subtitle" bold>How are you feeling today?</KamiText>
+              <KamiText variant="subtitle" bold>Mood Sanctuary</KamiText>
             </View>
             {todayMood && (
-              <View style={[s.donePill, { backgroundColor: colors.primary + '18' }]}>
-                <Text style={{ fontSize: 11, color: colors.primary }}>✓</Text>
-                <KamiText variant="caption" color={colors.primary} bold>Done</KamiText>
+              <View style={[s.donePill, { backgroundColor: Colors.success + '18' }]}>
+                <Text style={{ fontSize: 11, color: Colors.success }}>✓</Text>
+                <KamiText variant="caption" color={Colors.success} bold>Logged</KamiText>
               </View>
             )}
           </View>
 
           {todayMood ? (
-            <Tap onPress={() => handleMoodPick(MOODS.find(m => m.id === todayMood.moodId) ?? MOODS[0])} style={[s.moodDone, { borderColor: colors.primary + '33', backgroundColor: colors.creamDeep + '22' }]}>
-              <View style={[s.moodDoneEmojiWrap, { borderColor: colors.primary + '18' }]}>
-                <Text style={{ fontSize: 36 }}>{todayMood.moodEmoji}</Text>
-              </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <View style={s.moodBadgeRow}>
-                  <View style={[s.moodBadge, { backgroundColor: colors.primary + '15' }]}>
-                    <KamiText variant="caption" color={colors.primary} bold>{todayMood.moodLabel}</KamiText>
-                  </View>
-                  <KamiText variant="caption" color={Colors.textMuted}>Logged today</KamiText>
+            <Tap onPress={() => handleMoodPick(MOODS.find(m => m.id === todayMood.moodId) ?? MOODS[0])} style={s.singlesMoodLoggedBox}>
+              <LinearGradient
+                colors={[colors.primary + '12', colors.primary + '03']}
+                style={s.singlesMoodLoggedGradient}
+              >
+                <View style={s.singlesMoodEmojiCircle}>
+                  <Text style={{ fontSize: 32 }}>{todayMood.moodEmoji}</Text>
                 </View>
-                <KamiText variant="body" style={s.moodNote}>
-                  {todayMood.note ? `“${todayMood.note}”` : 'Tap to add some thoughts or reflection...'}
-                </KamiText>
-              </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <KamiText variant="body" bold color={colors.primaryDark}>
+                    Feeling {todayMood.moodLabel}
+                  </KamiText>
+                  <KamiText variant="caption" color={Colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 18 }}>
+                    {todayMood.note ? `“${todayMood.note}”` : 'Tap to add some thoughts or reflection...'}
+                  </KamiText>
+                </View>
+              </LinearGradient>
             </Tap>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Space[4] }}>
-              <View style={s.moodRow}>
-                {MOODS.map(m => (
-                  <Tap key={m.id} onPress={() => handleMoodPick(m)} style={s.moodCircle}>
-                    <View style={[s.moodCircleEmojiWrap, { backgroundColor: colors.creamDeep }]}>
-                      <Text style={{ fontSize: 24 }}>{m.emoji}</Text>
-                    </View>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>{m.label}</KamiText>
-                  </Tap>
-                ))}
-              </View>
-            </ScrollView>
+            <View style={{ gap: Space[3] }}>
+              <KamiText variant="caption" color={Colors.textMuted}>How is your inner world today? Select to check in:</KamiText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Space[5] }} contentContainerStyle={{ paddingHorizontal: Space[5] }}>
+                <View style={s.singlesMoodRow}>
+                  {MOODS.map(m => (
+                    <Tap key={m.id} onPress={() => handleMoodPick(m)} style={s.singlesMoodCircle}>
+                      <View style={s.singlesMoodEmojiWrap}>
+                        <Text style={{ fontSize: 24 }}>{m.emoji}</Text>
+                      </View>
+                      <KamiText variant="caption" color={Colors.textSecondary} bold>{m.label}</KamiText>
+                    </Tap>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
           )}
 
           {recentMoods.length > 1 && (
-            <View style={s.weekRow}>
+            <View style={s.singlesWeekRow}>
               {recentMoods.slice(-7).map(m => (
-                <View key={m.id} style={s.weekDot}>
+                <View key={m.id} style={s.singlesWeekDot}>
                   <Text style={{ fontSize: 16 }}>{m.moodEmoji}</Text>
                   <KamiText variant="caption" style={{ fontSize: 9 }} color={Colors.textMuted}>
                     {new Date(m.loggedDate).toLocaleDateString(undefined, { weekday: 'narrow' })}
@@ -1165,50 +1433,52 @@ export function HomeScreen({ navigation }: Props) {
           )}
         </View>
 
-        {/* ── TODAY'S PROMPT ───────────────────────────── */}
+        {/* ── MINDFULNESS PROMPT ───────────────────────── */}
         {todayPrompt && (
           <Tap
             onPress={() => navigation.navigate('Journal')}
-            style={[s.promptCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}
+            style={s.singlesNotebookCard}
           >
-            <View style={[s.promptIconWrap, { backgroundColor: colors.primary + '15' }]}>
-              <Text style={{ fontSize: 20, color: colors.primary }}>✍️</Text>
+            <View style={s.notebookHeader}>
+              <View style={s.notebookSpiral} />
+              <KamiText variant="overline" color={colors.primary} bold>Mindfulness Prompt</KamiText>
             </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <KamiText variant="overline" color={colors.primary} bold>Daily Reflection</KamiText>
-              <KamiText variant="body" style={s.promptText} numberOfLines={3}>"{todayPrompt.content}"</KamiText>
-              <KamiText variant="caption" color={promptResponse ? Colors.success : colors.primary} bold>
-                {promptResponse ? '✓ Answered — Tap to edit' : 'Tap to reflect ›'}
+            <View style={s.notebookBody}>
+              <KamiText variant="body" style={s.notebookPromptText}>
+                “{todayPrompt.content}”
+              </KamiText>
+              <KamiText variant="caption" color={promptResponse ? Colors.success : colors.primary} bold style={{ marginTop: 8 }}>
+                {promptResponse ? '✓ Reflection written — Tap to view' : 'Write your thoughts ›'}
               </KamiText>
             </View>
           </Tap>
         )}
 
-        {/* ── JOURNAL PREVIEW ──────────────────────────── */}
-        <View style={s.card}>
+        {/* ── MY JOURNAL ──────────────────────────────── */}
+        <View style={s.singlesSectionCard}>
           <View style={s.cardHeader}>
             <View style={s.cardTitleRow}>
               <Text style={[s.cardIcon, { color: colors.primary }]}>📓</Text>
-              <KamiText variant="subtitle" bold>Journal</KamiText>
+              <KamiText variant="subtitle" bold>My Journal</KamiText>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Journal')} hitSlop={8}>
-              <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold>View All ›</KamiText>
             </TouchableOpacity>
           </View>
           {journalEntries.length === 0 ? (
-            <Tap onPress={() => navigation.navigate('Journal')} style={s.emptyInner}>
+            <Tap onPress={() => navigation.navigate('Journal')} style={s.singlesEmptyInner}>
               <KamiText variant="caption" color={Colors.textMuted} align="center">
-                No entries yet.{'\n'}Your first thought matters.
+                Your journal is a blank canvas.{'\n'}Document your dreams, thoughts, and lessons.
               </KamiText>
-              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Start writing ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[3] }}>Write your first entry ›</KamiText>
             </Tap>
           ) : (
             <View style={{ gap: Space[2] }}>
-              {journalEntries.slice(0, 1).map(e => (
-                <Tap key={e.id} onPress={() => navigation.navigate('Journal')} style={[s.journalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
-                  <View style={[s.journalPreviewDot, { backgroundColor: colors.primary }]} />
+              {journalEntries.slice(0, 2).map(e => (
+                <Tap key={e.id} onPress={() => navigation.navigate('Journal')} style={s.singlesJournalItem}>
+                  <View style={[s.singlesJournalDot, { backgroundColor: colors.primary }]} />
                   <View style={{ flex: 1, gap: 2 }}>
-                    <KamiText variant="label" numberOfLines={1} bold>
+                    <KamiText variant="label" numberOfLines={1} bold color={Colors.textPrimary}>
                       {e.title || 'Untitled entry'}
                     </KamiText>
                     <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>{e.body}</KamiText>
@@ -1222,60 +1492,68 @@ export function HomeScreen({ navigation }: Props) {
           )}
         </View>
 
-        {/* ── GOALS PREVIEW ────────────────────────────── */}
-        <View style={s.card}>
+        {/* ── MY GOALS ────────────────────────────────── */}
+        <View style={s.singlesSectionCard}>
           <View style={s.cardHeader}>
             <View style={s.cardTitleRow}>
               <Text style={[s.cardIcon, { color: colors.primary }]}>🌱</Text>
-              <KamiText variant="subtitle" bold>Goals</KamiText>
+              <KamiText variant="subtitle" bold>Personal Goals</KamiText>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Goals')} hitSlop={8}>
-              <KamiText variant="caption" color={colors.primary} bold>View all ›</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold>View All ›</KamiText>
             </TouchableOpacity>
           </View>
           {activeGoals.length === 0 ? (
-            <Tap onPress={() => navigation.navigate('Goals')} style={s.emptyInner}>
-              <KamiText variant="caption" color={Colors.textMuted} align="center">No active goals.</KamiText>
-              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Set your first goal ›</KamiText>
+            <Tap onPress={() => navigation.navigate('Goals')} style={s.singlesEmptyInner}>
+              <KamiText variant="caption" color={Colors.textMuted} align="center">No active goals set.</KamiText>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[3] }}>Grow a new habit ›</KamiText>
             </Tap>
           ) : (
             <View style={{ gap: Space[3] }}>
               {activeGoals.slice(0, 3).map(g => (
-                <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={[s.goalPreview, { backgroundColor: colors.creamDeep + '15' }]}>
-                  <Text style={{ fontSize: 20 }}>{g.emoji}</Text>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <KamiText variant="label" numberOfLines={1} bold>{g.title}</KamiText>
-                    <View style={[s.miniBar, { backgroundColor: colors.creamDeep }]}>
-                      <View style={[s.miniFill, { width: `${g.progress}%` as any, backgroundColor: colors.primary }]} />
+                <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={s.singlesGoalItem}>
+                  <View style={s.singlesGoalEmojiCircle}>
+                    <Text style={{ fontSize: 18 }}>{g.emoji}</Text>
+                  </View>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <KamiText variant="label" numberOfLines={1} bold color={Colors.textPrimary}>{g.title}</KamiText>
+                      <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
+                    </View>
+                    <View style={s.singlesProgressBar}>
+                      <View style={[s.singlesProgressFill, { width: `${g.progress}%` as any, backgroundColor: colors.primary }]} />
                     </View>
                   </View>
-                  <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
                 </Tap>
               ))}
-              {activeGoals.length > 3 && (
-                <KamiText variant="caption" color={Colors.textMuted} align="center">
-                  +{activeGoals.length - 3} more goals
-                </KamiText>
-              )}
             </View>
           )}
         </View>
 
-        {/* ── QUICK ACTIONS ROW ────────────────────────── */}
-        <View style={s.quickRow}>
-          <Tap onPress={() => navigation.navigate('Memories')} style={s.quickCard}>
-            <Text style={s.quickEmoji}>📸</Text>
-            <View>
-              <KamiText variant="label" bold>Memories</KamiText>
-              <KamiText variant="caption" color={Colors.textMuted}>Photo Vault</KamiText>
+        {/* ── ARCHIVE & CAPSULES ───────────────────────── */}
+        <View style={s.singlesQuickRow}>
+          <Tap onPress={() => navigation.navigate('Memories')} style={s.premiumHalfCard}>
+            <View style={[s.premiumHalfIconWrap, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '22' }]}>
+              <Text style={{ fontSize: 22 }}>📸</Text>
             </View>
+            <KamiText variant="label" bold color={Colors.textPrimary} align="center" style={{ marginTop: Space[2] }}>
+              Photo Sanctuary
+            </KamiText>
+            <KamiText variant="caption" color={Colors.textMuted} align="center">
+              Milestones & Vault
+            </KamiText>
           </Tap>
-          <Tap onPress={() => navigation.navigate('Future')} style={s.quickCard}>
-            <Text style={s.quickEmoji}>💌</Text>
-            <View>
-              <KamiText variant="label" bold>Future Letters</KamiText>
-              <KamiText variant="caption" color={Colors.textMuted}>Time Capsule</KamiText>
+
+          <Tap onPress={() => navigation.navigate('Future')} style={s.premiumHalfCard}>
+            <View style={[s.premiumHalfIconWrap, { backgroundColor: Colors.creamDeep, borderColor: Colors.creamMid }]}>
+              <Text style={{ fontSize: 22 }}>✉️</Text>
             </View>
+            <KamiText variant="label" bold color={Colors.textPrimary} align="center" style={{ marginTop: Space[2] }}>
+              Letters to Self
+            </KamiText>
+            <KamiText variant="caption" color={Colors.textMuted} align="center">
+              Time Capsules
+            </KamiText>
           </Tap>
         </View>
 
@@ -1296,8 +1574,8 @@ export default HomeScreen;
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  root:  { flex: 1, backgroundColor: Colors.pageBg },
-  scroll:{ paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[5] },
+  root: { flex: 1, backgroundColor: Colors.pageBg },
+  scroll: { paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[5] },
 
   // Top bar
   topBar: {
@@ -1326,9 +1604,9 @@ const s = StyleSheet.create({
     overflow: 'hidden', borderWidth: 2, borderColor: Colors.primary,
     ...Shadows.sm,
   },
-  avatarImg:    { width: '100%', height: '100%' },
+  avatarImg: { width: '100%', height: '100%' },
   avatarLetter: { color: Colors.primary, fontSize: FontSize.md, fontWeight: FontWeight.extrabold },
-  greeting:     { marginTop: 2, lineHeight: 18 },
+  greeting: { marginTop: 2, lineHeight: 18 },
   onlineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1442,9 +1720,9 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border + '55',
     ...Shadows.card,
   },
-  cardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitleRow:{ flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  cardIcon:    { fontSize: FontSize.lg },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
+  cardIcon: { fontSize: FontSize.lg },
   donePill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.primary + '18', borderRadius: Radii.full,
@@ -1492,8 +1770,8 @@ const s = StyleSheet.create({
   },
   moodNote: { fontStyle: 'italic', color: Colors.textSecondary, lineHeight: 20 },
   moodRow: { flexDirection: 'row', gap: Space[1], paddingHorizontal: Space[2] },
-  weekRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingTop: Space[3], borderTopWidth: 1, borderTopColor: Colors.border + '33', marginTop: Space[1] },
-  weekDot:    { alignItems: 'center', gap: 3 },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: Space[3], borderTopWidth: 1, borderTopColor: Colors.border + '33', marginTop: Space[1] },
+  weekDot: { alignItems: 'center', gap: 3 },
 
   // Prompt / Daily Question
   promptCard: {
@@ -1604,7 +1882,7 @@ const s = StyleSheet.create({
     gap: Space[4],
     alignItems: 'center',
   },
-  streakItem:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Space[3] },
+  streakItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Space[3] },
   streakIconContainer: {
     width: 42,
     height: 42,
@@ -1613,13 +1891,299 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  streakDivider:{ width: 1, height: 32, backgroundColor: Colors.border + '33' },
-  streakEmoji:  { fontSize: 20 },
-  streakNum:    { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: Colors.textPrimary, lineHeight: 22 },
-  streakLabel:  { fontSize: 10, marginTop: -2 },
+  streakDivider: { width: 1, height: 32, backgroundColor: Colors.border + '33' },
+  streakEmoji: { fontSize: 20 },
+  streakNum: { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: Colors.textPrimary, lineHeight: 22 },
+  streakLabel: { fontSize: 10, marginTop: -2 },
+
+  // Singles Revamp styles
+  singlesHero: {
+    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[3] : Space[3],
+    paddingBottom: Space[5],
+    paddingHorizontal: Space[5],
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    ...Shadows.md,
+    elevation: 3,
+  },
+  singlesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Space[4],
+  },
+  singlesStatsRow: {
+    flexDirection: 'row',
+    gap: Space[4],
+  },
+  singlesStatCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[3],
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[4],
+    ...Shadows.sm,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  singlesStatNum: {
+    fontSize: FontSize.lg + 2,
+    color: Colors.textPrimary,
+  },
+  singlesSectionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: Space[5],
+    gap: Space[4],
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.08)',
+    ...Shadows.card,
+  },
+  singlesMoodLoggedBox: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(201, 104, 130, 0.15)',
+  },
+  singlesMoodLoggedGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[4],
+    padding: Space[4],
+  },
+  singlesMoodEmojiCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+  },
+  singlesMoodRow: {
+    flexDirection: 'row',
+    gap: Space[2],
+  },
+  singlesMoodCircle: {
+    alignItems: 'center',
+    gap: 6,
+    width: 70,
+  },
+  singlesMoodEmojiWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FAF9F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  singlesWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: Space[3],
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    marginTop: Space[1],
+  },
+  singlesWeekDot: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  singlesNotebookCard: {
+    backgroundColor: '#FFFDF9',
+    borderRadius: 24,
+    padding: Space[5],
+    borderWidth: 1.5,
+    borderColor: '#EADECA',
+    ...Shadows.card,
+    elevation: 3,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  notebookHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Space[3],
+    paddingLeft: Space[2],
+  },
+  notebookSpiral: {
+    position: 'absolute',
+    top: -12,
+    left: 20,
+    right: 20,
+    height: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: '#D3C2B0',
+    borderStyle: 'dotted',
+  },
+  notebookBody: {
+    paddingLeft: Space[2],
+    borderLeftWidth: 1,
+    borderLeftColor: '#F0E5D8',
+    paddingVertical: Space[1],
+  },
+  notebookPromptText: {
+    fontFamily: FontFamily.display,
+    fontSize: FontSize.base,
+    fontStyle: 'italic',
+    lineHeight: 24,
+    color: '#5C4033',
+  },
+  singlesEmptyInner: {
+    alignItems: 'center',
+    paddingVertical: Space[4],
+  },
+  singlesJournalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[4],
+    paddingVertical: Space[3] + 2,
+    paddingHorizontal: Space[3] + 2,
+    borderRadius: 16,
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  singlesJournalDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  singlesGoalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[4],
+    paddingVertical: Space[3],
+    paddingHorizontal: Space[4],
+    borderRadius: 18,
+    backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+  },
+  singlesGoalEmojiCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.sm,
+    elevation: 1,
+  },
+  singlesProgressBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    overflow: 'hidden',
+  },
+  singlesProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  singlesQuickRow: {
+    flexDirection: 'row',
+    gap: Space[4],
+  },
+  premiumHalfCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingVertical: Space[5],
+    paddingHorizontal: Space[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.05)',
+    ...Shadows.card,
+    elevation: 2,
+    gap: 2,
+  },
+  premiumHalfIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    ...Shadows.sm,
+    elevation: 1,
+  },
 });
 
 const hsStyles = StyleSheet.create({
+  // Redesigned Daily Question Styles
+  dailyQuestionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: Space[5],
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+    ...Shadows.md,
+    marginHorizontal: Space[5],
+    marginBottom: Space[5],
+    gap: Space[4],
+  },
+  completedBadge: {
+    paddingHorizontal: Space[2] + 2,
+    paddingVertical: 2,
+    borderRadius: Radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  questionPromptBox: {
+    padding: Space[4],
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  questionPromptText: {
+    fontSize: FontSize.md,
+    fontStyle: 'italic',
+    fontWeight: '600',
+    lineHeight: 22,
+    color: '#4A3B32',
+    fontFamily: FontFamily.display,
+    textAlign: 'center',
+  },
+  bubbleContainer: {
+    gap: 4,
+    width: '100%',
+  },
+  bubbleMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  bubbleAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  waitingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Space[3],
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[1],
+    paddingHorizontal: Space[3],
+    paddingVertical: Space[1] - 2,
+    borderRadius: Radii.full,
+  },
+
   // Alerts stack
   alertsContainer: {
     position: 'absolute',
@@ -2234,6 +2798,80 @@ const hsStyles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Mood Ring Widget Styles
+  moodRingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: Space[5],
+    borderWidth: 1.5,
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+    ...Shadows.md,
+    elevation: 3,
+    marginHorizontal: Space[5],
+    marginBottom: Space[5],
+    gap: Space[4],
+  },
+  moodRingAvatarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Space[2],
+  },
+  moodRingUserCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  moodRingAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#fff',
+    ...Shadows.sm,
+    elevation: 2,
+  },
+  moodRingCenterLine: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Space[2],
+  },
+  moodRingStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Space[3],
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+    marginTop: Space[2],
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+  },
+  moodRingChipsRow: {
+    gap: Space[2],
+    paddingBottom: 4,
+  },
+  moodRingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Space[3],
+    paddingVertical: Space[2] - 2,
+    borderRadius: Radii.full,
+    borderWidth: 1.5,
+    backgroundColor: '#FAF9F6',
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });
 

@@ -1,6 +1,7 @@
 import { supabase } from '@shared/lib/supabase';
 import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
 import type { Result } from '@features/home/types';
+import { resolveAvatarUrl } from '../profile';
 import type { 
   Couple, CoupleInvitation, CoupleJournal, CoupleComment, CoupleReaction, 
   CoupleMemory, CoupleGoal, CoupleLetter, CoupleDailyQuestion, CoupleAnswer, 
@@ -36,13 +37,14 @@ export async function searchPartnerByShortId(shortId: string): Promise<Result<{ 
 
     if (error) return { success: false, error: friendly(error.message) };
     if (!data) return { success: false, error: 'No user found with that ID.' };
+    const resolvedAvatar = await resolveAvatarUrl(data.avatar_url);
     return {
       success: true,
       data: {
         id: data.id,
         nickname: data.nickname || '',
         email: data.email || '',
-        avatarUrl: data.avatar_url,
+        avatarUrl: resolvedAvatar,
       }
     };
   } catch (e) {
@@ -154,10 +156,14 @@ export async function fetchSentInvitations(): Promise<Result<CoupleInvitation[]>
 /** Decline or cancel a couple invitation */
 export async function updateInvitationStatus(invitationId: string, status: 'declined' | 'accepted'): Promise<Result<void>> {
   try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+
     const { error } = await supabase
       .from('couple_invitations')
       .update({ status })
-      .eq('id', invitationId);
+      .eq('id', invitationId)
+      .or(`sender_id.eq.${userRes.user.id},receiver_id.eq.${userRes.user.id}`);
 
     if (error) return { success: false, error: friendly(error.message) };
     return { success: true, data: undefined };
@@ -169,10 +175,14 @@ export async function updateInvitationStatus(invitationId: string, status: 'decl
 /** Permanently delete an invitation */
 export async function deleteInvitation(invitationId: string): Promise<Result<void>> {
   try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+
     const { error } = await supabase
       .from('couple_invitations')
       .delete()
-      .eq('id', invitationId);
+      .eq('id', invitationId)
+      .or(`sender_id.eq.${userRes.user.id},receiver_id.eq.${userRes.user.id}`);
 
     if (error) return { success: false, error: friendly(error.message) };
     return { success: true, data: undefined };
@@ -190,34 +200,23 @@ export async function acceptInvitation(
   senderNickname: string
 ): Promise<Result<string>> {
   try {
-    const coupleName = `${senderNickname} & ${myNickname}`;
-    const { data: couple, error: cErr } = await supabase
-      .from('couples')
-      .insert({ name: coupleName })
-      .select('id')
-      .single();
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
 
-    if (cErr || !couple) return { success: false, error: cErr?.message || 'Failed to create couple.' };
-
-    const { error: mErr } = await supabase
-      .from('couple_members')
-      .insert([
-        { couple_id: couple.id, user_id: senderId },
-        { couple_id: couple.id, user_id: receiverId }
-      ]);
-
-    if (mErr) {
-      await supabase.from('couples').delete().eq('id', couple.id);
-      if (mErr.code === '23505') return { success: false, error: 'One of the partners is already connected to a Couple Space.' };
-      return { success: false, error: mErr.message };
+    // Verify current user is receiver
+    if (userRes.user.id !== receiverId) {
+      return { success: false, error: 'You are not the receiver of this invitation.' };
     }
 
-    await supabase
-      .from('couple_invitations')
-      .update({ status: 'accepted' })
-      .eq('id', invitationId);
+    const coupleName = `${senderNickname} & ${myNickname}`;
+    const { data, error } = await supabase
+      .rpc('accept_couple_invitation', {
+        p_invitation_id: invitationId,
+        p_couple_name: coupleName
+      });
 
-    return { success: true, data: couple.id };
+    if (error || !data) return { success: false, error: friendly(error?.message ?? 'Failed to accept invitation.') };
+    return { success: true, data };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -226,7 +225,7 @@ export async function acceptInvitation(
 // ─── COUPLE CORE METADATA ────────────────────────────────────────────────────
 
 /** Fetch active couple connection details */
-export async function fetchActiveCouple(): Promise<Result<{ couple: Couple | null; partner: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null } | null }>> {
+export async function fetchActiveCouple(): Promise<Result<{ couple: Couple | null; partner: { id: string; nickname: string; email: string; avatarUrl: string | null; lastSeenAt?: string | null; currentMoodEmoji?: string | null; currentMoodLabel?: string | null } | null }>> {
   try {
     const { data: userRes } = await supabase.auth.getUser();
     if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
@@ -254,7 +253,7 @@ export async function fetchActiveCouple(): Promise<Result<{ couple: Couple | nul
     // Get partner info
     const { data: partnerMember, error: pErr } = await supabase
       .from('couple_members')
-      .select('user_id, profiles(id, nickname, email, avatar_url, last_seen_at)')
+      .select('user_id, profiles(id, nickname, email, avatar_url, last_seen_at, current_mood_emoji, current_mood_label)')
       .eq('couple_id', coupleObj.id)
       .neq('user_id', userRes.user.id)
       .maybeSingle();
@@ -262,12 +261,15 @@ export async function fetchActiveCouple(): Promise<Result<{ couple: Couple | nul
     let partnerObj = null;
     if (partnerMember && partnerMember.profiles) {
       const p = partnerMember.profiles as any;
+      const resolvedAvatar = await resolveAvatarUrl(p.avatar_url);
       partnerObj = {
         id: p.id,
         nickname: p.nickname || 'Partner',
         email: p.email || '',
-        avatarUrl: p.avatar_url,
+        avatarUrl: resolvedAvatar,
         lastSeenAt: p.last_seen_at,
+        currentMoodEmoji: p.current_mood_emoji,
+        currentMoodLabel: p.current_mood_label,
       };
     }
 
@@ -283,9 +285,25 @@ export async function fetchActiveCouple(): Promise<Result<{ couple: Couple | nul
   }
 }
 
+/** Helper to verify current user is a member of the couple space */
+async function checkMembership(coupleId: string): Promise<boolean> {
+  const { data: userRes } = await supabase.auth.getUser();
+  if (!userRes?.user) return false;
+  const { data, error } = await supabase
+    .from('couple_members')
+    .select('couple_id')
+    .eq('couple_id', coupleId)
+    .eq('user_id', userRes.user.id)
+    .maybeSingle();
+  return !!data && !error;
+}
+
 /** Update Couple metadata (anniversary date, custom name) */
 export async function updateCoupleDetails(coupleId: string, name: string, anniversaryDate: string | null): Promise<Result<void>> {
   try {
+    const isMember = await checkMembership(coupleId);
+    if (!isMember) return { success: false, error: 'Not a member of this couple.' };
+
     const { error } = await supabase
       .from('couples')
       .update({
@@ -305,6 +323,9 @@ export async function updateCoupleDetails(coupleId: string, name: string, annive
 /** Initiate deletion countdown (7-day recovery period) */
 export async function scheduleCoupleDeletion(coupleId: string): Promise<Result<string>> {
   try {
+    const isMember = await checkMembership(coupleId);
+    if (!isMember) return { success: false, error: 'Not a member of this couple.' };
+
     const deleteAt = new Date(Date.now() + 7 * 86400000).toISOString();
     const { error } = await supabase
       .from('couples')
@@ -324,6 +345,9 @@ export async function scheduleCoupleDeletion(coupleId: string): Promise<Result<s
 /** Restore/Cancel Couple deletion */
 export async function cancelCoupleDeletion(coupleId: string): Promise<Result<void>> {
   try {
+    const isMember = await checkMembership(coupleId);
+    if (!isMember) return { success: false, error: 'Not a member of this couple.' };
+
     const { error } = await supabase
       .from('couples')
       .update({
@@ -471,40 +495,40 @@ export async function fetchCoupleJournals(coupleId: string): Promise<Result<Coup
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const mapped: CoupleJournal[] = [];
-    for (const r of data ?? []) {
-      const resolvedImgs = await resolveSignedUrls('journal_images', r.image_urls || []);
-      mapped.push({
-        id: r.id,
-        coupleId: r.couple_id,
-        userId: r.user_id,
-        title: r.title,
-        body: r.body,
-        moodId: r.mood_id,
-        imageUrls: resolvedImgs,
-        tags: r.tags || [],
-        entryDate: r.entry_date,
-        isPinned: r.is_pinned,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-        userNickname: r.profiles?.nickname || 'Partner',
-        userAvatarUrl: r.profiles?.avatar_url,
-        comments: (r.couple_journal_comments ?? []).map((c: any) => ({
-          id: c.id,
-          entryId: c.entry_id,
-          userId: c.user_id,
-          body: c.body,
-          createdAt: c.created_at,
-          userNickname: c.profiles?.nickname || 'Partner',
-          userAvatarUrl: c.profiles?.avatar_url
-        })),
-        reactions: (r.couple_journal_reactions ?? []).map((rx: any) => ({
-          entryId: rx.entry_id,
-          userId: rx.user_id,
-          emoji: rx.emoji
-        }))
-      });
-    }
+    const resolvedImgsList = await Promise.all(
+      (data ?? []).map(r => resolveSignedUrls('journal_images', r.image_urls || []))
+    );
+
+    const mapped = (data ?? []).map((r, i) => ({
+      id: r.id,
+      coupleId: r.couple_id,
+      userId: r.user_id,
+      title: r.title,
+      body: r.body,
+      moodId: r.mood_id,
+      imageUrls: resolvedImgsList[i],
+      tags: r.tags || [],
+      entryDate: r.entry_date,
+      isPinned: r.is_pinned,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+      userNickname: r.profiles?.nickname || 'Partner',
+      userAvatarUrl: r.profiles?.avatar_url,
+      comments: (r.couple_journal_comments ?? []).map((c: any) => ({
+        id: c.id,
+        entryId: c.entry_id,
+        userId: c.user_id,
+        body: c.body,
+        createdAt: c.created_at,
+        userNickname: c.profiles?.nickname || 'Partner',
+        userAvatarUrl: c.profiles?.avatar_url
+      })),
+      reactions: (r.couple_journal_reactions ?? []).map((rx: any) => ({
+        entryId: rx.entry_id,
+        userId: rx.user_id,
+        emoji: rx.emoji
+      }))
+    }));
 
     return { success: true, data: mapped };
   } catch (e) {
@@ -651,20 +675,20 @@ export async function fetchCoupleMemories(coupleId: string): Promise<Result<Coup
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const mapped: CoupleMemory[] = [];
-    for (const r of data ?? []) {
-      const resolved = await resolveSignedUrls('memory_images', r.image_urls || []);
-      mapped.push({
-        id: r.id,
-        coupleId: r.couple_id,
-        title: r.title,
-        description: r.description,
-        imageUrls: resolved,
-        memoryDate: r.memory_date,
-        tags: r.tags || [],
-        createdAt: r.created_at
-      });
-    }
+    const resolvedImgsList = await Promise.all(
+      (data ?? []).map(r => resolveSignedUrls('memory_images', r.image_urls || []))
+    );
+
+    const mapped = (data ?? []).map((r, i) => ({
+      id: r.id,
+      coupleId: r.couple_id,
+      title: r.title,
+      description: r.description,
+      imageUrls: resolvedImgsList[i],
+      memoryDate: r.memory_date,
+      tags: r.tags || [],
+      createdAt: r.created_at
+    }));
 
     return { success: true, data: mapped };
   } catch (e) {

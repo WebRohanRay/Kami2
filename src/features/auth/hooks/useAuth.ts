@@ -4,6 +4,7 @@
  * No UI component should import from infrastructure directly.
  */
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import * as authService  from '@infrastructure/auth';
 import * as profileRepo  from '@infrastructure/profile';
 import { registerForPushNotificationsAsync } from '@infrastructure/notifications/notificationService';
@@ -60,16 +61,28 @@ export function useAuth() {
     if (!user?.id) return;
 
     const runHeartbeat = () => {
-      profileRepo.updateProfile(user.id, { lastSeenAt: new Date().toISOString() }).catch(() => {});
+      if (AppState.currentState === 'active') {
+        profileRepo.updateProfile(user.id, { lastSeenAt: new Date().toISOString() }).catch(() => {});
+      }
     };
 
     // Run immediately on active user session
     runHeartbeat();
 
-    // Set interval for every 30 seconds
-    const interval = setInterval(runHeartbeat, 30 * 1000);
+    // Set interval for every 60 seconds
+    const interval = setInterval(runHeartbeat, 60 * 1000);
 
-    return () => clearInterval(interval);
+    // Also listen to AppState change
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        runHeartbeat();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -179,7 +192,6 @@ export function useAuth() {
   }
 
   async function updateProfile(
-    userId: string,
     input: {
       nickname?: string;
       avatarUrl?: string;
@@ -193,15 +205,18 @@ export function useAuth() {
       currentMoodEmoji?: string;
     }
   ): Promise<Result<void>> {
-    const { setUser } = store();
-    const r = await profileRepo.updateProfile(userId, input);
+    const { setUser, user } = store();
+    if (!user?.id) return { success: false, error: 'Not authenticated.' };
+    const r = await profileRepo.updateProfile(user.id, input);
     if (!r.success) return r;
     setUser(r.data);
     return { success: true, data: undefined };
   }
 
-  async function exportData(userId: string): Promise<Result<Record<string, any>>> {
-    return profileRepo.exportUserData(userId);
+  async function exportData(): Promise<Result<Record<string, any>>> {
+    const { user } = store();
+    if (!user?.id) return { success: false, error: 'Not authenticated.' };
+    return profileRepo.exportUserData();
   }
 
   return {

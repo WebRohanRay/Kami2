@@ -11,7 +11,7 @@ import {
   ActivityIndicator, Alert, Animated, Keyboard, Modal,
   Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
-  Image, StatusBar as RNStatusBar,
+  Image, StatusBar as RNStatusBar, AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import KamiText from '@shared/ui/atoms/KamiText';
@@ -21,9 +21,9 @@ import { useAuthStore } from '@features/auth';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import type { Letter } from '@features/home/types';
 import type { CoupleLetter } from '@features/couple/types';
-import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCoupleStore, PartnerActionType } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
-import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
+import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import * as coupleService from '@infrastructure/couple/coupleService';
 import * as futureService from '@infrastructure/home/futureService';
 import { pickImages, uploadImages } from '@shared/lib/storage';
@@ -329,15 +329,23 @@ const WriteModal: React.FC<{
 
           {/* Subject */}
           <KamiText variant="overline" style={wm.label}>Subject</KamiText>
-          <TextInput style={[wm.input, { backgroundColor: colors.creamDeep }]} placeholder="To my future self…" placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
+          <TextInput style={[wm.input, { backgroundColor: '#FAF8F5', borderColor: '#E5DEC9' }]} placeholder="To my future self…" placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
 
           {/* Body */}
           <KamiText variant="overline" style={wm.label}>Your letter *</KamiText>
-          <TextInput
-            style={[wm.bodyInput, { backgroundColor: colors.creamDeep }]} placeholder="Dear future me,&#10;&#10;I hope you're well. Right now I'm thinking about…"
-            placeholderTextColor={Colors.textMuted} value={body} onChangeText={setBody}
-            multiline autoFocus={!draftLetter} textAlignVertical="top" maxLength={5000}
-          />
+          <View style={wm.paperWrapper}>
+            <TextInput
+              style={[wm.bodyInput, { backgroundColor: '#FFFDF6', color: '#4A3B32', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]} 
+              placeholder="Dear future me,&#10;&#10;I hope you're well. Right now I'm thinking about…"
+              placeholderTextColor="rgba(74, 59, 50, 0.4)" 
+              value={body} 
+              onChangeText={setBody}
+              multiline 
+              autoFocus={!draftLetter} 
+              textAlignVertical="top" 
+              maxLength={5000}
+            />
+          </View>
           <KamiText variant="caption" color={Colors.textMuted} align="right">{body.length} / 5000</KamiText>
 
           {/* Attachments */}
@@ -412,7 +420,8 @@ const wm = StyleSheet.create({
   customInput:  { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border, textAlign: 'center' },
   unlockDate:   { flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: Colors.rose100, borderRadius: Radii.card, padding: Space[3], marginVertical: Space[1] },
   input:        { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border },
-  bodyInput:    { backgroundColor: Colors.creamDeep, borderRadius: Radii.card, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border, minHeight: 220, lineHeight: 24, fontFamily: FontFamily.display },
+  bodyInput:    { paddingHorizontal: Space[4], paddingLeft: Space[6], paddingVertical: Space[3], fontSize: FontSize.base, color: '#4A3B32', minHeight: 220, lineHeight: 28, fontStyle: 'italic', borderLeftWidth: 1.5, borderLeftColor: '#fca5a5' },
+  paperWrapper: { position: 'relative', borderRadius: Radii.card, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden' },
   photoHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Space[4], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[3] },
   addPhotoBtn:  { paddingVertical: Space[1], paddingHorizontal: Space[2] },
   photoScroll:  { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
@@ -614,6 +623,12 @@ export function FutureScreen({ navigation }: Props) {
   }, []);
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
+  const [appState, setAppState] = useState(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => setAppState(next));
+    return () => sub.remove();
+  }, []);
 
   // Focus listener to refresh data on navigate focus
   useEffect(() => {
@@ -636,26 +651,26 @@ export function FutureScreen({ navigation }: Props) {
 
   // Real-time ephemeral broadcast status when entering/leaving screen or writing/reading
   useEffect(() => {
-    if (activeSpace === 'couple' && couple?.id && user?.id) {
-      if (isFocused) {
-        const action = writeOpen 
-          ? 'writing_letter' 
-          : readOpen 
-            ? 'reading_letter' 
-            : 'viewing_letters';
-        useCoupleStore.getState().setMyActiveAction(action);
-        broadcastPartnerAction(couple.id, user.id, action);
-      } else {
-        const store = useCoupleStore.getState();
-        const cleared1 = store.clearMyActiveAction('writing_letter');
-        const cleared2 = store.clearMyActiveAction('reading_letter');
-        const cleared3 = store.clearMyActiveAction('viewing_letters');
-        if (cleared1 || cleared2 || cleared3) {
-          broadcastPartnerAction(couple.id, user.id, 'idle');
-        }
+    if (activeSpace !== 'couple' || !couple?.id || !user?.id) return;
+    if (isFocused && appState === 'active') {
+      const action: PartnerActionType = writeOpen 
+        ? (editingDraft ? 'editing_draft' : 'writing_letter') 
+        : readOpen 
+          ? 'reading_letter' 
+          : 'viewing_letters';
+      useCoupleStore.getState().setMyActiveAction(action);
+      broadcastPartnerAction(couple.id, user.id, action);
+    } else {
+      const store = useCoupleStore.getState();
+      const cleared1 = store.clearMyActiveAction('writing_letter');
+      const cleared2 = store.clearMyActiveAction('editing_draft');
+      const cleared3 = store.clearMyActiveAction('reading_letter');
+      const cleared4 = store.clearMyActiveAction('viewing_letters');
+      if (cleared1 || cleared2 || cleared3 || cleared4) {
+        broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [activeSpace, couple?.id, user?.id, isFocused, writeOpen, readOpen]);
+  }, [activeSpace, couple?.id, user?.id, isFocused, appState, writeOpen, readOpen, editingDraft]);
 
   // Dual-mode loaders
   useEffect(() => {
@@ -916,7 +931,7 @@ export function FutureScreen({ navigation }: Props) {
       return !isUnlocked && !l.isDraft && !l.isArchived;
     }
     if (filterTab === 'drafts') {
-      return !!l.isDraft && !l.isArchived;
+      return !!l.isDraft && !l.isArchived && ('senderId' in l ? l.senderId === user?.id : true);
     }
     if (filterTab === 'favorites') {
       return !!l.isFavorite && !l.isDraft && !l.isArchived;
@@ -1114,32 +1129,34 @@ const LetterCard: React.FC<{
 
   const isUnlocked = checkUnlocked(letter);
 
-  // closed flap for sealed/unread ✉️, open sheet for read/unlocked 📄, and tied with a ribbon 🎀 for favorites
-  const getEnvelopeEmoji = () => {
-    if (letter.isDraft) return '📝';
-    if (letter.isFavorite) return '🎀';
-    if (isUnlocked) {
-      return letter.isRead ? '📄' : '✉️'; // open vs unread unlocked envelope
-    }
-    return '🔒'; // locked/sealed
-  };
-
   return (
     <TouchableOpacity activeOpacity={1} onPress={onOpen}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
       <Animated.View style={[
-        s.card, 
-        isUnlocked && [s.cardOpen, { borderColor: colors.primary + '33', backgroundColor: colors.creamDeep + '33' }], 
+        s.envelopeCard,
+        isUnlocked ? s.envelopeUnlocked : s.envelopeSealed,
         { transform: [{ scale: sc }] }
       ]}>
-        <View style={s.cardLeft}>
-          <Text style={{ fontSize: 32 }}>{getEnvelopeEmoji()}</Text>
+        {/* Envelope stamp/seal indicator on the left */}
+        <View style={s.envelopeStampCol}>
+          {isUnlocked ? (
+            <View style={[s.openedLetterIcon, { backgroundColor: colors.primary + '11' }]}>
+              <Text style={{ fontSize: 22 }}>📄</Text>
+            </View>
+          ) : (
+            <View style={s.waxSealCircle}>
+              <View style={s.waxSealInner}>
+                <Text style={s.waxSealSymbol}>⚜️</Text>
+              </View>
+            </View>
+          )}
         </View>
+
         <View style={{ flex: 1, gap: 4 }}>
           <View style={s.cardRow}>
-            <KamiText variant="label" numberOfLines={1} style={{ flex: 1 }}>{letter.subject}</KamiText>
+            <KamiText variant="label" numberOfLines={1} style={[s.letterSubject, { color: '#4A3B32' }]} bold>{letter.subject}</KamiText>
             <View style={s.cardActions}>
               <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} hitSlop={8} style={s.favBtn}>
                 <Text style={{ fontSize: 16, color: letter.isFavorite ? colors.primary : '#cbd5e1' }}>
@@ -1156,14 +1173,20 @@ const LetterCard: React.FC<{
               {senderText}
             </KamiText>
           )}
-          <KamiText variant="caption" color={isUnlocked ? colors.primary : Colors.textMuted} bold={isUnlocked}>
-            {daysUntil(letter.deliverAt)}
-          </KamiText>
+          
+          <View style={s.letterMetaRow}>
+            <Text style={{ fontSize: 11 }}>{isUnlocked ? '🔓' : '🔒'}</Text>
+            <KamiText variant="caption" color={isUnlocked ? colors.primary : Colors.textMuted} bold={isUnlocked}>
+              {daysUntil(letter.deliverAt)}
+            </KamiText>
+          </View>
+          
           <KamiText variant="caption" color={Colors.textMuted}>
             Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
           </KamiText>
+          
           {isUnlocked && !letter.isRead && (
-            <View style={s.newBadge}>
+            <View style={[s.newBadge, { backgroundColor: colors.primary }]}>
               <KamiText variant="caption" color="#fff" bold style={{ fontSize: 8 }}>NEW</KamiText>
             </View>
           )}
@@ -1189,9 +1212,74 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
   emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  card:     { flexDirection: 'row', gap: Space[3], backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], borderWidth: 1, borderColor: Colors.border + '44', ...Shadows.sm },
-  cardOpen: { borderStyle: 'solid' },
-  cardLeft: { alignItems: 'center', justifyContent: 'center', width: 44 },
+  envelopeCard: {
+    flexDirection: 'row',
+    gap: Space[4],
+    borderRadius: 20,
+    padding: Space[4],
+    borderWidth: 1.5,
+    ...Shadows.md,
+    backgroundColor: '#FAF8F2', // warm scrapbook paper background
+    elevation: 2,
+  },
+  envelopeSealed: {
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+    borderStyle: 'dashed',
+  },
+  envelopeUnlocked: {
+    borderColor: 'rgba(201, 104, 130, 0.22)',
+    backgroundColor: '#FFFDF9', // open paper background
+  },
+  envelopeStampCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+  },
+  openedLetterIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waxSealCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#991b1b', // crimson red wax
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#7f1d1d',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  waxSealInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#b91c1c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waxSealSymbol: {
+    color: '#FCD34D', // gold seal symbol
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  letterSubject: {
+    fontSize: FontSize.sm + 1,
+    fontFamily: FontFamily.display,
+  },
+  letterMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   cardRow:  { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
   cardActions: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
   favBtn:   { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '33' },
@@ -1211,7 +1299,6 @@ const s = StyleSheet.create({
     position: 'absolute',
     right: 0,
     bottom: 0,
-    backgroundColor: '#ec4899', // Pink
     borderRadius: Radii.sm,
     paddingHorizontal: Space[1] + 1,
     paddingVertical: 1,

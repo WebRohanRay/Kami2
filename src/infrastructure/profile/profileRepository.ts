@@ -45,11 +45,11 @@ function clean(v: string | undefined | null): string | undefined {
   return t || undefined;
 }
 
-async function resolveAvatarUrl(path: string | null | undefined): Promise<string | null> {
+export async function resolveAvatarUrl(path: string | null | undefined): Promise<string | null> {
   if (!path) return null;
   if (path.startsWith('http')) return path;
   try {
-    const { data } = await supabase.storage.from('avatars').createSignedUrl(path, 31536000); // 1 year signed URL
+    const { data } = await supabase.storage.from('avatars').createSignedUrl(path, 3600); // 1 hour signed URL
     return data?.signedUrl ?? null;
   } catch (error) {
     console.error('resolveAvatarUrl error:', error);
@@ -93,17 +93,58 @@ export function supabaseUserToAuthUser(user: User): AuthUser {
 export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>> {
   const base = supabaseUserToAuthUser(user);
 
-  const { data, error } = await supabase
+  // 1. Try to fetch the existing profile first (avoids blind upsert overwrites of nickname/avatar)
+  let { data, error } = await supabase
     .from('profiles')
-    .upsert(
-      { id: user.id, email: base.email, nickname: base.nickname ?? null, avatar_url: base.avatarUrl ?? null },
-      { onConflict: 'id' }
-    )
     .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
-    .single();
+    .eq('id', user.id)
+    .maybeSingle();
 
-  if (error || !data) {
+  // 2. If profile is not found, upsert/create it
+  if (!data && !error) {
+    const { data: upsertedData, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(
+        { id: user.id, email: base.email, nickname: base.nickname ?? null, avatar_url: base.avatarUrl ?? null },
+        { onConflict: 'id' }
+      )
+      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
+      .single();
+
+    if (upsertError) {
+      console.error('[profileRepository] fetchOrCreateProfile upsert failed:', upsertError);
+      return { success: false, error: 'Could not create your profile. Please try again.' };
+    }
+    data = upsertedData;
+  } else if (error) {
+    console.error('[profileRepository] fetchOrCreateProfile select failed:', error);
     return { success: false, error: 'Could not load your profile. Please try again.' };
+  }
+
+  if (!data) {
+    return { success: false, error: 'Profile data is unavailable. Please try again.' };
+  }
+
+  // 3. Self-heal null KAMI IDs
+  if (!data.kami_id) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let newId = 'KAMI-';
+    for (let i = 0; i < 6; i++) {
+      newId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const { data: updatedData, error: updateError } = await supabase
+      .from('profiles')
+      .update({ kami_id: newId })
+      .eq('id', user.id)
+      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
+      .single();
+
+    if (updateError) {
+      console.error('[profileRepository] fetchOrCreateProfile self-healing update failed:', updateError);
+    }
+    if (updatedData) {
+      data = updatedData;
+    }
   }
   
   const resolvedAvatar = await resolveAvatarUrl(data.avatar_url);
@@ -146,8 +187,12 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
   return { success: true, data: rowToAuthUser(data as ProfileRow, base, resolvedAvatar) };
 }
 
-export async function exportUserData(userId: string): Promise<Result<Record<string, any>>> {
+export async function exportUserData(): Promise<Result<Record<string, any>>> {
   try {
+    const { data: userRes } = await supabase.auth.getUser();
+    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+    const userId = userRes.user.id;
+
     const [
       profile,
       moods,

@@ -10,9 +10,10 @@ import {
   ActivityIndicator, Alert, Animated, Keyboard, Modal,
   Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
-  Image, StatusBar as RNStatusBar,
+  Image, StatusBar as RNStatusBar, AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useHome }      from '@features/home/hooks';
 import { useHomeStore } from '@features/home/store';
 import { useAuthStore } from '@features/auth';
@@ -21,9 +22,9 @@ import KamiText         from '@shared/ui/atoms/KamiText';
 import { Colors, FontSize, FontWeight, Radii, Shadows, Space, FontFamily } from '@shared/constants';
 import type { Goal, GoalCategory } from '@features/home/types';
 import type { CoupleGoal } from '@features/couple/types';
-import { useCoupleStore } from '@features/couple/store/coupleStore';
+import { useCoupleStore, PartnerActionType } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
-import { broadcastPartnerAction } from '@features/couple/components/CoupleRealtimeListener';
+import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { pickImages, uploadImages } from '@shared/lib/storage';
 import { useTheme }     from '@shared/hooks';
@@ -205,6 +206,13 @@ export function GoalsScreen({ navigation }: Props) {
   const [saving,       setSaving]       = useState(false);
   const [refreshing,   setRefreshing]   = useState(false);
   const [isFocused,    setIsFocused]    = useState(navigation.isFocused());
+  const [appState,     setAppState]     = useState(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => setAppState(next));
+    return () => sub.remove();
+  }, []);
+
   const [filter,       setFilter]       = useState<'all' | GoalCategory>('all');
 
   const [visibleActive,    setVisibleActive]    = useState(10);
@@ -236,21 +244,23 @@ export function GoalsScreen({ navigation }: Props) {
 
   // Real-time ephemeral broadcast status when adding/editing a goal
   useEffect(() => {
-    if (activeSpace === 'couple' && couple?.id && user?.id) {
-      if (isFocused) {
-        const action = modalVisible ? 'creating_goal' : 'viewing_goals';
-        useCoupleStore.getState().setMyActiveAction(action);
-        broadcastPartnerAction(couple.id, user.id, action);
-      } else {
-        const store = useCoupleStore.getState();
-        const cleared1 = store.clearMyActiveAction('creating_goal');
-        const cleared2 = store.clearMyActiveAction('viewing_goals');
-        if (cleared1 || cleared2) {
-          broadcastPartnerAction(couple.id, user.id, 'idle');
-        }
+    if (activeSpace !== 'couple' || !couple?.id || !user?.id) return;
+    if (isFocused && appState === 'active') {
+      const action: PartnerActionType = modalVisible 
+        ? (editing ? 'editing_goal' : 'creating_goal') 
+        : 'viewing_goals';
+      useCoupleStore.getState().setMyActiveAction(action);
+      broadcastPartnerAction(couple.id, user.id, action);
+    } else {
+      const store = useCoupleStore.getState();
+      const cleared1 = store.clearMyActiveAction('creating_goal');
+      const cleared2 = store.clearMyActiveAction('editing_goal');
+      const cleared3 = store.clearMyActiveAction('viewing_goals');
+      if (cleared1 || cleared2 || cleared3) {
+        broadcastPartnerAction(couple.id, user.id, 'idle');
       }
     }
-  }, [isFocused, modalVisible, activeSpace, couple?.id, user?.id]);
+  }, [isFocused, appState, modalVisible, editing, activeSpace, couple?.id, user?.id]);
 
   // Dual-mode loaders
   useEffect(() => {
@@ -496,11 +506,17 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
   const cat = CATEGORIES.find(c => c.id === goal.category);
   const imageUrl = 'imageUrl' in goal ? (goal as any).imageUrl : null;
 
-  // Plant growth stage representation: Sprout Seed 🌱 (<30%), Growing Vine 🌿 (30-99%), Blooming Flower 🌸 (100%)
-  const getPlantEmoji = () => {
+  // Plant growth stage representation: Sprout 🌱 (<30%), Growing Vine 🌿 (30-99%), Blooming Flower 🌸 (100%)
+  const getStageEmoji = () => {
     if (goal.progress < 30) return '🌱';
     if (goal.progress < 100) return '🌿';
     return '🌸';
+  };
+
+  const getStageName = () => {
+    if (goal.progress < 30) return 'Sprouting Stage';
+    if (goal.progress < 100) return 'Growing Stage';
+    return 'Full Bloom';
   };
 
   return (
@@ -523,8 +539,8 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
         )}
 
         <View style={s.cardTop}>
-          <View style={s.gardenBadge}>
-            <Text style={{ fontSize: 22 }}>{getPlantEmoji()}</Text>
+          <View style={[s.gardenBadge, { borderColor: completed ? '#6EE7B7' : '#A7F3D0' }]}>
+            <Text style={{ fontSize: 20 }}>{getStageEmoji()}</Text>
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <KamiText variant="label" numberOfLines={1} style={[imageUrl && { color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0,height:1}, textShadowRadius: 2 }, { color: Colors.textPrimary }]}>
@@ -545,13 +561,59 @@ const GoalCard: React.FC<{ goal: Goal | CoupleGoal; onEdit: () => void; onDelete
           </TouchableOpacity>
         </View>
 
-        <View style={s.progRow}>
-          <View style={[s.progTrack, { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.primary + '18' }]}>
-            <View style={[s.progFill, { width: `${goal.progress}%` as any, backgroundColor: completed ? Colors.success : colors.primary }]} />
+        {/* Organic Progress Section */}
+        <View style={s.organicProgSection}>
+          <View style={s.organicProgHeader}>
+            <View style={s.stageIndicator}>
+              <Text style={{ fontSize: 12 }}>{getStageEmoji()}</Text>
+              <KamiText variant="caption" bold color={completed ? Colors.success : colors.primary}>
+                {getStageName()}
+              </KamiText>
+            </View>
+            <KamiText variant="caption" bold color={completed ? Colors.success : colors.primary}>
+              {goal.progress}%
+            </KamiText>
           </View>
-          <KamiText variant="caption" color={completed ? Colors.success : colors.primary} bold style={{ minWidth: 36, ...Platform.select({ web: { textAlign: 'right' } }) }}>
-            {goal.progress}%
-          </KamiText>
+
+          <View style={s.vineTrackContainer}>
+            {/* Vine background line */}
+            <View style={s.vineBg} />
+            {/* Active vine progress line */}
+            <LinearGradient
+              colors={completed ? ['#34D399', '#059669'] : [colors.primary, colors.primaryDark || colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[s.vineFill, { width: `${goal.progress}%` }]}
+            />
+
+            {/* Organic Growth Notches */}
+            {/* Sprout Notch at 30% */}
+            <View style={[
+              s.vineNotch, 
+              { left: '30%' }, 
+              goal.progress >= 30 && [s.vineNotchActive, { borderColor: completed ? Colors.success : colors.primary }]
+            ]}>
+              <Text style={[s.vineNotchEmoji, { opacity: goal.progress >= 30 ? 1 : 0.4 }]}>🌱</Text>
+            </View>
+
+            {/* Grow Notch at 70% */}
+            <View style={[
+              s.vineNotch, 
+              { left: '70%' }, 
+              goal.progress >= 70 && [s.vineNotchActive, { borderColor: completed ? Colors.success : colors.primary }]
+            ]}>
+              <Text style={[s.vineNotchEmoji, { opacity: goal.progress >= 70 ? 1 : 0.4 }]}>🌿</Text>
+            </View>
+
+            {/* Bloom Notch at 100% */}
+            <View style={[
+              s.vineNotch, 
+              { left: '100%' }, 
+              goal.progress >= 100 && [s.vineNotchActive, { borderColor: completed ? Colors.success : '#34D399' }]
+            ]}>
+              <Text style={[s.vineNotchEmoji, { opacity: goal.progress >= 100 ? 1 : 0.4 }]}>🌸</Text>
+            </View>
+          </View>
         </View>
 
         {!completed && (
@@ -604,9 +666,16 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
   emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
 
-  card:     { position: 'relative', borderRadius: Radii.card, padding: Space[4], gap: Space[3], borderWidth: 1.5, overflow: 'hidden', ...Shadows.sm },
-  cardActive: { backgroundColor: '#f0fdf4', borderColor: '#dcfce7' }, // Soft organic light green
-  cardDone: { opacity: 0.85, backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }, // Soft completion mint green
+  card:     { position: 'relative', borderRadius: Radii.card, padding: Space[4], gap: Space[3], borderWidth: 1.5, overflow: 'hidden', ...Shadows.md, elevation: 3 },
+  cardActive: {
+    backgroundColor: '#FFFDFD',
+    borderColor: 'rgba(201, 104, 130, 0.12)',
+  },
+  cardDone: {
+    opacity: 0.9,
+    backgroundColor: '#F3FAF6',
+    borderColor: '#CBECE0',
+  },
   
   // Cover Photo
   cardCoverWrap:{ ...StyleSheet.absoluteFillObject, height: 80, overflow: 'hidden' },
@@ -614,15 +683,66 @@ const s = StyleSheet.create({
   cardCoverOverlay:{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
 
   gardenBadge:{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#dcfce7', ...Shadows.sm },
-  emojiBadge:{ fontSize: 24, width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', textAlign: 'center', lineHeight: Platform.OS === 'ios' ? 34 : 30 },
   cardTop:  { flexDirection: 'row', alignItems: 'center', gap: Space[3], zIndex: 1 },
   delBtn:   { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.creamDeep, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border + '33', zIndex: 2 },
-  progRow:  { flexDirection: 'row', alignItems: 'center', gap: Space[3] },
-  progTrack:{ flex: 1, height: 8, backgroundColor: Colors.creamDeep, borderRadius: 4, overflow: 'hidden' },
-  progFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 4 },
+  
+  organicProgSection: {
+    gap: Space[2],
+    marginVertical: Space[1],
+  },
+  organicProgHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  stageIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[1],
+  },
+  vineTrackContainer: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+    position: 'relative',
+    marginVertical: Space[3],
+    marginHorizontal: Space[2],
+  },
+  vineBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 3,
+  },
+  vineFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  vineNotch: {
+    position: 'absolute',
+    top: -9,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ translateX: -12 }],
+    ...Shadows.sm,
+  },
+  vineNotchActive: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 2,
+    ...Shadows.md,
+  },
+  vineNotchEmoji: {
+    fontSize: 12,
+  },
+
   controls: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  ctrlBtnMinus: { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: '#fff', borderWidth: 1, borderColor: Colors.border + '33' },
-  ctrlBtnPlus:  { paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.sm, backgroundColor: Colors.primary },
+  ctrlBtnMinus: { paddingHorizontal: Space[4], paddingVertical: Space[2], borderRadius: Radii.full, backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: '#FFE3E3', alignItems: 'center', justifyContent: 'center' },
+  ctrlBtnPlus:  { paddingHorizontal: Space[4], paddingVertical: Space[2], borderRadius: Radii.full, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   completedBadge:{ flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: '#d1fae5', borderRadius: Radii.sm, paddingHorizontal: Space[3], paddingVertical: Space[2], alignSelf: 'flex-start', borderWidth: 1, borderColor: '#6ee7b7' },
   loadMoreBtn: {
     alignItems: 'center',

@@ -69,7 +69,17 @@ export async function uploadAvatar(
       };
     }
 
-    const path = `${userId}/avatar.jpg`;
+    // Fetch current profile to get old avatar path
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', userId)
+      .maybeSingle();
+
+    const oldPath = profile?.avatar_url;
+
+    // Generate unique new path to bypass image caching issues
+    const path = `${userId}/avatar-${Date.now()}.jpg`;
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
@@ -83,6 +93,11 @@ export async function uploadAvatar(
         success: false,
         error: 'Could not upload your photo.',
       };
+    }
+
+    // Delete old avatar from storage bucket if it was a storage file
+    if (oldPath && !oldPath.startsWith('http')) {
+      await supabase.storage.from('avatars').remove([oldPath]);
     }
 
     return {

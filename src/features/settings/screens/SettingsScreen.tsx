@@ -398,7 +398,7 @@ export function SettingsScreen({ navigation }: Props) {
     if (!next) { Alert.alert('Kami', 'Nickname cannot be empty.'); return; }
 
     setSavingNickname(true);
-    const result = await updateProfile(user.id, { nickname: next });
+    const result = await updateProfile({ nickname: next });
     setSavingNickname(false);
     if (!result.success) { Alert.alert('Kami', result.error); return; }
     setEditingProfile(false);
@@ -485,7 +485,7 @@ export function SettingsScreen({ navigation }: Props) {
     if (r.success) {
       Alert.alert('Kami', 'Couple Space created! Welcome to your shared space. ❤️');
       await loadCoupleInfo();
-      await updateProfile(user.id, { activeSpace: 'couple' });
+      await updateProfile({ activeSpace: 'couple' });
     } else {
       Alert.alert('Kami', r.error);
     }
@@ -511,7 +511,7 @@ export function SettingsScreen({ navigation }: Props) {
       return;
     }
     setLoadingCouple(true);
-    const r = await updateProfile(user.id, { activeSpace: space });
+    const r = await updateProfile({ activeSpace: space });
     setLoadingCouple(false);
     if (!r.success) {
       Alert.alert('Kami', r.error);
@@ -554,7 +554,7 @@ export function SettingsScreen({ navigation }: Props) {
             if (r.success) {
               Alert.alert('Kami', 'Couple Space deletion scheduled. You have 7 days to restore it.');
               await loadCoupleInfo();
-              await updateProfile(user!.id, { activeSpace: 'personal' });
+              await updateProfile({ activeSpace: 'personal' });
             } else {
               Alert.alert('Kami', r.error);
             }
@@ -589,7 +589,7 @@ export function SettingsScreen({ navigation }: Props) {
     if (!uploaded.success) { setAvatarLoading(false); Alert.alert('Kami', uploaded.error); return; }
     
     // Save relative path, profileRepo resolves fresh signed URL
-    const saved = await updateProfile(user.id, { avatarUrl: uploaded.path });
+    const saved = await updateProfile({ avatarUrl: uploaded.path });
     setAvatarLoading(false);
     if (!saved.success) { Alert.alert('Kami', saved.error); return; }
     Alert.alert('Kami', 'Display photo updated! 🌸');
@@ -597,7 +597,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleTogglePref = async (key: 'dailyReminder' | 'weeklyDigest' | 'streakAlerts', val: boolean) => {
     if (!user?.id) return;
-    const r = await updateProfile(user.id, { [key]: val });
+    const r = await updateProfile({ [key]: val });
     if (!r.success) {
       Alert.alert('Kami', r.error);
     }
@@ -605,7 +605,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleThemeSelect = async (themeId: string) => {
     if (!user?.id) return;
-    const r = await updateProfile(user.id, { theme: themeId });
+    const r = await updateProfile({ theme: themeId });
     if (!r.success) {
       Alert.alert('Kami', r.error);
     } else {
@@ -615,14 +615,14 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleTextSizeSelect = async (sizeId: string) => {
     if (!user?.id) return;
-    const r = await updateProfile(user.id, { textSize: sizeId });
+    const r = await updateProfile({ textSize: sizeId });
     if (!r.success) Alert.alert('Kami', r.error);
   };
 
   const handleExportData = async () => {
     if (!user?.id) return;
     setExporting(true);
-    const r = await exportData(user.id);
+    const r = await exportData();
     setExporting(false);
     if (!r.success) { Alert.alert('Kami', r.error); return; }
 
