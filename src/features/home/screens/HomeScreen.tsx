@@ -38,6 +38,7 @@ import {
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { useTheme } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
+import { resolveSignedUrls } from '@shared/lib/storage';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
 import { supabase } from '@shared/lib/supabase';
@@ -435,6 +436,25 @@ export function HomeScreen({ navigation }: Props) {
   const [nextEventText, setNextEventText] = useState('');
   const [customMoodModalVisible, setCustomMoodModalVisible] = useState(false);
   const [customMoodSaving, setCustomMoodSaving] = useState(false);
+  const [resolvedHeroBg, setResolvedHeroBg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.heroBgUrl) {
+      if (user.heroBgUrl.startsWith('http')) {
+        setResolvedHeroBg(user.heroBgUrl);
+      } else {
+        resolveSignedUrls('avatars', [user.heroBgUrl])
+          .then((urls) => {
+            if (urls && urls[0]) {
+              setResolvedHeroBg(urls[0]);
+            }
+          })
+          .catch((err) => console.error('Failed to resolve hero background URL:', err));
+      }
+    } else {
+      setResolvedHeroBg(null);
+    }
+  }, [user?.heroBgUrl]);
 
   const { updateProfile } = useAuth();
 
@@ -1238,7 +1258,7 @@ export function HomeScreen({ navigation }: Props) {
 
           {/* ── 3. TODAY'S MOMENT CARD (HERO) ─────────── */}
           <ImageBackground
-            source={{ uri: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?q=80&w=600&auto=format&fit=crop' }}
+            source={{ uri: resolvedHeroBg || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?q=80&w=600&auto=format&fit=crop' }}
             style={hsStyles.heroCardImage}
             imageStyle={{ borderRadius: 24 }}
           >

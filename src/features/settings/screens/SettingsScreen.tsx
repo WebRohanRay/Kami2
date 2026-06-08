@@ -42,7 +42,7 @@ import {
 import { useAuth }      from '@features/auth';
 import { useAuthStore } from '@features/auth';
 import { useTheme }     from '@shared/hooks';
-import { pickAvatarImage, uploadAvatar } from '@shared/lib/storage';
+import { pickAvatarImage, uploadAvatar, uploadHeroBg, pickImages } from '@shared/lib/storage';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import * as Clipboard from 'expo-clipboard';
 import * as coupleService from '@infrastructure/couple/coupleService';
@@ -300,6 +300,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [signingOut,     setSigningOut]     = useState(false);
   const [deleting,       setDeleting]       = useState(false);
   const [exporting,      setExporting]      = useState(false);
+  const [heroBgLoading,  setHeroBgLoading]  = useState(false);
 
   // Selector & Info Sheets
   const [activeSelector, setActiveSelector] = useState<'theme' | 'textSize' | null>(null);
@@ -593,6 +594,26 @@ export function SettingsScreen({ navigation }: Props) {
     setAvatarLoading(false);
     if (!saved.success) { Alert.alert('Kami', saved.error); return; }
     Alert.alert('Kami', 'Display photo updated! 🌸');
+  };
+
+  const handleHeroBgPress = async () => {
+    if (!user?.id) { Alert.alert('Kami', 'Please sign in again.'); return; }
+    const picked = await pickImages(false);
+    if (!picked.success) {
+      if (!picked.cancelled) Alert.alert('Kami', picked.error);
+      return;
+    }
+    const uri = picked.uris[0];
+    if (!uri) return;
+
+    setHeroBgLoading(true);
+    const uploaded = await uploadHeroBg(user.id, uri);
+    if (!uploaded.success) { setHeroBgLoading(false); Alert.alert('Kami', uploaded.error); return; }
+
+    const saved = await updateProfile({ heroBgUrl: uploaded.path });
+    setHeroBgLoading(false);
+    if (!saved.success) { Alert.alert('Kami', saved.error); return; }
+    Alert.alert('Kami', "Today's Moment cover image updated! 🖼️");
   };
 
   const handleTogglePref = async (key: 'dailyReminder' | 'weeklyDigest' | 'streakAlerts', val: boolean) => {
@@ -972,6 +993,12 @@ export function SettingsScreen({ navigation }: Props) {
             label="Text Size"
             value={sizeLabel}
             onPress={() => setActiveSelector('textSize')}
+          />
+          <SettingRow
+            icon="🖼️"
+            label="Cover Image"
+            value={heroBgLoading ? 'Uploading... ⏳' : user?.heroBgUrl ? 'Custom Cover Set' : 'Default Cover'}
+            onPress={handleHeroBgPress}
           />
         </SettingGroup>
 

@@ -23,6 +23,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_space TEXT DEFAULT '
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS current_mood_label TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS current_mood_emoji TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hero_bg_url TEXT;
 
 -- Apply default and check constraints safely
 ALTER TABLE public.profiles ALTER COLUMN active_space SET DEFAULT 'personal';

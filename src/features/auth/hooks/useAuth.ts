@@ -5,11 +5,11 @@
  */
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
-import * as authService  from '@infrastructure/auth';
-import * as profileRepo  from '@infrastructure/profile';
+import * as authService from '@infrastructure/auth';
+import * as profileRepo from '@infrastructure/profile';
 import { registerForPushNotificationsAsync } from '@infrastructure/notifications/notificationService';
 import { applyTheme } from '@shared/constants';
-import { useAuthStore }  from '../store';
+import { useAuthStore } from '../store';
 import type { AuthUser, AuthStatus, Result } from '../types';
 
 function statusFor(user: AuthUser): AuthStatus {
@@ -25,7 +25,7 @@ async function hydrateUser(
 ) {
   const result = await profileRepo.fetchOrCreateProfile(supabaseUser);
   const authUser = result.success ? result.data : profileRepo.supabaseUserToAuthUser(supabaseUser);
-  
+
   if (authUser.theme) {
     applyTheme(authUser.theme);
   }
@@ -62,7 +62,7 @@ export function useAuth() {
 
     const runHeartbeat = () => {
       if (AppState.currentState === 'active') {
-        profileRepo.updateProfile(user.id, { lastSeenAt: new Date().toISOString() }).catch(() => {});
+        profileRepo.updateProfile(user.id, { lastSeenAt: new Date().toISOString() }).catch(() => { });
       }
     };
 
@@ -173,7 +173,7 @@ export function useAuth() {
     const { reset, setStatus } = store();
     if (user?.id) {
       // Mark user offline immediately in the database before signing out
-      await profileRepo.updateProfile(user.id, { lastSeenAt: '1970-01-01T00:00:00.000Z' }).catch(() => {});
+      await profileRepo.updateProfile(user.id, { lastSeenAt: '1970-01-01T00:00:00.000Z' }).catch(() => { });
     }
     const r = await authService.signOut();
     if (!r.success) return r;
@@ -203,6 +203,7 @@ export function useAuth() {
       activeSpace?: 'personal' | 'couple';
       currentMoodLabel?: string;
       currentMoodEmoji?: string;
+      heroBgUrl?: string;
     }
   ): Promise<Result<void>> {
     const { setUser, user } = store();

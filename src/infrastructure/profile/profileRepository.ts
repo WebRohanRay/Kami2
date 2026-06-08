@@ -23,6 +23,7 @@ type ProfileRow = {
   current_mood_label: string | null;
   current_mood_emoji: string | null;
   last_seen_at: string | null;
+  hero_bg_url: string | null;
 };
 
 type UpdateInput = {
@@ -38,6 +39,7 @@ type UpdateInput = {
   currentMoodLabel?: string;
   currentMoodEmoji?: string;
   lastSeenAt?: string;
+  heroBgUrl?: string;
 };
 
 function clean(v: string | undefined | null): string | undefined {
@@ -60,32 +62,33 @@ export async function resolveAvatarUrl(path: string | null | undefined): Promise
 export function rowToAuthUser(row: ProfileRow, base: AuthUser, resolvedAvatarUrl?: string | null): AuthUser {
   return {
     ...base,
-    nickname:  clean(row.nickname)   ?? base.nickname,
-    avatarUrl: resolvedAvatarUrl      ?? clean(row.avatar_url) ?? base.avatarUrl,
-    theme:     row.theme              ?? base.theme,
-    textSize:  row.text_size          ?? base.textSize,
+    nickname: clean(row.nickname) ?? base.nickname,
+    avatarUrl: resolvedAvatarUrl ?? clean(row.avatar_url) ?? base.avatarUrl,
+    theme: row.theme ?? base.theme,
+    textSize: row.text_size ?? base.textSize,
     dailyReminder: row.daily_reminder_enabled ?? base.dailyReminder,
-    weeklyDigest:  row.weekly_digest_enabled  ?? base.weeklyDigest,
-    streakAlerts:  row.streak_alerts_enabled  ?? base.streakAlerts,
-    pushToken:     row.push_token         ?? base.pushToken,
-    kamiId:        row.kami_id            ?? base.kamiId,
-    activeSpace:   (row.active_space as any) ?? base.activeSpace,
+    weeklyDigest: row.weekly_digest_enabled ?? base.weeklyDigest,
+    streakAlerts: row.streak_alerts_enabled ?? base.streakAlerts,
+    pushToken: row.push_token ?? base.pushToken,
+    kamiId: row.kami_id ?? base.kamiId,
+    activeSpace: (row.active_space as any) ?? base.activeSpace,
     currentMoodLabel: row.current_mood_label ?? base.currentMoodLabel,
     currentMoodEmoji: row.current_mood_emoji ?? base.currentMoodEmoji,
-    lastSeenAt:    row.last_seen_at ?? base.lastSeenAt,
+    lastSeenAt: row.last_seen_at ?? base.lastSeenAt,
+    heroBgUrl: row.hero_bg_url ?? base.heroBgUrl,
   };
 }
 
 export function supabaseUserToAuthUser(user: User): AuthUser {
   const m = user.user_metadata ?? {};
   return {
-    id:            user.id,
-    email:         user.email ?? '',
+    id: user.id,
+    email: user.email ?? '',
     emailVerified: Boolean(user.email_confirmed_at),
-    nickname:  clean(typeof m.full_name === 'string' ? m.full_name : undefined),
+    nickname: clean(typeof m.full_name === 'string' ? m.full_name : undefined),
     avatarUrl: clean(
       typeof m.avatar_url === 'string' ? m.avatar_url :
-      typeof m.picture    === 'string' ? m.picture : undefined
+        typeof m.picture === 'string' ? m.picture : undefined
     ),
   };
 }
@@ -96,7 +99,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
   // 1. Try to fetch the existing profile first (avoids blind upsert overwrites of nickname/avatar)
   let { data, error } = await supabase
     .from('profiles')
-    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
+    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -108,7 +111,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
         { id: user.id, email: base.email, nickname: base.nickname ?? null, avatar_url: base.avatarUrl ?? null },
         { onConflict: 'id' }
       )
-      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
+      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
       .single();
 
     if (upsertError) {
@@ -136,7 +139,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
       .from('profiles')
       .update({ kami_id: newId })
       .eq('id', user.id)
-      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
+      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
       .single();
 
     if (updateError) {
@@ -146,26 +149,27 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
       data = updatedData;
     }
   }
-  
+
   const resolvedAvatar = await resolveAvatarUrl(data.avatar_url);
   return { success: true, data: rowToAuthUser(data as ProfileRow, base, resolvedAvatar) };
 }
 
 export async function updateProfile(userId: string, input: UpdateInput): Promise<Result<AuthUser>> {
   const patch: Record<string, any> = {};
-  if ('nickname'  in input) patch.nickname   = clean(input.nickname)  ?? null;
+  if ('nickname' in input) patch.nickname = clean(input.nickname) ?? null;
   if ('avatarUrl' in input) patch.avatar_url = clean(input.avatarUrl) ?? null;
-  if ('theme'     in input) patch.theme      = input.theme;
-  if ('textSize'  in input) patch.text_size  = input.textSize;
+  if ('theme' in input) patch.theme = input.theme;
+  if ('textSize' in input) patch.text_size = input.textSize;
   if ('dailyReminder' in input) patch.daily_reminder_enabled = input.dailyReminder;
-  if ('weeklyDigest'   in input) patch.weekly_digest_enabled  = input.weeklyDigest;
-  if ('streakAlerts'   in input) patch.streak_alerts_enabled  = input.streakAlerts;
+  if ('weeklyDigest' in input) patch.weekly_digest_enabled = input.weeklyDigest;
+  if ('streakAlerts' in input) patch.streak_alerts_enabled = input.streakAlerts;
 
   if ('pushToken' in input) patch.push_token = clean(input.pushToken) ?? null;
   if ('activeSpace' in input) patch.active_space = input.activeSpace;
   if ('currentMoodLabel' in input) patch.current_mood_label = input.currentMoodLabel;
   if ('currentMoodEmoji' in input) patch.current_mood_emoji = input.currentMoodEmoji;
   if ('lastSeenAt' in input) patch.last_seen_at = input.lastSeenAt;
+  if ('heroBgUrl' in input) patch.hero_bg_url = clean(input.heroBgUrl) ?? null;
 
   if (Object.keys(patch).length === 0) {
     return { success: false, error: 'Nothing to update.' };
@@ -175,7 +179,7 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
     .from('profiles')
     .update(patch)
     .eq('id', userId)
-    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at')
+    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
     .single();
 
   if (error || !data) {

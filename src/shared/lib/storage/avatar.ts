@@ -113,3 +113,69 @@ export async function uploadAvatar(
     };
   }
 }
+
+export async function uploadHeroBg(
+  userId: string,
+  uri: string
+): Promise<UploadResult> {
+  try {
+    const compressed = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1200 } }],
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    if (!compressed.base64) {
+      return {
+        success: false,
+        error: 'Could not process image.',
+      };
+    }
+
+    // Fetch current profile to get old cover path
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('hero_bg_url')
+      .eq('id', userId)
+      .maybeSingle();
+
+    const oldPath = profile?.hero_bg_url;
+
+    // Generate unique new path for cover image
+    const path = `${userId}/hero_bg-${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, decode(compressed.base64), {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      return {
+        success: false,
+        error: 'Could not upload cover image.',
+      };
+    }
+
+    // Delete old cover image from storage bucket if it was a storage file
+    if (oldPath && !oldPath.startsWith('http')) {
+      await supabase.storage.from('avatars').remove([oldPath]);
+    }
+
+    return {
+      success: true,
+      path,
+    };
+  } catch (error) {
+    console.error('uploadHeroBg error:', error);
+    return {
+      success: false,
+      error: 'Something went wrong uploading your cover image.',
+    };
+  }
+}

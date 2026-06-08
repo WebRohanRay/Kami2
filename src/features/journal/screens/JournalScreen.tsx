@@ -10,7 +10,7 @@ import {
   ActivityIndicator, Alert, Animated, Keyboard, Modal,
   Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
-  Image, StatusBar as RNStatusBar, AppState,
+  Image, StatusBar as RNStatusBar, AppState, Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useHome }      from '@features/home/hooks';
@@ -330,6 +330,8 @@ export function JournalScreen({ navigation }: Props) {
   const [promptVisible,setPromptVisible]  = useState(false);
   const [promptSaving, setPromptSaving]   = useState(false);
   const [refreshing,   setRefreshing]     = useState(false);
+  const [previewEntry, setPreviewEntry]   = useState<JournalEntry | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
 
   // Search & Filter state
   const [search, setSearch] = useState('');
@@ -862,12 +864,9 @@ export function JournalScreen({ navigation }: Props) {
                     )}
                     <EntryCard
                       entry={e}
-                      onEdit={() => {
-                        if (user?.activeSpace === 'couple' && e.userId !== user?.id) {
-                          Alert.alert('Kami', 'You can only edit entries you wrote.');
-                          return;
-                        }
-                        setEditing(e); setWriteVisible(true);
+                      onPressCard={() => {
+                        setPreviewEntry(e);
+                        setPreviewVisible(true);
                       }}
                       onDelete={() => handleDelete(e)}
                       onTogglePin={() => togglePin(e)}
@@ -899,6 +898,17 @@ export function JournalScreen({ navigation }: Props) {
       </ScrollView>
 
       <WriteModal visible={writeVisible} entry={editing} onClose={() => { setWriteVisible(false); setEditing(null); }} onSave={handleSave} saving={writeSaving} />
+      <PreviewModal
+        visible={previewVisible}
+        entry={previewEntry}
+        onClose={() => { setPreviewVisible(false); setPreviewEntry(null); }}
+        onEdit={() => {
+          setEditing(previewEntry);
+          setWriteVisible(true);
+        }}
+        activeSpace={user?.activeSpace}
+        user={user}
+      />
       {todayPrompt && (
         <PromptModal visible={promptVisible} prompt={todayPrompt.content} existing={promptResponse?.response} onClose={() => setPromptVisible(false)} onSave={handlePromptSave} saving={promptSaving} />
       )}
@@ -924,19 +934,19 @@ export function JournalScreen({ navigation }: Props) {
 
 const EntryCard: React.FC<{
   entry: any;
-  onEdit: () => void;
+  onPressCard: () => void;
   onDelete: () => void;
   onTogglePin: () => void;
   activeSpace?: 'personal' | 'couple';
   user?: any;
   onReact?: (entryId: string, emoji: string) => void;
   onOpenComments?: (entry: any) => void;
-}> = ({ entry, onEdit, onDelete, onTogglePin, activeSpace, user, onReact, onOpenComments }) => {
+}> = ({ entry, onPressCard, onDelete, onTogglePin, activeSpace, user, onReact, onOpenComments }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
   return (
     <TouchableOpacity
-      activeOpacity={1} onPress={onEdit}
+      activeOpacity={1} onPress={onPressCard}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
@@ -1026,6 +1036,127 @@ const EntryCard: React.FC<{
         )}
       </Animated.View>
     </TouchableOpacity>
+  );
+};
+
+const PreviewModal: React.FC<{
+  visible: boolean;
+  entry: any;
+  onClose: () => void;
+  onEdit: () => void;
+  activeSpace?: 'personal' | 'couple';
+  user?: any;
+}> = ({ visible, entry, onClose, onEdit, activeSpace, user }) => {
+  const { colors } = useTheme();
+  
+  if (!entry) return null;
+
+  const canEdit = !activeSpace || activeSpace === 'personal' || entry.userId === user?.id;
+  const { width: screenWidth } = Dimensions.get('window');
+  const carouselWidth = screenWidth - 40; // 20 padding on each side (Space[5] is 20)
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[pv.root, { backgroundColor: colors.pageBg }]}>
+        <View style={pv.header}>
+          <KamiText variant="title">Preview Entry</KamiText>
+          <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
+            {canEdit && (
+              <TouchableOpacity 
+                onPress={() => { onClose(); onEdit(); }} 
+                style={[pv.editBtn, { backgroundColor: colors.primary + '18' }]}
+                accessibilityRole="button"
+                accessibilityLabel="Edit Journal Entry"
+              >
+                <KamiText variant="label" color={colors.primary} bold>Edit</KamiText>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onClose} style={pv.closeBtn} accessibilityRole="button" accessibilityLabel="Close Preview">
+              <KamiText variant="label" color={Colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ScrollView contentContainerStyle={pv.scroll} showsVerticalScrollIndicator={false}>
+          {/* Mood & Date header */}
+          <View style={pv.metaRow}>
+            {entry.moodId ? (
+              <View style={[pv.moodBadge, { backgroundColor: colors.primary + '11' }]}>
+                <KamiText variant="caption" color={colors.primary} bold>{entry.moodId}</KamiText>
+              </View>
+            ) : <View />}
+            <KamiText variant="caption" color={Colors.textMuted}>
+              {formatDate(entry.entryDate || entry.createdAt)}
+            </KamiText>
+          </View>
+
+          {/* Title */}
+          <KamiText variant="subtitle" bold style={pv.title}>
+            {entry.title || 'Untitled Entry'}
+          </KamiText>
+
+          {/* Couple Space authorship info */}
+          {activeSpace === 'couple' && (
+            <View style={pv.authorRow}>
+              <KamiText variant="caption" color={colors.primary} bold>
+                By {entry.userNickname || 'Partner'}
+              </KamiText>
+            </View>
+          )}
+
+          {/* Premium Image Scroller / Carousel */}
+          {entry.imageUrls && entry.imageUrls.length > 0 && (
+            <View style={pv.imageScrollerContainer}>
+              <ScrollView 
+                horizontal 
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={pv.imageScrollView}
+                testID="journal-image-carousel"
+                accessibilityLabel="Journal Image Carousel"
+              >
+                {entry.imageUrls.map((url: string, index: number) => (
+                  <View key={index} style={{ width: carouselWidth, height: 240, overflow: 'hidden' }}>
+                    <Image 
+                      source={{ uri: url }} 
+                      style={pv.scrollerImage} 
+                      resizeMode="cover" 
+                      testID={`journal-image-${index}`}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+              {/* Pagination Dots indicator */}
+              {entry.imageUrls.length > 1 && (
+                <View style={pv.dotIndicatorRow}>
+                  {entry.imageUrls.map((_: any, index: number) => (
+                    <View key={index} style={[pv.dot, { backgroundColor: colors.primary + '44' }]} />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Body */}
+          <View style={pv.bodyContainer}>
+            <KamiText variant="body" color={Colors.textSecondary} style={pv.bodyText}>
+              {entry.body}
+            </KamiText>
+          </View>
+
+          {/* Tags */}
+          {entry.tags && entry.tags.length > 0 && (
+            <View style={pv.tagRow}>
+              {entry.tags.map((t: string) => (
+                <View key={t} style={[pv.tagChip, { backgroundColor: colors.primary + '15' }]}>
+                  <KamiText variant="caption" color={colors.primary}>#{t}</KamiText>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
   );
 };
 
@@ -1168,6 +1299,27 @@ const cm = StyleSheet.create({
     gap: Space[3],
     marginBottom: 2,
   },
+});
+
+const pv = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  editBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
+  closeBtn: { padding: Space[2] },
+  scroll: { padding: Space[5], gap: Space[4] },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
+  moodBadge: { paddingVertical: 2, paddingHorizontal: Space[2], borderRadius: Radii.sm },
+  title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
+  authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
+  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden' },
+  imageScrollView: { width: '100%', height: 250 },
+  scrollerImage: { width: '100%', height: '100%' },
+  dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  bodyContainer: { paddingVertical: Space[2] },
+  bodyText: { fontSize: FontSize.base, lineHeight: 26 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2], marginTop: Space[2] },
+  tagChip: { paddingVertical: 4, paddingHorizontal: Space[3], borderRadius: Radii.full },
 });
 
 export default JournalScreen;

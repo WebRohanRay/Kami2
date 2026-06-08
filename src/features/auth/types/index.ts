@@ -22,6 +22,7 @@ export type AuthUser = {
   currentMoodLabel?: string;
   currentMoodEmoji?: string;
   lastSeenAt?: string;
+  heroBgUrl?: string;
 };
 
 export type AuthState = {

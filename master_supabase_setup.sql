@@ -58,6 +58,7 @@ CREATE TABLE public.profiles (
   current_mood_label      TEXT,
   current_mood_emoji      TEXT,
   last_seen_at            TIMESTAMPTZ,
+  hero_bg_url             TEXT,
   created_at              TIMESTAMPTZ DEFAULT NOW(),
   updated_at              TIMESTAMPTZ DEFAULT NOW()
 );
@@ -443,12 +444,9 @@ BEGIN
   RETURN QUERY
   SELECT cl.body, cl.image_urls
   FROM couple_letters cl
-  WHERE cl.id = p_letter_id
-    AND (cl.deliver_at <= NOW() OR cl.is_draft = TRUE)
-    AND EXISTS (
-      SELECT 1 FROM public.couple_members
-      WHERE couple_members.couple_id = cl.couple_id AND couple_members.user_id = auth.uid()
-    );
+  WHERE cl.id = p_letter_id 
+    AND public.is_couple_member(cl.couple_id) 
+    AND (cl.deliver_at <= NOW() OR auth.uid() = cl.sender_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
