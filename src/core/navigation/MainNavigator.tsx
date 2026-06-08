@@ -6,12 +6,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
-import { HomeScreen, TimelineScreen }     from '@features/home';
+import { HomeScreen }     from '@features/home';
 import { JournalScreen }  from '@features/journal';
 import { MemoriesScreen } from '@features/memories';
 import { GoalsScreen }    from '@features/goals';
 import { FutureScreen }   from '@features/future';
 import { SettingsScreen } from '@features/settings';
+import TimelineScreen from '@features/couple/screens/TimelineScreen';
 
 import { useAuthStore }   from '@features/auth';
 import { Colors, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';

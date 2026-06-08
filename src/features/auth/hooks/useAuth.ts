@@ -45,6 +45,22 @@ async function hydrateUser(
       }
     }).catch(err => console.error('Push token registration failed:', err));
   }
+
+  // Synchronize local reminders scheduling on hydration
+  const { 
+    scheduleDailyReminderAsync, cancelDailyReminderAsync,
+    scheduleWeeklyDigestAsync, cancelWeeklyDigestAsync,
+    scheduleStreakAlertsAsync, cancelStreakAlertsAsync 
+  } = require('@infrastructure/notifications/notificationService');
+
+  if (authUser.dailyReminder ?? true) scheduleDailyReminderAsync().catch(() => {});
+  else cancelDailyReminderAsync().catch(() => {});
+
+  if (authUser.weeklyDigest ?? true) scheduleWeeklyDigestAsync().catch(() => {});
+  else cancelWeeklyDigestAsync().catch(() => {});
+
+  if (authUser.streakAlerts ?? true) scheduleStreakAlertsAsync().catch(() => {});
+  else cancelStreakAlertsAsync().catch(() => {});
 }
 
 export function useAuth() {
@@ -197,6 +213,7 @@ export function useAuth() {
       avatarUrl?: string;
       theme?: string;
       textSize?: string;
+      timezone?: string;
       dailyReminder?: boolean;
       weeklyDigest?: boolean;
       streakAlerts?: boolean;

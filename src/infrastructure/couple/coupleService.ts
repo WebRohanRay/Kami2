@@ -246,6 +246,7 @@ export async function fetchActiveCouple(): Promise<Result<{ couple: Couple | nul
       anniversaryDate: cRow.anniversary_date,
       pendingDeletion: cRow.pending_deletion,
       deleteAt: cRow.delete_at,
+      heroBgUrl: cRow.hero_bg_url,
       createdAt: cRow.created_at,
       updatedAt: cRow.updated_at
     };
@@ -320,6 +321,27 @@ export async function updateCoupleDetails(coupleId: string, name: string, annive
   }
 }
 
+/** Update Couple hero background image */
+export async function updateCoupleHeroBg(coupleId: string, heroBgUrl: string | null): Promise<Result<void>> {
+  try {
+    const isMember = await checkMembership(coupleId);
+    if (!isMember) return { success: false, error: 'Not a member of this couple.' };
+
+    const { error } = await supabase
+      .from('couples')
+      .update({
+        hero_bg_url: heroBgUrl,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', coupleId);
+
+    if (error) return { success: false, error: friendly(error.message) };
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: err(e) };
+  }
+}
+
 /** Initiate deletion countdown (7-day recovery period) */
 export async function scheduleCoupleDeletion(coupleId: string): Promise<Result<string>> {
   try {
@@ -376,10 +398,29 @@ const DEFAULT_POOL = [
   "What is a dream or project you'd love for us to build together?",
 ];
 
-/** Fetch today's couple reflection question (creates/seeds one if missing) */
-export async function fetchTodayDailyQuestion(): Promise<Result<CoupleDailyQuestion>> {
+function getLocalDateString(timezone: string = 'UTC'): string {
   try {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(new Date());
+  } catch (e) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(new Date());
+  }
+}
+
+/** Fetch today's couple reflection question (creates/seeds one if missing) */
+export async function fetchTodayDailyQuestion(timezone: string = 'UTC'): Promise<Result<CoupleDailyQuestion>> {
+  try {
+    const todayStr = getLocalDateString(timezone);
     const { data, error } = await supabase
       .from('couple_daily_questions')
       .select('*')
@@ -496,7 +537,7 @@ export async function fetchCoupleJournals(coupleId: string): Promise<Result<Coup
     if (error) return { success: false, error: friendly(error.message) };
 
     const resolvedImgsList = await Promise.all(
-      (data ?? []).map(r => resolveSignedUrls('journal_images', r.image_urls || []))
+      (data ?? []).map(r => resolveSignedUrls('couple_journal_images', r.image_urls || []))
     );
 
     const mapped = (data ?? []).map((r, i) => ({
@@ -746,7 +787,7 @@ export async function fetchCoupleMemories(coupleId: string): Promise<Result<Coup
     if (error) return { success: false, error: friendly(error.message) };
 
     const resolvedImgsList = await Promise.all(
-      (data ?? []).map(r => resolveSignedUrls('memory_images', r.image_urls || []))
+      (data ?? []).map(r => resolveSignedUrls('couple_memory_images', r.image_urls || []))
     );
 
     const mapped = (data ?? []).map((r: any, i: number) => ({
@@ -1093,7 +1134,7 @@ export async function fetchCoupleLetters(coupleId: string): Promise<Result<Coupl
     if (error) return { success: false, error: friendly(error.message) };
 
     const resolvedImgsList = await Promise.all(
-      (data ?? []).map((r: any) => r.image_urls && r.image_urls.length > 0 ? resolveSignedUrls('letter_images', r.image_urls) : Promise.resolve([]))
+      (data ?? []).map((r: any) => r.image_urls && r.image_urls.length > 0 ? resolveSignedUrls('couple_letter_images', r.image_urls) : Promise.resolve([]))
     );
 
     const mapped = (data ?? []).map((r: any, i: number) => {
@@ -1195,7 +1236,7 @@ export async function fetchCoupleLetterDetails(letterId: string): Promise<Result
     if (error || !data || data.length === 0) return { success: false, error: 'Could not open letter. It is still sealed.' };
 
     const row = data[0];
-    const resolvedUrls = await resolveSignedUrls('letter_images', row.image_urls || []);
+    const resolvedUrls = await resolveSignedUrls('couple_letter_images', row.image_urls || []);
     return {
       success: true,
       data: {

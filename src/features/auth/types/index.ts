@@ -13,6 +13,7 @@ export type AuthUser = {
   avatarUrl?: string;
   theme?: string;
   textSize?: string;
+  timezone?: string;
   dailyReminder?: boolean;
   weeklyDigest?: boolean;
   streakAlerts?: boolean;

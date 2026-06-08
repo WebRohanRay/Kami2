@@ -14,6 +14,7 @@ type ProfileRow = {
   avatar_url: string | null;
   theme: string;
   text_size: string;
+  timezone: string;
   daily_reminder_enabled: boolean;
   weekly_digest_enabled: boolean;
   streak_alerts_enabled: boolean;
@@ -31,6 +32,7 @@ type UpdateInput = {
   avatarUrl?: string;
   theme?: string;
   textSize?: string;
+  timezone?: string;
   dailyReminder?: boolean;
   weeklyDigest?: boolean;
   streakAlerts?: boolean;
@@ -66,6 +68,7 @@ export function rowToAuthUser(row: ProfileRow, base: AuthUser, resolvedAvatarUrl
     avatarUrl: resolvedAvatarUrl ?? clean(row.avatar_url) ?? base.avatarUrl,
     theme: row.theme ?? base.theme,
     textSize: row.text_size ?? base.textSize,
+    timezone: row.timezone ?? base.timezone,
     dailyReminder: row.daily_reminder_enabled ?? base.dailyReminder,
     weeklyDigest: row.weekly_digest_enabled ?? base.weeklyDigest,
     streakAlerts: row.streak_alerts_enabled ?? base.streakAlerts,
@@ -99,7 +102,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
   // 1. Try to fetch the existing profile first (avoids blind upsert overwrites of nickname/avatar)
   let { data, error } = await supabase
     .from('profiles')
-    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
+    .select('id,email,nickname,avatar_url,theme,text_size,timezone,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -111,7 +114,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
         { id: user.id, email: base.email, nickname: base.nickname ?? null, avatar_url: base.avatarUrl ?? null },
         { onConflict: 'id' }
       )
-      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
+      .select('id,email,nickname,avatar_url,theme,text_size,timezone,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
       .single();
 
     if (upsertError) {
@@ -139,7 +142,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
       .from('profiles')
       .update({ kami_id: newId })
       .eq('id', user.id)
-      .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
+      .select('id,email,nickname,avatar_url,theme,text_size,timezone,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
       .single();
 
     if (updateError) {
@@ -160,6 +163,7 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
   if ('avatarUrl' in input) patch.avatar_url = clean(input.avatarUrl) ?? null;
   if ('theme' in input) patch.theme = input.theme;
   if ('textSize' in input) patch.text_size = input.textSize;
+  if ('timezone' in input) patch.timezone = input.timezone;
   if ('dailyReminder' in input) patch.daily_reminder_enabled = input.dailyReminder;
   if ('weeklyDigest' in input) patch.weekly_digest_enabled = input.weeklyDigest;
   if ('streakAlerts' in input) patch.streak_alerts_enabled = input.streakAlerts;
@@ -179,7 +183,7 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
     .from('profiles')
     .update(patch)
     .eq('id', userId)
-    .select('id,email,nickname,avatar_url,theme,text_size,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
+    .select('id,email,nickname,avatar_url,theme,text_size,timezone,daily_reminder_enabled,weekly_digest_enabled,streak_alerts_enabled,push_token,kami_id,active_space,current_mood_label,current_mood_emoji,last_seen_at,hero_bg_url')
     .single();
 
   if (error || !data) {

@@ -39,13 +39,27 @@ const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) =
   return v.toString(16);
 });
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString())     return 'Today';
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+function formatDate(iso: string, timezone?: string) {
+  const tz = timezone || 'UTC';
+  
+  const getTzDateString = (date: Date) => {
+    try {
+      return date.toLocaleDateString('en-US', { timeZone: tz });
+    } catch {
+      return date.toDateString();
+    }
+  };
+
+  const dStr = getTzDateString(new Date(iso));
+  const todayStr = getTzDateString(new Date());
+  
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = getTzDateString(yesterday);
+
+  if (dStr === todayStr)     return 'Today';
+  if (dStr === yesterdayStr) return 'Yesterday';
+  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
 }
 
 // ─── Write modal ─────────────────────────────────────────────────────────────
@@ -58,6 +72,7 @@ const WriteModal: React.FC<{
 }> = ({ visible, entry, onClose, onSave, saving }) => {
   const [title, setTitle] = useState('');
   const [body,  setBody]  = useState('');
+  const timezone = useAuthStore(s => s.user?.timezone);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
@@ -121,7 +136,7 @@ const WriteModal: React.FC<{
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
-          <KamiText variant="overline">{entry ? 'Edit entry' : new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</KamiText>
+          <KamiText variant="overline">{entry ? 'Edit entry' : new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', timeZone: timezone || 'UTC' })}</KamiText>
           <TouchableOpacity onPress={() => { if (!body.trim()) return; Keyboard.dismiss(); onSave(body.trim(), title.trim() || undefined, selectedTags, localUris, selectedMood); }} disabled={saving || !body.trim()} hitSlop={8}>
             {saving
               ? <ActivityIndicator size="small" color={colors.primary} />
@@ -231,7 +246,7 @@ const WriteModal: React.FC<{
 };
 const wm = StyleSheet.create({
   root:        { flex: 1, backgroundColor: Colors.pageBg },
-  toolbar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  toolbar:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   content:     { padding: Space[5], gap: Space[4], paddingBottom: Space[10] },
   titleInput:  { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary },
   rule:        { height: 1, backgroundColor: Colors.border + '44' },
@@ -449,16 +464,19 @@ export function JournalScreen({ navigation }: Props) {
 
       // Separate existing remote signed URLs from new local picker URIs
       const localPickerUris = localUris.filter(u => u.startsWith('file://') || u.startsWith('content://'));
+      const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+      const ownerId = user.activeSpace === 'couple' && couple?.id ? couple.id : user.id;
+
       const existingPaths = (editing?.imageUrls ?? [])
         .filter(url => localUris.includes(url))
         .map(url => {
-          const match = url.match(/\/journal_images\/(.+?)\?/);
+          const match = url.match(new RegExp(`\\/${bucket}\\/(.+?)\\?`));
           return match ? decodeURIComponent(match[1]) : null;
         })
         .filter(Boolean) as string[];
 
       if (localPickerUris.length > 0) {
-        const uploadRes = await uploadImages('journal_images', user.id, targetId, localPickerUris);
+        const uploadRes = await uploadImages(bucket, ownerId, targetId, localPickerUris);
         if (!uploadRes.success) {
           Alert.alert('Kami', uploadRes.error);
           setWriteSaving(false);
@@ -691,7 +709,7 @@ export function JournalScreen({ navigation }: Props) {
               <Text style={{ fontSize: 24, color: colors.primary, lineHeight: 28 }}>‹</Text>
             </TouchableOpacity>
             <KamiText variant="label" bold style={s.calMonthTitle}>
-              {calendarDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+              {calendarDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
             </KamiText>
             <TouchableOpacity onPress={handleNextMonth} style={s.calArrow}>
               <Text style={{ fontSize: 24, color: colors.primary, lineHeight: 28 }}>›</Text>
@@ -765,7 +783,7 @@ export function JournalScreen({ navigation }: Props) {
           {selectedDateFilter && (
             <View style={s.filterHeaderRow}>
               <KamiText variant="caption" bold color={colors.primary}>
-                Filtering: {new Date(selectedDateFilter).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                Filtering: {new Date(selectedDateFilter).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
               </KamiText>
               <TouchableOpacity onPress={() => setSelectedDateFilter(null)}>
                 <KamiText variant="caption" color={colors.primary} bold>Show All</KamiText>
@@ -856,7 +874,15 @@ export function JournalScreen({ navigation }: Props) {
           return (
             <>
               {paginatedList.map((e, idx) => {
-                const showDate = idx === 0 || new Date(e.entryDate).toDateString() !== new Date(paginatedList[idx - 1].entryDate).toDateString();
+                const getTzDateStr = (dateStr: string) => {
+                  try {
+                    return new Date(dateStr).toLocaleDateString('en-US', { timeZone: user?.timezone ?? 'UTC' });
+                  } catch {
+                    return new Date(dateStr).toDateString();
+                  }
+                };
+                const showDate = idx === 0 || getTzDateStr(e.entryDate) !== getTzDateStr(paginatedList[idx - 1].entryDate);
+                
                 return (
                   <React.Fragment key={e.id}>
                     {showDate && (
@@ -1106,7 +1132,7 @@ const PreviewModal: React.FC<{
               </View>
             ) : <View />}
             <KamiText variant="caption" color={Colors.textMuted}>
-              {formatDate(entry.entryDate || entry.createdAt)}
+              {formatDate(entry.entryDate || entry.createdAt, user?.timezone)}
             </KamiText>
           </View>
 
@@ -1236,7 +1262,7 @@ const CommentsModal: React.FC<{
                           {isMe ? 'You' : c.userNickname}
                         </KamiText>
                         <KamiText variant="caption" color={Colors.textMuted} style={{ fontSize: 8 }}>
-                          {new Date(c.createdAt).toLocaleDateString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(c.createdAt).toLocaleDateString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: user?.timezone ?? 'UTC' })}
                         </KamiText>
                       </View>
                       <KamiText variant="body" color={Colors.textSecondary} style={{ fontSize: FontSize.sm, lineHeight: 18 }}>{c.body}</KamiText>
@@ -1276,7 +1302,7 @@ const CommentsModal: React.FC<{
 
 const cm = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   closeBtn: { padding: Space[2] },
   scroll: { padding: Space[5] },
   entrySummary: { padding: Space[4], borderRadius: Radii.card, gap: Space[1], marginBottom: Space[4], borderWidth: 1, borderColor: Colors.border + '22' },
@@ -1323,7 +1349,7 @@ const cm = StyleSheet.create({
 
 const pv = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   editBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   closeBtn: { padding: Space[2] },

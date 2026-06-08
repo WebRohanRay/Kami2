@@ -121,6 +121,18 @@ export function CoupleRealtimeListener() {
             `"${partnerName} wrote a new entry in our journal: go read what they shared! ✨"`,
             { screen: 'Journal' }
           );
+        } else if (payload.eventType === 'UPDATE' && newRow.user_id !== user.id) {
+          setToast({
+            title: 'Journal Entry Updated! 📓',
+            message: `${partnerName} updated a journal entry.`,
+            icon: '📓',
+            targetScreen: 'Journal'
+          });
+          triggerLocalNotificationAsync(
+            'Journal entry updated! 📓',
+            `"${partnerName} updated an entry in our journal: '${newRow.title || 'Untitled'}'. ✨"`,
+            { screen: 'Journal' }
+          );
         }
       })
       // 3. Couple Comments
@@ -262,6 +274,18 @@ export function CoupleRealtimeListener() {
             `"${partnerName} added a new memory to our wall: '${newRow.title}'. Let's keep making milestones! 🥰"`,
             { screen: 'Memories' }
           );
+        } else if (payload.eventType === 'UPDATE') {
+          setToast({
+            title: 'Memory Updated! 📸',
+            message: `${partnerName} updated a memory: "${newRow.title}".`,
+            icon: '📸',
+            targetScreen: 'Memories'
+          });
+          triggerLocalNotificationAsync(
+            'Memory updated! 📸',
+            `"${partnerName} updated the memory '${newRow.title}' on our timeline. Check out what changed! 🥰"`,
+            { screen: 'Memories' }
+          );
         }
       })
       // 7. Couple Answers
@@ -274,15 +298,18 @@ export function CoupleRealtimeListener() {
         loadDailyQuestion();
         const newRow = payload.new as any;
         if (payload.eventType === 'INSERT' && newRow.user_id !== user.id) {
+          const hasUserAnswered = useCoupleStore.getState().dailyAnswers.some(a => a.userId === user.id);
           setToast({
-            title: 'New Answer! 💭',
-            message: `${partnerName} answered today's question.`,
+            title: 'Partner Answered! 💭',
+            message: hasUserAnswered ? `${partnerName} answered today's question. Go read it!` : `${partnerName} answered today's question.`,
             icon: '💭',
             targetScreen: 'Home'
           });
           triggerLocalNotificationAsync(
-            'A secret revealed! 💭',
-            `"${partnerName} answered today's question! Type your answer to unlock theirs! 😉"`,
+            hasUserAnswered ? 'Answer Unlocked! 💭' : 'A secret revealed! 💭',
+            hasUserAnswered 
+              ? `"${partnerName} answered today's question! Tap to read their response. 🥰"`
+              : `"${partnerName} answered today's question! Type your answer to unlock theirs! 😉"`,
             { screen: 'Home' }
           );
         }
@@ -315,8 +342,22 @@ export function CoupleRealtimeListener() {
         event: '*', 
         schema: 'public', 
         table: 'couple_letter_reactions'
-      }, () => {
+      }, (payload) => {
         loadLetters();
+        const newRow = payload.new as any;
+        if (payload.eventType === 'INSERT' && newRow && newRow.user_id !== user.id) {
+          setToast({
+            title: 'Letter Reaction! ✉️',
+            message: `${partnerName} reacted ${newRow.emoji || ''} to your letter.`,
+            icon: newRow.emoji || '✉️',
+            targetScreen: 'Future'
+          });
+          triggerLocalNotificationAsync(
+            'Sweet reaction! ✉️',
+            `"${partnerName} reacted ${newRow.emoji || ''} to your love letter! 🥰"`,
+            { screen: 'Future' }
+          );
+        }
       })
       // 10. Partner Profile Mood Changes
       .on('postgres_changes', { 

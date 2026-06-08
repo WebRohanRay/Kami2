@@ -248,11 +248,23 @@ const MOODS = [
   { id: 'sad', emoji: '🍂', label: 'Sad' },
 ];
 
-function greetingTime() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+function greetingTime(timezone?: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || 'UTC',
+      hour: 'numeric',
+      hour12: false
+    });
+    const h = parseInt(formatter.format(new Date()), 10);
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  } catch (e) {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
 }
 function firstName(nickname?: string, email?: string) {
   if (nickname?.trim()) return nickname.trim().split(' ')[0];
@@ -438,12 +450,22 @@ export function HomeScreen({ navigation }: Props) {
   const [customMoodSaving, setCustomMoodSaving] = useState(false);
   const [resolvedHeroBg, setResolvedHeroBg] = useState<string | null>(null);
 
+  const { updateProfile } = useAuth();
+
+  // Couple Space Hooks & State
+  const {
+    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories, setPartner,
+    homeAlerts, removeHomeAlert, partnerAction, coupleLetters
+  } = useCoupleStore();
+  const { loadAll: loadCoupleAll, submitAnswer } = useCouple();
+
   useEffect(() => {
-    if (user?.heroBgUrl) {
-      if (user.heroBgUrl.startsWith('http')) {
-        setResolvedHeroBg(user.heroBgUrl);
+    const rawBgUrl = user?.activeSpace === 'couple' ? couple?.heroBgUrl : user?.heroBgUrl;
+    if (rawBgUrl) {
+      if (rawBgUrl.startsWith('http')) {
+        setResolvedHeroBg(rawBgUrl);
       } else {
-        resolveSignedUrls('avatars', [user.heroBgUrl])
+        resolveSignedUrls('avatars', [rawBgUrl])
           .then((urls) => {
             if (urls && urls[0]) {
               setResolvedHeroBg(urls[0]);
@@ -454,16 +476,7 @@ export function HomeScreen({ navigation }: Props) {
     } else {
       setResolvedHeroBg(null);
     }
-  }, [user?.heroBgUrl]);
-
-  const { updateProfile } = useAuth();
-
-  // Couple Space Hooks & State
-  const {
-    couple, partner, todayQuestion, dailyAnswers, coupleJournals, coupleGoals, relationshipEvents, coupleMemories, setPartner,
-    homeAlerts, removeHomeAlert, partnerAction, coupleLetters
-  } = useCoupleStore();
-  const { loadAll: loadCoupleAll, submitAnswer } = useCouple();
+  }, [user?.activeSpace, user?.heroBgUrl, couple?.heroBgUrl]);
 
   const [answerInput, setAnswerInput] = useState('');
   const [submittingAnswerState, setSubmittingAnswerState] = useState(false);
@@ -974,7 +987,7 @@ export function HomeScreen({ navigation }: Props) {
         return {
           title: 'Future Letter',
           script: 'is locked 🔒',
-          time: `Unlocks on ${new Date(lockedLetter.deliverAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+          time: `Unlocks on ${new Date(lockedLetter.deliverAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}`,
           cta: 'View Scheduled →',
         };
       }
@@ -1002,7 +1015,7 @@ export function HomeScreen({ navigation }: Props) {
           return {
             title: 'Letter Sealed',
             script: 'scheduled 🔒',
-            time: `Unlocks on ${new Date(myLetter.deliverAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`,
+            time: `Unlocks on ${new Date(myLetter.deliverAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}`,
             cta: 'View Scheduled →',
           };
         }
@@ -1043,7 +1056,10 @@ export function HomeScreen({ navigation }: Props) {
       }
     });
 
-    const shownTimelineEvents = todayEvents.length > 0 ? todayEvents : dynamicTimeline;
+    const shownTimelineEvents = [
+      ...todayEvents,
+      ...dynamicTimeline.filter(e => !todayEvents.some(te => te.id === e.id)).slice(0, 3)
+    ];
     const isTimelineScrollable = shownTimelineEvents.length > 3;
 
     return (
@@ -1791,7 +1807,7 @@ export function HomeScreen({ navigation }: Props) {
           <View style={{ flex: 1 }}>
             <KamiText style={[s.kamiLogo, { color: colors.primary }]} bold>Kami</KamiText>
             <KamiText variant="body" color={Colors.textSecondary} style={{ fontWeight: '500', marginTop: 2 }}>
-              {greetingTime()}, {name} 🌸
+              {greetingTime(user?.timezone)}, {name} 🌸
             </KamiText>
           </View>
           <TouchableOpacity
@@ -3346,12 +3362,13 @@ const hsStyles = StyleSheet.create({
 
   // Status Timer Card
   statusTimerCard: {
-    padding: Space[3],
-    borderRadius: 18,
-    marginHorizontal: Space[6],
-    marginBottom: Space[4],
-    borderWidth: 1.2,
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+    padding: Space[2],
+    borderRadius: 14,
+    marginHorizontal: Space[8],
+    marginBottom: Space[3],
+    borderWidth: 1,
+    borderColor: 'rgba(201, 104, 130, 0.10)',
+    backgroundColor: 'transparent',
   },
   timerHeaderRow: {
     flexDirection: 'row',
@@ -3361,9 +3378,9 @@ const hsStyles = StyleSheet.create({
     marginBottom: Space[3],
   },
   timerHeaderTitle: {
-    fontSize: FontSize.sm,
+    fontSize: 10,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   timerDisplayBox: {
     backgroundColor: '#fff',
@@ -3411,7 +3428,7 @@ const hsStyles = StyleSheet.create({
     gap: 3,
   },
   elegantMainVal: {
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: FontWeight.bold,
     fontFamily: FontFamily.display,
   },
@@ -3436,13 +3453,13 @@ const hsStyles = StyleSheet.create({
     minWidth: 28,
   },
   elegantTickerVal: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
     fontFamily: FontFamily.body,
   },
   elegantTickerColon: {
-    fontSize: FontSize.sm,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '400',
     alignSelf: 'center',
     marginBottom: 2,
   },

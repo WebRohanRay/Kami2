@@ -41,9 +41,9 @@ function friendly(raw: string) {
   return 'Something went wrong. Please try again.';
 }
 
-function getRelativePathFromSignedUrl(url: string): string {
-  if (!url.includes('letter_images/')) return url;
-  const parts = url.split('letter_images/');
+function getRelativePathFromSignedUrl(url: string, bucket: string): string {
+  if (!url.includes(`${bucket}/`)) return url;
+  const parts = url.split(`${bucket}/`);
   const pathWithQuery = parts[1];
   return pathWithQuery.split('?')[0];
 }
@@ -52,11 +52,11 @@ function checkUnlocked(l: Letter | CoupleLetter) {
   return Date.now() >= new Date(l.deliverAt).getTime();
 }
 
-function formatTimestamp(isoString: string | null | undefined): string | null {
+function formatTimestamp(isoString: string | null | undefined, timezone?: string): string | null {
   if (!isoString) return null;
   const d = new Date(isoString);
   if (d.getFullYear() <= 1970) return 'Delivered instantly';
-  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) + ' • ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: timezone || 'UTC' }) + ' • ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: timezone || 'UTC' });
 }
 
 function formatCountdown(deliverAtIso: string): string {
@@ -136,6 +136,7 @@ const WriteModal: React.FC<{
   const [localUris, setLocalUris] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   const { colors } = useTheme();
+  const timezone = useAuthStore(s => s.user?.timezone);
 
   const reset = () => {
     setSubject('');
@@ -198,8 +199,17 @@ const WriteModal: React.FC<{
     if (customAmPm === 'AM' && h === 12) h = 0;
 
     if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
-      const date = new Date(y, m - 1, d, h, min, 0);
-      return date.toISOString();
+      try {
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const dateStr = `${y}-${pad(m)}-${pad(d)}T${pad(h)}:${pad(min)}:00`;
+        const dateUTC = new Date(`${dateStr}Z`);
+        const localTime = new Date(dateUTC.toLocaleString('en-US', { timeZone: timezone || 'UTC' }));
+        const diff = dateUTC.getTime() - localTime.getTime();
+        return new Date(dateUTC.getTime() + diff).toISOString();
+      } catch (e) {
+        const date = new Date(y, m - 1, d, h, min, 0);
+        return date.toISOString();
+      }
     }
     return '';
   };
@@ -332,7 +342,7 @@ const WriteModal: React.FC<{
               {deliveryType === 'instant' ? (
                 'Delivers immediately'
               ) : deliverAtVal ? (
-                `Unlocks on ${new Date(deliverAtVal).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                `Unlocks on ${new Date(deliverAtVal).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: timezone || 'UTC' })}`
               ) : (
                 'Please enter a valid future date and time'
               )}
@@ -527,14 +537,14 @@ const ReadModal: React.FC<{
               {/* Metadata Details list */}
               <View style={rm.metadataBox}>
                 <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                  Created: {formatTimestamp(letter.createdAt)}
+                  Created: {formatTimestamp(letter.createdAt, user?.timezone)}
                 </KamiText>
                 <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                  Scheduled Unlock: {formatTimestamp(letter.deliverAt)}
+                  Scheduled Unlock: {formatTimestamp(letter.deliverAt, user?.timezone)}
                 </KamiText>
                 {'deliveredAt' in letter && letter.deliveredAt && (
                   <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                    Delivered: {formatTimestamp(letter.deliveredAt)}
+                    Delivered: {formatTimestamp(letter.deliveredAt, user?.timezone)}
                   </KamiText>
                 )}
               </View>
@@ -551,7 +561,7 @@ const ReadModal: React.FC<{
                   <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
                     <Text style={rm.envelopeEmoji}>{letter.isFavorite ? '🎀' : '📄'}</Text>
                     <KamiText variant="overline" align="center" style={{ marginTop: Space[2] }}>
-                      Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                      Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
                     </KamiText>
                     {activeSpace === 'couple' && 'senderId' in letter && (
                       <KamiText variant="caption" align="center" color={Colors.textMuted} style={{ marginTop: Space[1] }}>
@@ -580,26 +590,26 @@ const ReadModal: React.FC<{
                   {/* Metadata display */}
                   <View style={[rm.metadataBox, { marginTop: Space[5], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[3] }]}>
                     <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                      Created: {formatTimestamp(letter.createdAt)}
+                      Created: {formatTimestamp(letter.createdAt, user?.timezone)}
                     </KamiText>
                     {new Date(letter.deliverAt).getFullYear() > 1970 && (
                       <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                        Scheduled Unlock: {formatTimestamp(letter.deliverAt)}
+                        Scheduled Unlock: {formatTimestamp(letter.deliverAt, user?.timezone)}
                       </KamiText>
                     )}
                     {'deliveredAt' in letter && letter.deliveredAt && (
                       <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                        Delivered: {formatTimestamp(letter.deliveredAt)}
+                        Delivered: {formatTimestamp(letter.deliveredAt, user?.timezone)}
                       </KamiText>
                     )}
                     {'readAt' in letter && letter.readAt && (
                       <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                        Read: {formatTimestamp(letter.readAt)}
+                        Read: {formatTimestamp(letter.readAt, user?.timezone)}
                       </KamiText>
                     )}
                     {'updatedAt' in letter && letter.updatedAt && (
                       <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
-                        Last Updated: {formatTimestamp(letter.updatedAt)}
+                        Last Updated: {formatTimestamp(letter.updatedAt, user?.timezone)}
                       </KamiText>
                     )}
                   </View>
@@ -765,7 +775,10 @@ export function FutureScreen({ navigation }: Props) {
 
       let relativePaths: string[] = [];
       if (localOnly.length > 0) {
-        const uploadRes = await uploadImages('letter_images', user.id, targetId, localOnly);
+        const bucket = activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images';
+        const ownerId = activeSpace === 'couple' && couple?.id ? couple.id : user.id;
+
+        const uploadRes = await uploadImages(bucket, ownerId, targetId, localOnly);
         if (!uploadRes.success) {
           Alert.alert('Kami', uploadRes.error);
           setSaving(false);
@@ -774,7 +787,8 @@ export function FutureScreen({ navigation }: Props) {
         relativePaths = uploadRes.paths;
       }
 
-      const remoteRelativePaths = remoteUrls.map(getRelativePathFromSignedUrl);
+      const bucket = activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images';
+      const remoteRelativePaths = remoteUrls.map(u => getRelativePathFromSignedUrl(u, bucket));
       const finalImageUrls = [...remoteRelativePaths, ...relativePaths];
 
       if (activeSpace === 'couple') {
@@ -1248,7 +1262,7 @@ const LetterCard: React.FC<{
             {/* Date timestamp */}
             <View style={s.bubbleFooterRow}>
               <Text style={{ fontSize: 9, color: Colors.textMuted }}>
-                {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: currentUser?.timezone ?? 'UTC' })}
               </Text>
               {isUnlocked && !letter.isRead && !isMe && (
                 <View style={[s.newDot, { backgroundColor: colors.primary }]} />

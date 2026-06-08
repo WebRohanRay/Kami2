@@ -24,7 +24,7 @@ export function useCouple() {
   const loadDailyQuestion = useCallback(async () => {
     const s = store.getState();
     s.setQuestionLoading('loading');
-    const qRes = await coupleService.fetchTodayDailyQuestion();
+    const qRes = await coupleService.fetchTodayDailyQuestion(user?.timezone);
     if (qRes.success) {
       s.setTodayQuestion(qRes.data);
       const currentCouple = store.getState().couple;
@@ -89,7 +89,7 @@ export function useCouple() {
     if (metaRes.success && metaRes.data.couple) {
       const cId = metaRes.data.couple.id;
       // Load other tables using couple ID
-      const qRes = await coupleService.fetchTodayDailyQuestion();
+      const qRes = await coupleService.fetchTodayDailyQuestion(user?.timezone);
       if (qRes.success) {
         store.getState().setTodayQuestion(qRes.data);
         const aRes = await coupleService.fetchQuestionAnswers(qRes.data.id, cId);

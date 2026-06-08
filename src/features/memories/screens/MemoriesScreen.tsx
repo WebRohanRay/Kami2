@@ -360,17 +360,20 @@ export function MemoriesScreen({ navigation }: Props) {
 
       // Separate local picker files from remote signed URLs
       const localPickerUris = localUris.filter(u => u.startsWith('file://') || u.startsWith('content://'));
+      const bucket = activeSpace === 'couple' ? 'couple_memory_images' : 'memory_images';
+      const ownerId = activeSpace === 'couple' && couple?.id ? couple.id : user.id;
+
       const imageUrlsToFilter = editing ? editing.imageUrls : [];
       const existingPaths = (imageUrlsToFilter ?? [])
         .filter(url => localUris.includes(url))
         .map(url => {
-          const match = url.match(/\/memory_images\/(.+?)\?/);
+          const match = url.match(new RegExp(`\\/${bucket}\\/(.+?)\\?`));
           return match ? decodeURIComponent(match[1]) : null;
         })
         .filter(Boolean) as string[];
 
       if (localPickerUris.length > 0) {
-        const uploadRes = await uploadImages('memory_images', user.id, targetId, localPickerUris);
+        const uploadRes = await uploadImages(bucket, ownerId, targetId, localPickerUris);
         if (!uploadRes.success) {
           Alert.alert('Kami', uploadRes.error);
           setSaving(false);
@@ -717,6 +720,7 @@ const MemoryTimelineCard: React.FC<{
   onDelete: () => void;
 }> = ({ memory, index, total, isLast, onPressCard, onDelete }) => {
   const { colors } = useTheme();
+  const user = useAuthStore(s => s.user);
   const sc = useRef(new Animated.Value(1)).current;
 
   const desc = 'description' in memory ? memory.description : (memory as any).body;
@@ -768,7 +772,7 @@ const MemoryTimelineCard: React.FC<{
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Text style={{ fontSize: 10 }}>📅</Text>
                   <KamiText variant="caption" color={Colors.textMuted}>
-                    {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
                     {time ? ` · ${time}` : ''}
                   </KamiText>
                 </View>
@@ -1033,6 +1037,7 @@ const MemoryNetflixCard: React.FC<{
   onDelete: () => void;
 }> = ({ memory, onPressCard, onDelete }) => {
   const { colors } = useTheme();
+  const user = useAuthStore(s => s.user);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const desc = 'description' in memory ? memory.description : (memory as any).body;
@@ -1105,7 +1110,7 @@ const MemoryNetflixCard: React.FC<{
           <View style={s.netflixMetaItem}>
             <Text style={s.netflixMetaIcon}>📅</Text>
             <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>
-              {new Date(memory.memoryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              {new Date(memory.memoryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
               {time ? ` · ${time}` : ''}
             </KamiText>
           </View>
@@ -1159,6 +1164,7 @@ const MemoryNetflixCard: React.FC<{
 
 const MemoryCard: React.FC<{ memory: Memory; onPressCard: () => void; onDelete: () => void }> = ({ memory, onPressCard, onDelete }) => {
   const sc = useRef(new Animated.Value(1)).current;
+  const user = useAuthStore(s => s.user);
   return (
     <TouchableOpacity activeOpacity={1} onPress={onPressCard}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
@@ -1179,7 +1185,7 @@ const MemoryCard: React.FC<{ memory: Memory; onPressCard: () => void; onDelete: 
             </View>
             {memory.body ? <KamiText variant="body" color={Colors.textSecondary} numberOfLines={3} style={{ lineHeight: 20 }}>{memory.body}</KamiText> : null}
             <KamiText variant="caption" color={Colors.textMuted}>
-              {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
             </KamiText>
           </View>
         </View>
@@ -1308,7 +1314,7 @@ const MemoryPreviewModal: React.FC<{
               </View>
             ) : <View />}
             <KamiText variant="caption" color={Colors.textMuted}>
-              {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
               {time ? ` · ${time}` : ''}
             </KamiText>
           </View>
@@ -1428,7 +1434,7 @@ const getStarOpacity = (memoryDate: string) => {
 
 const pv = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   editBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   deleteBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },

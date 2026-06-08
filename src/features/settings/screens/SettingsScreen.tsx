@@ -42,7 +42,7 @@ import {
 import { useAuth }      from '@features/auth';
 import { useAuthStore } from '@features/auth';
 import { useTheme }     from '@shared/hooks';
-import { pickAvatarImage, uploadAvatar, uploadHeroBg, pickImages } from '@shared/lib/storage';
+import { pickAvatarImage, uploadAvatar, uploadHeroBg, uploadCoupleHeroBg, pickImages } from '@shared/lib/storage';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import * as Clipboard from 'expo-clipboard';
 import * as coupleService from '@infrastructure/couple/coupleService';
@@ -78,6 +78,17 @@ const TEXT_SIZES = [
   { id: 'small', label: 'Small', emoji: '▫️' },
   { id: 'medium', label: 'Medium', emoji: '◽' },
   { id: 'large', label: 'Large', emoji: '◻️' },
+] as const;
+
+const TIMEZONES = [
+  { id: 'Asia/Kolkata', label: 'India (UTC+5:30)', emoji: '🇮🇳' },
+  { id: 'Asia/Manila', label: 'Philippines (UTC+8:00)', emoji: '🇵🇭' },
+  { id: 'Asia/Jakarta', label: 'Indonesia (UTC+7:00)', emoji: '🇮🇩' },
+  { id: 'Asia/Singapore', label: 'Singapore (UTC+8:00)', emoji: '🇸🇬' },
+  { id: 'Europe/London', label: 'London (UTC+1:00)', emoji: '🇬🇧' },
+  { id: 'America/New_York', label: 'New York (UTC-4:00)', emoji: '🇺🇸' },
+  { id: 'America/Los_Angeles', label: 'Los Angeles (UTC-7:00)', emoji: '🇺🇸' },
+  { id: 'UTC', label: 'Universal Coordinated Time (UTC)', emoji: '🌐' },
 ] as const;
 
 function initialsFor(name?: string, email?: string) {
@@ -303,7 +314,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [heroBgLoading,  setHeroBgLoading]  = useState(false);
 
   // Selector & Info Sheets
-  const [activeSelector, setActiveSelector] = useState<'theme' | 'textSize' | null>(null);
+  const [activeSelector, setActiveSelector] = useState<'theme' | 'textSize' | 'timezone' | null>(null);
   const [activeInfo,     setActiveInfo]     = useState<'privacy' | 'terms' | null>(null);
 
   // Couple Space State
@@ -598,6 +609,8 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleHeroBgPress = async () => {
     if (!user?.id) { Alert.alert('Kami', 'Please sign in again.'); return; }
+    if (user.activeSpace === 'couple' && !couple) { Alert.alert('Kami', 'Please connect with a partner first.'); return; }
+    
     const picked = await pickImages(false);
     if (!picked.success) {
       if (!picked.cancelled) Alert.alert('Kami', picked.error);
@@ -607,13 +620,27 @@ export function SettingsScreen({ navigation }: Props) {
     if (!uri) return;
 
     setHeroBgLoading(true);
-    const uploaded = await uploadHeroBg(user.id, uri);
-    if (!uploaded.success) { setHeroBgLoading(false); Alert.alert('Kami', uploaded.error); return; }
+    
+    if (user.activeSpace === 'couple') {
+      const uploaded = await uploadCoupleHeroBg(couple!.id, uri);
+      if (!uploaded.success) { setHeroBgLoading(false); Alert.alert('Kami', uploaded.error); return; }
 
-    const saved = await updateProfile({ heroBgUrl: uploaded.path });
-    setHeroBgLoading(false);
-    if (!saved.success) { Alert.alert('Kami', saved.error); return; }
-    Alert.alert('Kami', "Today's Moment cover image updated! 🖼️");
+      const saved = await coupleService.updateCoupleHeroBg(couple!.id, uploaded.path);
+      setHeroBgLoading(false);
+      if (!saved.success) { Alert.alert('Kami', saved.error); return; }
+      
+      // Update local couple state to trigger re-renders
+      setCouple({ ...couple!, heroBgUrl: uploaded.path });
+      Alert.alert('Kami', "Couple Moment cover image updated! 🖼️");
+    } else {
+      const uploaded = await uploadHeroBg(user.id, uri);
+      if (!uploaded.success) { setHeroBgLoading(false); Alert.alert('Kami', uploaded.error); return; }
+
+      const saved = await updateProfile({ heroBgUrl: uploaded.path });
+      setHeroBgLoading(false);
+      if (!saved.success) { Alert.alert('Kami', saved.error); return; }
+      Alert.alert('Kami', "Today's Moment cover image updated! 🖼️");
+    }
   };
 
   const handleTogglePref = async (key: 'dailyReminder' | 'weeklyDigest' | 'streakAlerts', val: boolean) => {
@@ -621,6 +648,24 @@ export function SettingsScreen({ navigation }: Props) {
     const r = await updateProfile({ [key]: val });
     if (!r.success) {
       Alert.alert('Kami', r.error);
+      return;
+    }
+
+    const { 
+      scheduleDailyReminderAsync, cancelDailyReminderAsync,
+      scheduleWeeklyDigestAsync, cancelWeeklyDigestAsync,
+      scheduleStreakAlertsAsync, cancelStreakAlertsAsync 
+    } = require('@infrastructure/notifications/notificationService');
+
+    if (key === 'dailyReminder') {
+      if (val) scheduleDailyReminderAsync().catch(() => {});
+      else cancelDailyReminderAsync().catch(() => {});
+    } else if (key === 'weeklyDigest') {
+      if (val) scheduleWeeklyDigestAsync().catch(() => {});
+      else cancelWeeklyDigestAsync().catch(() => {});
+    } else if (key === 'streakAlerts') {
+      if (val) scheduleStreakAlertsAsync().catch(() => {});
+      else cancelStreakAlertsAsync().catch(() => {});
     }
   };
 
@@ -637,6 +682,12 @@ export function SettingsScreen({ navigation }: Props) {
   const handleTextSizeSelect = async (sizeId: string) => {
     if (!user?.id) return;
     const r = await updateProfile({ textSize: sizeId });
+    if (!r.success) Alert.alert('Kami', r.error);
+  };
+
+  const handleTimezoneSelect = async (tzId: string) => {
+    if (!user?.id) return;
+    const r = await updateProfile({ timezone: tzId });
     if (!r.success) Alert.alert('Kami', r.error);
   };
 
@@ -997,11 +1048,19 @@ export function SettingsScreen({ navigation }: Props) {
           <SettingRow
             icon="🖼️"
             label="Cover Image"
-            value={heroBgLoading ? 'Uploading... ⏳' : user?.heroBgUrl ? 'Custom Cover Set' : 'Default Cover'}
+            value={heroBgLoading ? 'Uploading... ⏳' : (user?.activeSpace === 'couple' ? couple?.heroBgUrl : user?.heroBgUrl) ? 'Custom Cover Set' : 'Default Cover'}
             onPress={handleHeroBgPress}
           />
         </SettingGroup>
-
+        {/* ── Timezone & Country ── */}
+        <SettingGroup title="Timezone & Country">
+          <SettingRow
+            icon="🌐"
+            label="Your Timezone"
+            value={TIMEZONES.find(t => t.id === (user?.timezone ?? 'UTC'))?.label ?? (user?.timezone ?? 'UTC')}
+            onPress={() => setActiveSelector('timezone')}
+          />
+        </SettingGroup>
         {/* ── Notifications ── */}
         <SettingGroup title="Notifications">
           <SettingRow
@@ -1025,7 +1084,7 @@ export function SettingsScreen({ navigation }: Props) {
             showChevron={false}
             rightEl={
               <Switch
-                value={user?.weeklyDigest ?? false}
+                value={user?.weeklyDigest ?? true}
                 onValueChange={(val) => handleTogglePref('weeklyDigest', val)}
                 trackColor={{ false: Colors.border, true: colors.primaryLight }}
                 thumbColor={colors.primary}
@@ -1143,6 +1202,15 @@ export function SettingsScreen({ navigation }: Props) {
         options={TEXT_SIZES}
         selectedValue={user?.textSize ?? 'medium'}
         onSelect={handleTextSizeSelect}
+        onClose={() => setActiveSelector(null)}
+      />
+
+      <SelectorSheet
+        visible={activeSelector === 'timezone'}
+        title="Select Timezone"
+        options={TIMEZONES}
+        selectedValue={user?.timezone ?? 'UTC'}
+        onSelect={handleTimezoneSelect}
         onClose={() => setActiveSelector(null)}
       />
 

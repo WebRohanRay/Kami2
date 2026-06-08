@@ -4,6 +4,7 @@ export interface Couple {
   anniversaryDate: string | null;
   pendingDeletion: boolean;
   deleteAt: string | null;
+  heroBgUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

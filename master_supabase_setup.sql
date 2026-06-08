@@ -31,15 +31,22 @@ CREATE OR REPLACE FUNCTION public.generate_kami_id()
 RETURNS TEXT AS $$
 DECLARE
   chars TEXT := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  result TEXT := 'KAMI-';
+  result TEXT;
   i INTEGER;
+  is_unique BOOLEAN := FALSE;
 BEGIN
-  FOR i IN 1..6 LOOP
-    result := result || substr(chars, floor(random() * length(chars) + 1)::integer, 1);
+  WHILE NOT is_unique LOOP
+    result := 'KAMI-';
+    FOR i IN 1..6 LOOP
+      result := result || substr(chars, floor(random() * length(chars) + 1)::integer, 1);
+    END LOOP;
+    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE kami_id = result) THEN
+      is_unique := TRUE;
+    END IF;
   END LOOP;
   RETURN result;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ─── 2. CORE TABLES & USER PROFILES ─────────────────────────
 CREATE TABLE public.profiles (
@@ -49,8 +56,9 @@ CREATE TABLE public.profiles (
   avatar_url              TEXT,
   theme                   TEXT NOT NULL DEFAULT 'blush',
   text_size               TEXT NOT NULL DEFAULT 'medium',
+  timezone                TEXT NOT NULL DEFAULT 'UTC',
   daily_reminder_enabled  BOOLEAN NOT NULL DEFAULT TRUE,
-  weekly_digest_enabled   BOOLEAN NOT NULL DEFAULT FALSE,
+  weekly_digest_enabled   BOOLEAN NOT NULL DEFAULT TRUE,
   streak_alerts_enabled   BOOLEAN NOT NULL DEFAULT TRUE,
   push_token              TEXT,
   kami_id                 TEXT UNIQUE DEFAULT public.generate_kami_id(),
@@ -253,7 +261,8 @@ CREATE TABLE public.couple_invitations (
   status              TEXT CHECK (status IN ('pending', 'accepted', 'declined', 'expired')) DEFAULT 'pending',
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   expires_at          TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days'),
-  UNIQUE (sender_id, receiver_id)
+  UNIQUE (sender_id, receiver_id),
+  CHECK (sender_id != receiver_id)
 );
 
 -- Couple Journals, Comments, Reactions
@@ -390,7 +399,7 @@ BEGIN
       AND couple_members.user_id = auth.uid()
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- RLS helper function to check if a user is the partner of another user
 CREATE OR REPLACE FUNCTION public.is_partner_of(profile_id UUID)
@@ -402,20 +411,20 @@ BEGIN
     WHERE m1.user_id = auth.uid() AND m2.user_id = profile_id
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger to auto-reset pending_deletion if either partner queries relationship state
 CREATE OR REPLACE FUNCTION public.restore_deleted_couple_space()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF OLD.pending_deletion = TRUE AND NEW.pending_deletion = TRUE THEN
-    UPDATE public.couples 
-    SET pending_deletion = FALSE, delete_at = NULL 
-    WHERE id = NEW.id;
+  IF OLD.pending_deletion = TRUE AND NEW.pending_deletion = FALSE THEN
+    NEW.delete_at = NULL;
+  ELSIF OLD.pending_deletion = FALSE AND NEW.pending_deletion = TRUE THEN
+    NEW.delete_at = NOW() + INTERVAL '7 days';
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER restore_deleted_couple_space_trigger
   BEFORE UPDATE ON public.couples
@@ -483,6 +492,11 @@ BEGIN
   -- Verify current user is receiver
   IF v_receiver_id != auth.uid() THEN
     RAISE EXCEPTION 'You are not the receiver of this invitation.';
+  END IF;
+
+  -- Verify not self-invitation
+  IF v_sender_id = v_receiver_id THEN
+    RAISE EXCEPTION 'You cannot couple with yourself.';
   END IF;
 
   -- 3. Insert Couple
@@ -556,7 +570,7 @@ CREATE TRIGGER on_mood_log_insert_update_streak
   FOR EACH ROW EXECUTE FUNCTION public.update_streak_on_checkin();
 
 -- Deterministic daily prompt picker
-CREATE OR REPLACE FUNCTION public.fetch_today_prompt()
+CREATE OR REPLACE FUNCTION public.fetch_today_prompt(p_client_date DATE DEFAULT CURRENT_DATE)
 RETURNS TABLE (id UUID, content TEXT, category TEXT) AS $$
 DECLARE
   v_count INT;
@@ -568,7 +582,7 @@ BEGIN
     RETURN;
   END IF;
   
-  v_day_of_year := EXTRACT(DOY FROM NOW())::INT;
+  v_day_of_year := EXTRACT(DOY FROM p_client_date)::INT;
   v_offset := v_day_of_year % v_count;
   
   RETURN QUERY
@@ -580,8 +594,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-REVOKE ALL ON FUNCTION public.fetch_today_prompt() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.fetch_today_prompt() TO authenticated;
+REVOKE ALL ON FUNCTION public.fetch_today_prompt(DATE) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fetch_today_prompt(DATE) TO authenticated;
 
 -- Secure Self-Delete Account RPC
 CREATE OR REPLACE FUNCTION public.delete_user_account()
@@ -697,9 +711,10 @@ ALTER TABLE public.couple_daily_questions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "couple_questions_select" ON public.couple_daily_questions FOR SELECT USING (auth.role() = 'authenticated');
 
 ALTER TABLE public.couple_answers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_answers_all" ON public.couple_answers FOR ALL 
-  USING (public.is_couple_member(couple_id)) 
-  WITH CHECK (public.is_couple_member(couple_id) AND auth.uid() = user_id);
+CREATE POLICY "couple_answers_select" ON public.couple_answers FOR SELECT USING (public.is_couple_member(couple_id));
+CREATE POLICY "couple_answers_insert" ON public.couple_answers FOR INSERT WITH CHECK (public.is_couple_member(couple_id) AND auth.uid() = user_id);
+CREATE POLICY "couple_answers_update" ON public.couple_answers FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "couple_answers_delete" ON public.couple_answers FOR DELETE USING (auth.uid() = user_id);
 
 ALTER TABLE public.relationship_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "relationship_events_all" ON public.relationship_events FOR ALL 
@@ -731,7 +746,11 @@ VALUES
   ('journal_images', 'journal_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
   ('letter_images', 'letter_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
   ('memory_images', 'memory_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
-  ('goal_images', 'goal_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic'])
+  ('goal_images', 'goal_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
+  ('couple_journal_images', 'couple_journal_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
+  ('couple_letter_images', 'couple_letter_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
+  ('couple_memory_images', 'couple_memory_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic']),
+  ('couple_goal_images', 'couple_goal_images', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/heic'])
 ON CONFLICT (id) DO UPDATE SET 
   public = EXCLUDED.public,
   file_size_limit = EXCLUDED.file_size_limit,
@@ -744,28 +763,52 @@ CREATE POLICY "Users can read own avatar" ON storage.objects FOR SELECT USING (b
 CREATE POLICY "Users can delete own avatar" ON storage.objects FOR DELETE USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Journal storage policies
-CREATE POLICY "Users can read own journal images" ON storage.objects FOR SELECT USING (bucket_id = 'journal_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
+CREATE POLICY "Users can read own journal images" ON storage.objects FOR SELECT USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can insert own journal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own journal images" ON storage.objects FOR UPDATE USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own journal images" ON storage.objects FOR DELETE USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Letters storage policies
-CREATE POLICY "Users can read own letter images" ON storage.objects FOR SELECT USING (bucket_id = 'letter_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
+CREATE POLICY "Users can read own letter images" ON storage.objects FOR SELECT USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can insert own letter images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own letter images" ON storage.objects FOR UPDATE USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own letter images" ON storage.objects FOR DELETE USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Memories storage policies
-CREATE POLICY "Users can read own memory images" ON storage.objects FOR SELECT USING (bucket_id = 'memory_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
+CREATE POLICY "Users can read own memory images" ON storage.objects FOR SELECT USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can insert own memory images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own memory images" ON storage.objects FOR UPDATE USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own memory images" ON storage.objects FOR DELETE USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Goals storage policies
-CREATE POLICY "Users can read own goal images" ON storage.objects FOR SELECT USING (bucket_id = 'goal_images' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
+CREATE POLICY "Users can read own goal images" ON storage.objects FOR SELECT USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can insert own goal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can update own goal images" ON storage.objects FOR UPDATE USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can delete own goal images" ON storage.objects FOR DELETE USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Couple Journal storage policies
+CREATE POLICY "Users can read couple journal images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can insert couple journal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can update couple journal images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can delete couple journal images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+
+-- Couple Letters storage policies
+CREATE POLICY "Users can read couple letter images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can insert couple letter images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can update couple letter images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can delete couple letter images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+
+-- Couple Memories storage policies
+CREATE POLICY "Users can read couple memory images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can insert couple memory images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can update couple memory images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can delete couple memory images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+
+-- Couple Goals storage policies
+CREATE POLICY "Users can read couple goal images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can insert couple goal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can update couple goal images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+CREATE POLICY "Users can delete couple goal images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
 
 
 -- ─── 7. GIN SEARCH INDEXES & OPTIMIZATIONS ──────────────────

@@ -685,6 +685,7 @@ const GoalPreviewModal: React.FC<{
   onProgress: (g: Goal | CoupleGoal, delta: number) => void;
 }> = ({ visible, goal, onClose, onEdit, onDelete, onProgress }) => {
   const { colors } = useTheme();
+  const user = useAuthStore(s => s.user);
 
   if (!goal) return null;
 
@@ -775,7 +776,7 @@ const GoalPreviewModal: React.FC<{
             )}
             {goal.targetDate && (
               <View style={[gp.badge, { backgroundColor: '#F1F5F9' }]}>
-                <KamiText variant="caption" color={Colors.textSecondary} bold>🗓 Due: {new Date(goal.targetDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</KamiText>
+                <KamiText variant="caption" color={Colors.textSecondary} bold>🗓 Due: {new Date(goal.targetDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}</KamiText>
               </View>
             )}
           </View>
@@ -877,7 +878,7 @@ const GoalPreviewModal: React.FC<{
 
 const gp = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   editBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   deleteBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
@@ -910,7 +911,7 @@ export default GoalsScreen;
 
 const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
   addBtnPlus: { fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[3] },

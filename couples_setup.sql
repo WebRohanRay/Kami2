@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.couples (
   anniversary_date    DATE,
   pending_deletion    BOOLEAN DEFAULT FALSE,
   delete_at           TIMESTAMPTZ,
+  hero_bg_url         TEXT,
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
