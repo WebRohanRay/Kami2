@@ -10,7 +10,7 @@ import {
   ActivityIndicator, Alert, Animated, Keyboard, Modal,
   Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
-  Image, StatusBar as RNStatusBar, AppState,
+  Image, StatusBar as RNStatusBar, AppState, Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import KamiText from '@shared/ui/atoms/KamiText';
@@ -264,8 +264,9 @@ export function MemoriesScreen({ navigation }: Props) {
   const [saving,     setSaving]     = useState(false);
   const [search,     setSearch]     = useState('');
   const [viewMode,   setViewMode]   = useState<'timeline' | 'galaxy'>('timeline');
-  const [selectedStar, setSelectedStar] = useState<Memory | CoupleMemory | null>(null);
   const [timelineLimit, setTimelineLimit] = useState(5);
+  const [previewMemory, setPreviewMemory] = useState<Memory | CoupleMemory | null>(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
   const [appState, setAppState] = useState(AppState.currentState);
@@ -305,7 +306,7 @@ export function MemoriesScreen({ navigation }: Props) {
       if (isFocused && appState === 'active') {
         const action = modalOpen 
           ? 'writing_memory' 
-          : selectedStar 
+          : previewVisible
             ? 'viewing_memory' 
             : 'reading_memories';
         useCoupleStore.getState().setMyActiveAction(action);
@@ -320,7 +321,7 @@ export function MemoriesScreen({ navigation }: Props) {
         }
       }
     }
-  }, [activeSpace, couple?.id, user?.id, isFocused, appState, modalOpen, selectedStar]);
+  }, [activeSpace, couple?.id, user?.id, isFocused, appState, modalOpen, previewVisible]);
 
   useEffect(() => {
     if (activeSpace === 'couple') {
@@ -488,7 +489,7 @@ export function MemoriesScreen({ navigation }: Props) {
               <MemoryNetflixCard
                 key={m.id}
                 memory={m}
-                onEdit={() => { setEditing(m); setModalOpen(true); }}
+                onPressCard={() => { setPreviewMemory(m); setPreviewVisible(true); }}
                 onDelete={() => handleDelete(m)}
               />
             ))}
@@ -596,7 +597,10 @@ export function MemoriesScreen({ navigation }: Props) {
                         }
                       ]}
                       activeOpacity={0.8}
-                      onPress={() => setSelectedStar(m)}
+                      onPress={() => {
+                        setPreviewMemory(m);
+                        setPreviewVisible(true);
+                      }}
                     >
                       <AnimatedStarPulse />
                       <Text style={s.starEmoji}>⭐</Text>
@@ -658,7 +662,7 @@ export function MemoriesScreen({ navigation }: Props) {
                   index={idx}
                   total={recentMemories.length}
                   isLast={idx === Math.min(recentMemories.length, timelineLimit) - 1}
-                  onEdit={() => { setEditing(m); setModalOpen(true); }}
+                  onPressCard={() => { setPreviewMemory(m); setPreviewVisible(true); }}
                   onDelete={() => handleDelete(m)}
                 />
               ))}
@@ -686,12 +690,14 @@ export function MemoriesScreen({ navigation }: Props) {
 
       <MemoryModal visible={modalOpen} memory={editing} onClose={() => { setModalOpen(false); setEditing(null); }} onSave={handleSave} saving={saving} activeSpace={activeSpace} />
       
-      <GalaxyDetailModal
-        visible={!!selectedStar}
-        memory={selectedStar}
-        onClose={() => setSelectedStar(null)}
-        onEdit={() => { setEditing(selectedStar); setModalOpen(true); }}
-        onDelete={() => handleDelete(selectedStar!)}
+      <MemoryPreviewModal
+        visible={previewVisible}
+        memory={previewMemory}
+        onClose={() => { setPreviewVisible(false); setPreviewMemory(null); }}
+        onEdit={() => { setEditing(previewMemory); setModalOpen(true); }}
+        onDelete={() => handleDelete(previewMemory!)}
+        activeSpace={activeSpace}
+        user={user}
       />
     </SafeAreaView>
   );
@@ -707,9 +713,9 @@ const MemoryTimelineCard: React.FC<{
   index: number;
   total: number;
   isLast: boolean;
-  onEdit: () => void;
+  onPressCard: () => void;
   onDelete: () => void;
-}> = ({ memory, index, total, isLast, onEdit, onDelete }) => {
+}> = ({ memory, index, total, isLast, onPressCard, onDelete }) => {
   const { colors } = useTheme();
   const sc = useRef(new Animated.Value(1)).current;
 
@@ -735,7 +741,7 @@ const MemoryTimelineCard: React.FC<{
 
       {/* Card Content */}
       <View style={{ flex: 1, paddingBottom: Space[4] }}>
-        <TouchableOpacity activeOpacity={1} onPress={onEdit}
+        <TouchableOpacity activeOpacity={1} onPress={onPressCard}
           onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
           onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
         >
@@ -823,7 +829,7 @@ const MemoryTimelineCard: React.FC<{
 
 const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
   addPlus:{ fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
 
@@ -1023,9 +1029,9 @@ const s = StyleSheet.create({
 
 const MemoryNetflixCard: React.FC<{
   memory: any;
-  onEdit: () => void;
+  onPressCard: () => void;
   onDelete: () => void;
-}> = ({ memory, onEdit, onDelete }) => {
+}> = ({ memory, onPressCard, onDelete }) => {
   const { colors } = useTheme();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
@@ -1077,7 +1083,7 @@ const MemoryNetflixCard: React.FC<{
       )}
 
       {/* Info Content */}
-      <TouchableOpacity style={s.netflixCardInfo} onPress={onEdit} activeOpacity={0.9}>
+      <TouchableOpacity style={s.netflixCardInfo} onPress={onPressCard} activeOpacity={0.9}>
         <View style={s.cardHeaderRow}>
           <KamiText variant="label" bold numberOfLines={1} style={{ flex: 1 }}>
             {memory.title}
@@ -1151,10 +1157,10 @@ const MemoryNetflixCard: React.FC<{
   );
 };
 
-const MemoryCard: React.FC<{ memory: Memory; onEdit: () => void; onDelete: () => void }> = ({ memory, onEdit, onDelete }) => {
+const MemoryCard: React.FC<{ memory: Memory; onPressCard: () => void; onDelete: () => void }> = ({ memory, onPressCard, onDelete }) => {
   const sc = useRef(new Animated.Value(1)).current;
   return (
-    <TouchableOpacity activeOpacity={1} onPress={onEdit}
+    <TouchableOpacity activeOpacity={1} onPress={onPressCard}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
@@ -1224,92 +1230,181 @@ const AnimatedStarPulse = () => {
   );
 };
 
-const GalaxyDetailModal: React.FC<{
+const MemoryPreviewModal: React.FC<{
   visible: boolean;
   memory: Memory | CoupleMemory | null;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ visible, memory, onClose, onEdit, onDelete }) => {
+  activeSpace?: 'personal' | 'couple';
+  user?: any;
+}> = ({ visible, memory, onClose, onEdit, onDelete, activeSpace, user }) => {
+  const { colors } = useTheme();
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  useEffect(() => {
+    if (visible) {
+      setActiveImageIndex(0);
+    }
+  }, [visible]);
+
   if (!memory) return null;
 
   const desc = 'description' in memory ? memory.description : (memory as any).body;
-  const location = 'location' in memory ? (memory as any).location : null;
   const mood = 'mood' in memory ? (memory as any).mood : null;
-  const memoryTime = 'memoryTime' in memory ? (memory as any).memoryTime : null;
+  const location = 'location' in memory ? (memory as any).location : null;
+  const time = 'memoryTime' in memory ? (memory as any).memoryTime : null;
   const lastEdited = 'lastEditedNickname' in memory ? (memory as any).lastEditedNickname : null;
+  const emoji = 'emoji' in memory ? (memory as any).emoji : '📸';
+
+  const canEdit = !activeSpace || activeSpace === 'personal' || ('userId' in memory ? memory.userId === user?.id : true);
+  const { width: screenWidth } = Dimensions.get('window');
+  const carouselWidth = screenWidth - 40; // 20 padding on each side
+
+  const handleOptionsPress = () => {
+    const options = [
+      { text: 'Cancel', style: 'cancel' as const },
+    ];
+    if (canEdit) {
+      options.unshift({
+        text: 'Edit Memory',
+        onPress: () => { onClose(); onEdit(); }
+      });
+    }
+    options.unshift({
+      text: 'Delete Memory',
+      style: 'destructive' as const,
+      onPress: () => { onClose(); onDelete(); }
+    });
+    Alert.alert('Options', undefined, options);
+  };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={s.galaxyModalBackdrop}>
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={onClose} activeOpacity={1} />
-        
-        <View style={[s.galaxyModalCard, { backgroundColor: '#111324', borderColor: 'rgba(234, 179, 8, 0.4)' }]}>
-          <TouchableOpacity style={s.galaxyModalClose} onPress={onClose}>
-            <Text style={{ color: '#fff', fontSize: 18 }}>✕</Text>
-          </TouchableOpacity>
-
-          <Text style={{ fontSize: 44, alignSelf: 'center', marginBottom: Space[2] }}>⭐</Text>
-
-          <KamiText variant="title" color="#fff" align="center" style={{ marginBottom: Space[1] }}>
-            {memory.title}
-          </KamiText>
-          <KamiText variant="caption" color="rgba(255,255,255,0.5)" align="center" style={{ marginBottom: Space[4] }}>
-            {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-            {memoryTime ? ` · ${memoryTime}` : ''}
-          </KamiText>
-
-          {(location || mood) ? (
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: Space[3], marginBottom: Space[3] }}>
-              {location ? <KamiText variant="caption" color="#fff">📍 {location}</KamiText> : null}
-              {mood ? <KamiText variant="caption" color="#fff">Mood: {mood}</KamiText> : null}
-            </View>
-          ) : null}
-
-          {lastEdited ? (
-            <KamiText variant="caption" color="rgba(234, 179, 8, 0.8)" align="center" style={{ marginBottom: Space[3], fontSize: 11 }}>
-              ✏️ Last edited by {lastEdited}
-            </KamiText>
-          ) : null}
-
-          {desc ? (
-            <KamiText variant="body" color="rgba(255,255,255,0.85)" style={s.galaxyModalDesc}>
-              {desc}
-            </KamiText>
-          ) : null}
-
-          {memory.imageUrls && memory.imageUrls.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.galaxyModalPhotos}>
-              <View style={{ flexDirection: 'row', gap: Space[2] }}>
-                {memory.imageUrls.map((url, i) => (
-                  <Image key={i} source={{ uri: url }} style={s.galaxyModalPhoto} />
-                ))}
-              </View>
-            </ScrollView>
-          )}
-
-          <View style={s.galaxyModalActions}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={[pv.root, { backgroundColor: colors.pageBg }]}>
+        <View style={pv.header}>
+          <KamiText variant="title">Preview Memory</KamiText>
+          <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
             <TouchableOpacity 
-              style={[s.galaxyModalBtn, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]} 
-              onPress={() => {
-                onClose();
-                onEdit();
-              }}
+              onPress={handleOptionsPress} 
+              style={[pv.menuBtn, { backgroundColor: colors.primary + '18' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Options"
             >
-              <KamiText variant="caption" color="#fff" bold>Edit Star</KamiText>
+              <Text style={{ fontSize: 18, color: colors.primary, fontWeight: 'bold' }}>☰</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[s.galaxyModalBtn, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]} 
-              onPress={() => {
-                onClose();
-                onDelete();
-              }}
-            >
-              <KamiText variant="caption" color="#ef4444" bold>Delete Star</KamiText>
+            <TouchableOpacity onPress={onClose} style={pv.closeBtn} accessibilityRole="button" accessibilityLabel="Close Preview">
+              <KamiText variant="label" color={Colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+
+        <ScrollView contentContainerStyle={pv.scroll} showsVerticalScrollIndicator={false}>
+          {/* Header metadata (Mood, Date, Time, Location) */}
+          <View style={pv.metaRow}>
+            {mood ? (
+              <View style={[pv.moodBadge, { backgroundColor: colors.primary + '11' }]}>
+                <KamiText variant="caption" color={colors.primary} bold>Mood: {mood}</KamiText>
+              </View>
+            ) : <View />}
+            <KamiText variant="caption" color={Colors.textMuted}>
+              {new Date(memory.memoryDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              {time ? ` · ${time}` : ''}
+            </KamiText>
+          </View>
+
+          {/* Location details */}
+          {location && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -Space[2], marginBottom: Space[2] }}>
+              <Text style={{ fontSize: 12 }}>📍</Text>
+              <KamiText variant="caption" color={Colors.textSecondary} bold>{location}</KamiText>
+            </View>
+          )}
+
+          {/* Title */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[2], marginVertical: Space[1] }}>
+            <Text style={{ fontSize: 32 }}>{emoji}</Text>
+            <KamiText variant="subtitle" bold style={[pv.title, { flex: 1 }]}>
+              {memory.title}
+            </KamiText>
+          </View>
+
+          {/* Authorship / last edited info */}
+          {lastEdited && (
+            <View style={pv.authorRow}>
+              <KamiText variant="caption" color={colors.primary} bold>
+                ✏️ Last edited by {lastEdited}
+              </KamiText>
+            </View>
+          )}
+
+          {/* Premium Image Scroller / Carousel */}
+          {memory.imageUrls && memory.imageUrls.length > 0 && (
+            <View style={pv.imageScrollerContainer}>
+              <ScrollView 
+                horizontal 
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={pv.imageScrollView}
+                testID="memory-image-carousel"
+                accessibilityLabel="Memory Image Carousel"
+                onScroll={(e) => {
+                  const slide = Math.round(e.nativeEvent.contentOffset.x / carouselWidth);
+                  if (slide !== activeImageIndex) {
+                    setActiveImageIndex(slide);
+                  }
+                }}
+                scrollEventThrottle={16}
+              >
+                {memory.imageUrls.map((url: string, index: number) => (
+                  <View key={index} style={{ width: carouselWidth, height: 250, overflow: 'hidden' }}>
+                    <Image 
+                      source={{ uri: url }} 
+                      style={pv.scrollerImage} 
+                      resizeMode="cover" 
+                      testID={`memory-image-${index}`}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+              {/* Pagination Dots indicator */}
+              {memory.imageUrls.length > 1 && (
+                <View style={pv.dotIndicatorRow}>
+                  {memory.imageUrls.map((_: any, index: number) => (
+                    <View 
+                      key={index} 
+                      style={[
+                        pv.dot, 
+                        { backgroundColor: index === activeImageIndex ? colors.primary : colors.primary + '33' }
+                      ]} 
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Description Body */}
+          {desc ? (
+            <View style={pv.bodyContainer}>
+              <KamiText variant="body" color={Colors.textSecondary} style={pv.bodyText}>
+                {desc}
+              </KamiText>
+            </View>
+          ) : null}
+
+          {/* Tags */}
+          {'tags' in memory && memory.tags && memory.tags.length > 0 && (
+            <View style={pv.tagRow}>
+              {memory.tags.map((t: string) => (
+                <View key={t} style={[pv.tagChip, { backgroundColor: colors.primary + '15' }]}>
+                  <KamiText variant="caption" color={colors.primary}>#{t}</KamiText>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </SafeAreaView>
     </Modal>
   );
 };
@@ -1330,5 +1425,28 @@ const getStarOpacity = (memoryDate: string) => {
   const opacity = Math.max(0.35, 1.0 - (ageDays / 180));
   return opacity;
 };
+
+const pv = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  editBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
+  deleteBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
+  menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
+  closeBtn: { padding: Space[2] },
+  scroll: { padding: Space[5], gap: Space[4] },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
+  moodBadge: { paddingVertical: 2, paddingHorizontal: Space[2], borderRadius: Radii.sm },
+  title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
+  authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
+  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden' },
+  imageScrollView: { width: '100%', height: 250 },
+  scrollerImage: { width: '100%', height: '100%' },
+  dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  bodyContainer: { paddingVertical: Space[2] },
+  bodyText: { fontSize: FontSize.base, lineHeight: 26 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2], marginTop: Space[2] },
+  tagChip: { paddingVertical: 4, paddingHorizontal: Space[3], borderRadius: Radii.full },
+});
 
 export default MemoriesScreen;

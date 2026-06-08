@@ -906,6 +906,7 @@ export function JournalScreen({ navigation }: Props) {
           setEditing(previewEntry);
           setWriteVisible(true);
         }}
+        onDelete={handleDelete}
         activeSpace={user?.activeSpace}
         user={user}
       />
@@ -1044,9 +1045,10 @@ const PreviewModal: React.FC<{
   entry: any;
   onClose: () => void;
   onEdit: () => void;
+  onDelete?: (e: any) => void;
   activeSpace?: 'personal' | 'couple';
   user?: any;
-}> = ({ visible, entry, onClose, onEdit, activeSpace, user }) => {
+}> = ({ visible, entry, onClose, onEdit, onDelete, activeSpace, user }) => {
   const { colors } = useTheme();
   
   if (!entry) return null;
@@ -1055,22 +1057,40 @@ const PreviewModal: React.FC<{
   const { width: screenWidth } = Dimensions.get('window');
   const carouselWidth = screenWidth - 40; // 20 padding on each side (Space[5] is 20)
 
+  const handleOptionsPress = () => {
+    const options = [
+      { text: 'Cancel', style: 'cancel' as const },
+    ];
+    if (canEdit) {
+      options.unshift({
+        text: 'Edit Entry',
+        onPress: () => { onClose(); onEdit(); }
+      });
+    }
+    if (onDelete) {
+      options.unshift({
+        text: 'Delete Entry',
+        style: 'destructive' as const,
+        onPress: () => { onClose(); onDelete(entry); }
+      });
+    }
+    Alert.alert('Options', undefined, options);
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[pv.root, { backgroundColor: colors.pageBg }]}>
         <View style={pv.header}>
           <KamiText variant="title">Preview Entry</KamiText>
           <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
-            {canEdit && (
-              <TouchableOpacity 
-                onPress={() => { onClose(); onEdit(); }} 
-                style={[pv.editBtn, { backgroundColor: colors.primary + '18' }]}
-                accessibilityRole="button"
-                accessibilityLabel="Edit Journal Entry"
-              >
-                <KamiText variant="label" color={colors.primary} bold>Edit</KamiText>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity 
+              onPress={handleOptionsPress} 
+              style={[pv.menuBtn, { backgroundColor: colors.primary + '18' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Options"
+            >
+              <Text style={{ fontSize: 18, color: colors.primary, fontWeight: 'bold' }}>☰</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={onClose} style={pv.closeBtn} accessibilityRole="button" accessibilityLabel="Close Preview">
               <KamiText variant="label" color={Colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
             </TouchableOpacity>
@@ -1303,8 +1323,9 @@ const cm = StyleSheet.create({
 
 const pv = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
   editBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
+  menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   closeBtn: { padding: Space[2] },
   scroll: { padding: Space[5], gap: Space[4] },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
@@ -1326,7 +1347,7 @@ export default JournalScreen;
 
 const s = StyleSheet.create({
   root:  { flex: 1, backgroundColor: Colors.pageBg },
-  header:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
+  header:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
   writeBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
   writeBtnPlus: { fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
 
