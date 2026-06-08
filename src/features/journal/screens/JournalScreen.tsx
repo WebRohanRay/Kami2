@@ -491,6 +491,7 @@ export function JournalScreen({ navigation }: Props) {
         if (editing) {
           const r = await updateCoupleJournal(editing.id, body, title, tags, relativePaths, moodId);
           if (!r.success) {
+            console.error('[JournalScreen] updateCoupleJournal failed:', r.error);
             Alert.alert('Kami', r.error);
           } else {
             setWriteVisible(false);
@@ -500,6 +501,7 @@ export function JournalScreen({ navigation }: Props) {
         } else {
           const r = await addCoupleJournal(couple.id, body, title, tags, relativePaths, moodId);
           if (!r.success) {
+            console.error('[JournalScreen] addCoupleJournal failed:', r.error);
             Alert.alert('Kami', r.error);
           } else {
             setWriteVisible(false);
@@ -513,6 +515,7 @@ export function JournalScreen({ navigation }: Props) {
           : await addJournalEntry({ body, title, tags, imageUrls: relativePaths, moodId: moodId || undefined });
 
         if (!r.success) {
+          console.error('[JournalScreen] solo journal save failed:', r.error);
           Alert.alert('Kami', r.error);
         } else {
           setWriteVisible(false);
@@ -521,6 +524,7 @@ export function JournalScreen({ navigation }: Props) {
         }
       }
     } catch (e) {
+      console.error('[JournalScreen] handleSave exception caught:', e);
       Alert.alert('Kami', 'Error saving your entry.');
     } finally {
       setWriteSaving(false);

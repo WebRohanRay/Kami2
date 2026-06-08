@@ -1790,6 +1790,12 @@ export function HomeScreen({ navigation }: Props) {
 
           <View style={{ height: Space[10] }} />
         </ScrollView>
+        <CustomMoodModal
+          visible={customMoodModalVisible}
+          onClose={() => setCustomMoodModalVisible(false)}
+          onSave={handleCustomMoodSave}
+          saving={customMoodSaving}
+        />
       </SafeAreaView>
     );
   }

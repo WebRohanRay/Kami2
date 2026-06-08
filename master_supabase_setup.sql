@@ -901,57 +901,131 @@ ON CONFLICT (id) DO UPDATE SET
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- Storage security policies
-CREATE POLICY "Users can upload own avatar" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Users can update own avatar" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Users can read own avatar" ON storage.objects FOR SELECT USING (bucket_id = 'avatars' AND (auth.uid()::text = (storage.foldername(name))[1] OR public.is_partner_of(((storage.foldername(name))[1])::uuid)));
-CREATE POLICY "Users can delete own avatar" ON storage.objects FOR DELETE USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
+CREATE POLICY "Users can upload own avatar" ON storage.objects FOR INSERT WITH CHECK (
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR 
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
+      public.is_couple_member(((storage.foldername(name))[1])::uuid)
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "Users can update own avatar" ON storage.objects;
+CREATE POLICY "Users can update own avatar" ON storage.objects FOR UPDATE USING (
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR 
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
+      public.is_couple_member(((storage.foldername(name))[1])::uuid)
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "Users can read own avatar" ON storage.objects;
+CREATE POLICY "Users can read own avatar" ON storage.objects FOR SELECT USING (
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR 
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
+      (
+        public.is_partner_of(((storage.foldername(name))[1])::uuid) OR
+        public.is_couple_member(((storage.foldername(name))[1])::uuid)
+      )
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "Users can delete own avatar" ON storage.objects;
+CREATE POLICY "Users can delete own avatar" ON storage.objects FOR DELETE USING (
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR 
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
+      public.is_couple_member(((storage.foldername(name))[1])::uuid)
+    )
+  )
+);
 
 -- Journal storage policies
+DROP POLICY IF EXISTS "Users can read own journal images" ON storage.objects;
 CREATE POLICY "Users can read own journal images" ON storage.objects FOR SELECT USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can insert own journal images" ON storage.objects;
 CREATE POLICY "Users can insert own journal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can update own journal images" ON storage.objects;
 CREATE POLICY "Users can update own journal images" ON storage.objects FOR UPDATE USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can delete own journal images" ON storage.objects;
 CREATE POLICY "Users can delete own journal images" ON storage.objects FOR DELETE USING (bucket_id = 'journal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Letters storage policies
+DROP POLICY IF EXISTS "Users can read own letter images" ON storage.objects;
 CREATE POLICY "Users can read own letter images" ON storage.objects FOR SELECT USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can insert own letter images" ON storage.objects;
 CREATE POLICY "Users can insert own letter images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can update own letter images" ON storage.objects;
 CREATE POLICY "Users can update own letter images" ON storage.objects FOR UPDATE USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can delete own letter images" ON storage.objects;
 CREATE POLICY "Users can delete own letter images" ON storage.objects FOR DELETE USING (bucket_id = 'letter_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Memories storage policies
+DROP POLICY IF EXISTS "Users can read own memory images" ON storage.objects;
 CREATE POLICY "Users can read own memory images" ON storage.objects FOR SELECT USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can insert own memory images" ON storage.objects;
 CREATE POLICY "Users can insert own memory images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can update own memory images" ON storage.objects;
 CREATE POLICY "Users can update own memory images" ON storage.objects FOR UPDATE USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can delete own memory images" ON storage.objects;
 CREATE POLICY "Users can delete own memory images" ON storage.objects FOR DELETE USING (bucket_id = 'memory_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Goals storage policies
+DROP POLICY IF EXISTS "Users can read own goal images" ON storage.objects;
 CREATE POLICY "Users can read own goal images" ON storage.objects FOR SELECT USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can insert own goal images" ON storage.objects;
 CREATE POLICY "Users can insert own goal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can update own goal images" ON storage.objects;
 CREATE POLICY "Users can update own goal images" ON storage.objects FOR UPDATE USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
+DROP POLICY IF EXISTS "Users can delete own goal images" ON storage.objects;
 CREATE POLICY "Users can delete own goal images" ON storage.objects FOR DELETE USING (bucket_id = 'goal_images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
 -- Couple Journal storage policies
+DROP POLICY IF EXISTS "Users can read couple journal images" ON storage.objects;
 CREATE POLICY "Users can read couple journal images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can insert couple journal images" ON storage.objects;
 CREATE POLICY "Users can insert couple journal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can update couple journal images" ON storage.objects;
 CREATE POLICY "Users can update couple journal images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can delete couple journal images" ON storage.objects;
 CREATE POLICY "Users can delete couple journal images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_journal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
 
 -- Couple Letters storage policies
+DROP POLICY IF EXISTS "Users can read couple letter images" ON storage.objects;
 CREATE POLICY "Users can read couple letter images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can insert couple letter images" ON storage.objects;
 CREATE POLICY "Users can insert couple letter images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can update couple letter images" ON storage.objects;
 CREATE POLICY "Users can update couple letter images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can delete couple letter images" ON storage.objects;
 CREATE POLICY "Users can delete couple letter images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_letter_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
 
 -- Couple Memories storage policies
+DROP POLICY IF EXISTS "Users can read couple memory images" ON storage.objects;
 CREATE POLICY "Users can read couple memory images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can insert couple memory images" ON storage.objects;
 CREATE POLICY "Users can insert couple memory images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can update couple memory images" ON storage.objects;
 CREATE POLICY "Users can update couple memory images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can delete couple memory images" ON storage.objects;
 CREATE POLICY "Users can delete couple memory images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_memory_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
 
 -- Couple Goals storage policies
+DROP POLICY IF EXISTS "Users can read couple goal images" ON storage.objects;
 CREATE POLICY "Users can read couple goal images" ON storage.objects FOR SELECT USING (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can insert couple goal images" ON storage.objects;
 CREATE POLICY "Users can insert couple goal images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can update couple goal images" ON storage.objects;
 CREATE POLICY "Users can update couple goal images" ON storage.objects FOR UPDATE USING (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
+DROP POLICY IF EXISTS "Users can delete couple goal images" ON storage.objects;
 CREATE POLICY "Users can delete couple goal images" ON storage.objects FOR DELETE USING (bucket_id = 'couple_goal_images' AND public.is_couple_member(((storage.foldername(name))[1])::uuid));
 
 

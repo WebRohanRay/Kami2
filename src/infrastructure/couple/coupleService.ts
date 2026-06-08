@@ -9,6 +9,7 @@ import type {
 } from '@features/couple/types';
 
 function friendly(raw: string): string {
+  console.error('[Supabase Error Debug - Raw Message]:', raw);
   if (raw.includes('JWT') || raw.includes('not authenticated'))
     return 'Your session expired. Please sign in again.';
   if (raw.includes('network') || raw.includes('fetch'))
@@ -19,6 +20,7 @@ function friendly(raw: string): string {
 }
 
 function err(e: unknown): string {
+  console.error('[Supabase Error Debug - Exception Caught]:', e);
   if (e instanceof Error) return friendly(e.message);
   if (typeof e === 'string') return friendly(e);
   return 'Something went wrong.';
@@ -530,7 +532,7 @@ export async function fetchCoupleJournals(coupleId: string): Promise<Result<Coup
   try {
     const { data, error } = await supabase
       .from('couple_journals')
-      .select('*, couple_journal_comments(*, profiles(nickname, avatar_url)), couple_journal_reactions(*), profiles(nickname, avatar_url)')
+      .select('*, couple_journal_comments(*, profiles(nickname, avatar_url)), couple_journal_reactions(*), profiles!couple_journals_user_id_fkey(nickname, avatar_url)')
       .eq('couple_id', coupleId)
       .order('entry_date', { ascending: false });
 
@@ -601,7 +603,7 @@ export async function createCoupleJournal(
         image_urls: imageUrls,
         mood_id: moodId || null
       })
-      .select('*, profiles(nickname, avatar_url)')
+      .select('*, profiles!couple_journals_user_id_fkey(nickname, avatar_url)')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };
@@ -655,7 +657,7 @@ export async function updateCoupleJournal(
         updated_at: new Date().toISOString()
       })
       .eq('id', entryId)
-      .select('*, profiles(nickname, avatar_url)')
+      .select('*, profiles!couple_journals_user_id_fkey(nickname, avatar_url)')
       .single();
 
     if (error) return { success: false, error: friendly(error.message) };

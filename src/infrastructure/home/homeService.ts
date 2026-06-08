@@ -31,6 +31,7 @@ import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
 // ─── Error normaliser ────────────────────────────────────────────────────────
 
 function friendly(raw: string): string {
+  console.error('[Supabase Error Debug - Raw Message]:', raw);
   if (raw.includes('duplicate key') || raw.includes('unique'))
     return 'You already logged this today.';
   if (raw.includes('JWT') || raw.includes('not authenticated'))
@@ -41,6 +42,7 @@ function friendly(raw: string): string {
 }
 
 function err(e: unknown): string {
+  console.error('[Supabase Error Debug - Exception Caught]:', e);
   if (e instanceof Error) return friendly(e.message);
   if (typeof e === 'string') return friendly(e);
   return 'Something went wrong.';

@@ -212,7 +212,7 @@ export async function uploadCoupleHeroBg(
     const oldPath = couple?.hero_bg_url;
 
     // Generate unique new path for cover image
-    const path = `couple_${coupleId}/hero_bg-${Date.now()}.jpg`;
+    const path = `${coupleId}/hero_bg-${Date.now()}.jpg`;
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
