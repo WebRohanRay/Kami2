@@ -407,6 +407,93 @@ export function CoupleRealtimeListener() {
     };
   }, [activeSpace, couple?.id, partner?.id, user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Set up Supabase realtime channel for user invitations
+    const channel = supabase.channel(`user_invitations_realtime_${user.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'couple_invitations', 
+        filter: `receiver_id=eq.${user.id}` 
+      }, async (payload) => {
+        try {
+          const senderId = (payload.new as any).sender_id;
+          if (senderId) {
+            const { data } = await supabase.from('profiles').select('nickname').eq('id', senderId).maybeSingle();
+            const senderNickname = data?.nickname || 'Someone';
+            setToast({
+              title: 'Couple Invitation! 💖',
+              message: `${senderNickname} sent you a couple invitation.`,
+              icon: '💖',
+              targetScreen: 'Settings'
+            });
+            triggerLocalNotificationAsync(
+              'Couple Invitation! 💖',
+              `"${senderNickname} sent you a couple invitation! Open settings to respond. 🥰"`,
+              { screen: 'Settings' }
+            );
+          }
+        } catch (e) {
+          console.error('Error handling invitation insert notification:', e);
+        }
+      })
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'couple_invitations', 
+        filter: `sender_id=eq.${user.id}` 
+      }, async (payload) => {
+        try {
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
+          if (newRow.status === 'accepted' && oldRow?.status !== 'accepted') {
+            const receiverId = newRow.receiver_id;
+            if (receiverId) {
+              const { data } = await supabase.from('profiles').select('nickname').eq('id', receiverId).maybeSingle();
+              const receiverNickname = data?.nickname || 'Your partner';
+              setToast({
+                title: 'Invitation Accepted! 💖',
+                message: `${receiverNickname} accepted your couple invitation.`,
+                icon: '💖',
+                targetScreen: 'Settings'
+              });
+              triggerLocalNotificationAsync(
+                'Invitation Accepted! 💖',
+                `"${receiverNickname} accepted your couple invitation! Welcome to your shared space. 🥰"`,
+                { screen: 'Settings' }
+              );
+            }
+          } else if (newRow.status === 'declined' && oldRow?.status !== 'declined') {
+            const receiverId = newRow.receiver_id;
+            if (receiverId) {
+              const { data } = await supabase.from('profiles').select('nickname').eq('id', receiverId).maybeSingle();
+              const receiverNickname = data?.nickname || 'Your partner';
+              setToast({
+                title: 'Invitation Declined 💔',
+                message: `${receiverNickname} declined your couple invitation.`,
+                icon: '💔',
+                targetScreen: 'Settings'
+              });
+              triggerLocalNotificationAsync(
+                'Invitation Declined 💔',
+                `"${receiverNickname} declined your couple invitation."`,
+                { screen: 'Settings' }
+              );
+            }
+          }
+        } catch (e) {
+          console.error('Error handling invitation update notification:', e);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   return <GlobalToast toast={toast} onClose={() => setToast(null)} />;
 }
 

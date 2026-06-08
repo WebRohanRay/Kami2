@@ -745,6 +745,7 @@ GRANT EXECUTE ON FUNCTION public.fetch_today_prompt(DATE) TO authenticated;
 CREATE OR REPLACE FUNCTION public.delete_user_account()
 RETURNS VOID AS $$
 BEGIN
+  DELETE FROM storage.objects WHERE owner = auth.uid();
   DELETE FROM auth.users WHERE id = auth.uid();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

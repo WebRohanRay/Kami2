@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "1025756872566",
-    "project_id": "kami-8a25d",
-    "storage_bucket": "kami-8a25d.firebasestorage.app"
+    "project_number": "855754303070",
+    "project_id": "kami-notification",
+    "storage_bucket": "kami-notification.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1025756872566:android:d35591e5ab440a890a8457",
+        "mobilesdk_app_id": "1:855754303070:android:44bee76446130775d776cf",
         "android_client_info": {
           "package_name": "com.rohanray12345.Kami"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCz5VXyEa2Et0HKK6yvC3Pvdl6x7QLyMnY"
+          "current_key": "AIzaSyBwumAFOsOtCbC3i0zN7G8ySHb0uGIstD0"
         }
       ],
       "services": {

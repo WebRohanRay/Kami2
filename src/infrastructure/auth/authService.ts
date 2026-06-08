@@ -13,6 +13,7 @@ export function configureGoogleSignIn(webClientId: string): void {
 }
 
 function friendly(raw: string): string {
+  console.error('[Supabase Auth Error]:', raw);
   const map: [string, string][] = [
     ['Invalid login credentials',   'Incorrect email or password.'],
     ['Email not confirmed',          'Please verify your email first.'],

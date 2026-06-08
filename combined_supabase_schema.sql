@@ -365,6 +365,7 @@ GRANT EXECUTE ON FUNCTION fetch_unlocked_letter(UUID) TO authenticated;
 CREATE OR REPLACE FUNCTION delete_user_account()
 RETURNS VOID AS $$
 BEGIN
+  DELETE FROM storage.objects WHERE owner = auth.uid();
   DELETE FROM auth.users WHERE id = auth.uid();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
