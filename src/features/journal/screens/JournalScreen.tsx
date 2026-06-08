@@ -263,7 +263,7 @@ const wm = StyleSheet.create({
   photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
   photoRow:    { flexDirection: 'row', gap: Space[3] },
   photoWrap:   { position: 'relative' },
-  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm },
+  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
   removePhotoBadge:{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
   counter:     { paddingHorizontal: Space[5], paddingVertical: Space[3], alignItems: 'flex-end', borderTopWidth: 1, borderTopColor: Colors.border + '22' },
 });
@@ -1170,7 +1170,7 @@ const PreviewModal: React.FC<{
                     <Image 
                       source={{ uri: url }} 
                       style={pv.scrollerImage} 
-                      resizeMode="cover" 
+                      resizeMode="contain" 
                       testID={`journal-image-${index}`}
                     />
                   </View>
@@ -1362,9 +1362,9 @@ const pv = StyleSheet.create({
   moodBadge: { paddingVertical: 2, paddingHorizontal: Space[2], borderRadius: Radii.sm },
   title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
   authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
-  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden' },
+  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.03)' },
   imageScrollView: { width: '100%', height: 250 },
-  scrollerImage: { width: '100%', height: '100%' },
+  scrollerImage: { width: '100%', height: '100%', resizeMode: 'contain' },
   dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
   dot: { width: 6, height: 6, borderRadius: 3 },
   bodyContainer: { paddingVertical: Space[2] },
@@ -1413,7 +1413,7 @@ const s = StyleSheet.create({
   // Image attachments preview
   imageRowScroll: { marginHorizontal: -Space[4], paddingHorizontal: Space[4], marginVertical: Space[1] },
   imageRow:    { flexDirection: 'row', gap: Space[2] },
-  cardImage:   { width: 80, height: 80, borderRadius: Radii.sm },
+  cardImage:   { width: 80, height: 80, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
 
   tagRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: Space[1] },
   tag:        { backgroundColor: Colors.primary + '15', borderRadius: Radii.full, paddingHorizontal: Space[2], paddingVertical: 2 },

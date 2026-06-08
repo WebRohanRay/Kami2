@@ -4,3 +4,5 @@ export { default as MemoryCard }     from './MemoryCard';
 export type { Memory }               from './MemoryCard';
 export { default as StreakBadge }    from './StreakBadge';
 export { default as SocialLoginRow } from './SocialLoginRow';
+export { ImageZoomModal } from './ImageZoomModal';
+

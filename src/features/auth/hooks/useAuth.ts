@@ -23,6 +23,14 @@ async function hydrateUser(
   setUser: (u: AuthUser) => void,
   setStatus: (s: AuthStatus) => void,
 ) {
+  const emailVerified = Boolean(supabaseUser.email_confirmed_at);
+  if (!emailVerified) {
+    const authUser = profileRepo.supabaseUserToAuthUser(supabaseUser);
+    setUser(authUser);
+    setStatus('unverified');
+    return;
+  }
+
   const result = await profileRepo.fetchOrCreateProfile(supabaseUser);
   const authUser = result.success ? result.data : profileRepo.supabaseUserToAuthUser(supabaseUser);
 
@@ -113,12 +121,20 @@ export function useAuth() {
     );
 
     // 1. Restore session on mount
-    authService.getSession().then(async ({ data: { session } }) => {
+    authService.getSession().then(async ({ data: { session }, error }) => {
       if (!mounted) return;
+      if (error) {
+        console.warn('[useAuth] Session restoration error (cleaning up local storage):', error.message);
+        await authService.signOut().catch(() => {});
+        setStatus('unauthenticated');
+        return;
+      }
       if (!session?.user) { setStatus('unauthenticated'); return; }
       await hydrateRef.current(session.user as any, setUser, setStatus);
-    }).catch(() => {
+    }).catch(async (err) => {
       if (!mounted) return;
+      console.error('[useAuth] Session restoration exception:', err);
+      await authService.signOut().catch(() => {});
       setError('Could not restore your session.');
       setStatus('error');
     });

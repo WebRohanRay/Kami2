@@ -753,6 +753,19 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 REVOKE ALL ON FUNCTION public.delete_user_account() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
 
+-- Check if email exists RPC (used during signup validation)
+CREATE OR REPLACE FUNCTION public.check_email_exists(p_email TEXT)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM auth.users WHERE email = LOWER(TRIM(p_email))
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.check_email_exists(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_email_exists(TEXT) TO anon, authenticated;
+
 
 -- ─── 5. ROW LEVEL SECURITY (RLS) POLICIES ───────────────────
 -- Profiles

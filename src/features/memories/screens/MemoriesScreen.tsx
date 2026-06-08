@@ -232,7 +232,7 @@ const wm = StyleSheet.create({
   photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
   photoRow:    { flexDirection: 'row', gap: Space[3] },
   photoWrap:   { position: 'relative' },
-  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm },
+  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
   removePhotoBadge:{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
 });
 const mm = StyleSheet.create({
@@ -861,7 +861,7 @@ const s = StyleSheet.create({
   galaxyModalClose: { position: 'absolute', top: Space[4], right: Space[4], width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
   galaxyModalDesc: { fontSize: FontSize.base, lineHeight: 22, color: 'rgba(255, 255, 255, 0.9)', marginVertical: Space[3] },
   galaxyModalPhotos: { marginVertical: Space[3], marginHorizontal: -Space[5], paddingHorizontal: Space[5] },
-  galaxyModalPhoto: { width: 180, height: 120, borderRadius: Radii.sm },
+  galaxyModalPhoto: { width: 180, height: 120, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
   galaxyModalActions: { flexDirection: 'row', gap: Space[3], marginTop: Space[4] },
   galaxyModalBtn: { flex: 1, height: 44, borderRadius: Radii.button, justifyContent: 'center', alignItems: 'center' },
 
@@ -877,7 +877,7 @@ const s = StyleSheet.create({
 
   imageScroll: { marginHorizontal: -Space[4], paddingHorizontal: Space[4], marginTop: Space[1] },
   imageRow:    { flexDirection: 'row', gap: Space[2] },
-  photo:       { width: 200, height: 130, borderRadius: Radii.sm },
+  photo:       { width: 200, height: 130, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
 
   timelineContainer: { paddingLeft: Space[1] },
   timelineRow: { flexDirection: 'row' },
@@ -929,7 +929,8 @@ const s = StyleSheet.create({
   netflixCardPhoto: {
     width: 260,
     height: 140,
-    resizeMode: 'cover',
+    resizeMode: 'contain',
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   dotsContainer: {
     position: 'absolute',
@@ -1367,7 +1368,7 @@ const MemoryPreviewModal: React.FC<{
                     <Image 
                       source={{ uri: url }} 
                       style={pv.scrollerImage} 
-                      resizeMode="cover" 
+                      resizeMode="contain" 
                       testID={`memory-image-${index}`}
                     />
                   </View>
@@ -1444,9 +1445,9 @@ const pv = StyleSheet.create({
   moodBadge: { paddingVertical: 2, paddingHorizontal: Space[2], borderRadius: Radii.sm },
   title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
   authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
-  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden' },
+  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.03)' },
   imageScrollView: { width: '100%', height: 250 },
-  scrollerImage: { width: '100%', height: '100%' },
+  scrollerImage: { width: '100%', height: '100%', resizeMode: 'contain' },
   dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
   dot: { width: 6, height: 6, borderRadius: 3 },
   bodyContainer: { paddingVertical: Space[2] },

@@ -373,6 +373,19 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 REVOKE ALL ON FUNCTION delete_user_account() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION delete_user_account() TO authenticated;
 
+-- Check if email exists RPC (used during signup validation)
+CREATE OR REPLACE FUNCTION check_email_exists(p_email TEXT)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM auth.users WHERE email = LOWER(TRIM(p_email))
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION check_email_exists(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION check_email_exists(TEXT) TO anon, authenticated;
+
 -- Deterministic daily prompt picker
 CREATE OR REPLACE FUNCTION fetch_today_prompt()
 RETURNS TABLE (id UUID, content TEXT, category TEXT) AS $$

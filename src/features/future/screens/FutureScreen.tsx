@@ -25,8 +25,9 @@ import { useCouple } from '@features/couple/hooks/useCouple';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import * as coupleService from '@infrastructure/couple/coupleService';
 import * as futureService from '@infrastructure/home/futureService';
-import { pickImages, uploadImages } from '@shared/lib/storage';
+import { pickImages, uploadImages, pickAndCropImage } from '@shared/lib/storage';
 import { useTheme } from '@shared/hooks';
+import { ImageZoomModal } from '@shared/ui';
 
 type Props = MainTabScreenProps<'Future'>;
 
@@ -135,6 +136,7 @@ const WriteModal: React.FC<{
   const [customAmPm, setCustomAmPm] = useState('PM');
   const [localUris, setLocalUris] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
+  const [zoomImageUri, setZoomImageUri] = useState<string | null>(null);
   const { colors } = useTheme();
   const timezone = useAuthStore(s => s.user?.timezone);
 
@@ -215,14 +217,42 @@ const WriteModal: React.FC<{
   };
 
   const handlePickPhotos = async () => {
-    setPicking(true);
-    const r = await pickImages(true);
-    setPicking(false);
-    if (r.success) {
-      setLocalUris(prev => [...prev, ...r.uris]);
-    } else if (!r.cancelled) {
-      Alert.alert('Kami', r.error);
-    }
+    Alert.alert(
+      'Add Photo',
+      'Choose how you want to select your photos:',
+      [
+        {
+          text: 'Select Multiple (No Crop)',
+          onPress: async () => {
+            setPicking(true);
+            const r = await pickImages(true);
+            setPicking(false);
+            if (r.success) {
+              setLocalUris(prev => [...prev, ...r.uris]);
+            } else if (!r.cancelled) {
+              Alert.alert('Kami', r.error);
+            }
+          }
+        },
+        {
+          text: 'Select & Crop Photo',
+          onPress: async () => {
+            setPicking(true);
+            const r = await pickAndCropImage();
+            setPicking(false);
+            if (r.success) {
+              setLocalUris(prev => [...prev, ...r.uris]);
+            } else if (!r.cancelled) {
+              Alert.alert('Kami', r.error);
+            }
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
   };
 
   const handleRemovePhoto = (index: number) => {
@@ -383,7 +413,9 @@ const WriteModal: React.FC<{
               <View style={wm.photoRow}>
                 {localUris.map((uri, idx) => (
                   <View key={idx} style={wm.photoWrap}>
-                    <Image source={{ uri }} style={wm.attachedImage} />
+                    <TouchableOpacity onPress={() => setZoomImageUri(uri)} activeOpacity={0.9}>
+                      <Image source={{ uri }} style={wm.attachedImage} />
+                    </TouchableOpacity>
                     <TouchableOpacity style={wm.removePhotoBadge} onPress={() => handleRemovePhoto(idx)}>
                       <Text style={{ color: '#fff', fontSize: 10 }}>✕</Text>
                     </TouchableOpacity>
@@ -426,6 +458,7 @@ const WriteModal: React.FC<{
             </TouchableOpacity>
           </View>
         </ScrollView>
+        <ImageZoomModal visible={zoomImageUri !== null} imageUri={zoomImageUri} onClose={() => setZoomImageUri(null)} />
       </SafeAreaView>
     </Modal>
   );
@@ -444,6 +477,7 @@ const ReadModal: React.FC<{
   const [content, setContent] = useState<{ body: string; imageUrls: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [countdownText, setCountdownText] = useState('');
+  const [zoomImageUri, setZoomImageUri] = useState<string | null>(null);
   const { colors } = useTheme();
   const user = useAuthStore(s => s.user);
 
@@ -580,7 +614,9 @@ const ReadModal: React.FC<{
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={rm.photoScroll}>
                         <View style={rm.photoRow}>
                           {content.imageUrls.map((url, i) => (
-                            <Image key={i} source={{ uri: url }} style={rm.attachedImage} />
+                            <TouchableOpacity key={i} onPress={() => setZoomImageUri(url)} activeOpacity={0.9}>
+                              <Image source={{ uri: url }} style={rm.attachedImage} />
+                            </TouchableOpacity>
                           ))}
                         </View>
                       </ScrollView>
@@ -645,6 +681,7 @@ const ReadModal: React.FC<{
             )}
           </View>
         )}
+        <ImageZoomModal visible={zoomImageUri !== null} imageUri={zoomImageUri} onClose={() => setZoomImageUri(null)} />
       </SafeAreaView>
     </Modal>
   );
@@ -1496,7 +1533,7 @@ const wm = StyleSheet.create({
   photoScroll:  { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
   photoRow:     { flexDirection: 'row', gap: Space[3] },
   photoWrap:    { position: 'relative' },
-  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm },
+  attachedImage:{ width: 90, height: 90, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
   removePhotoBadge:{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
 });
 
@@ -1510,7 +1547,7 @@ const rm = StyleSheet.create({
   photoSection:{ marginTop: Space[5], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[4] },
   photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5] },
   photoRow:    { flexDirection: 'row', gap: Space[3] },
-  attachedImage:{ width: 140, height: 140, borderRadius: Radii.card },
+  attachedImage:{ width: 140, height: 140, borderRadius: Radii.card, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
   favToggleBtn:{ paddingVertical: Space[1], paddingHorizontal: Space[2] },
   reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: Space[3], paddingHorizontal: Space[4], borderTopWidth: 1 },
   reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: 'transparent' },

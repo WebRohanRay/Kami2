@@ -47,7 +47,46 @@ export async function pickImages(allowMultiple = true): Promise<PickResult> {
 
     return { success: true, uris };
   } catch (e) {
-    console.error('pickImages error:', e);
+    return { success: false, cancelled: false, error: 'Failed to open library.' };
+  }
+}
+
+/** Pick a single image with freeform cropping enabled */
+export async function pickAndCropImage(): Promise<PickResult> {
+  try {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      return {
+        success: false,
+        cancelled: false,
+        error: 'Photo library access was denied.',
+      };
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, // Enable native cropping
+      quality: 0.8,
+    });
+
+    if (result.canceled) {
+      return { success: false, cancelled: true };
+    }
+
+    const uris = result.assets.map(asset => asset.uri).filter(Boolean);
+
+    if (!uris.length) {
+      return {
+        success: false,
+        cancelled: false,
+        error: 'Could not read the photo.',
+      };
+    }
+
+    return { success: true, uris };
+  } catch (e) {
+    console.error('pickAndCropImage error:', e);
     return { success: false, cancelled: false, error: 'Failed to open library.' };
   }
 }

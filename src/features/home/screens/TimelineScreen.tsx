@@ -732,6 +732,8 @@ const styles = StyleSheet.create({
     width: 100,
     height: 70,
     borderRadius: Radii.sm,
+    resizeMode: 'contain',
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   ctaButton: {
     paddingVertical: Space[2] - 2,

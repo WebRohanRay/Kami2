@@ -13,7 +13,7 @@ export function configureGoogleSignIn(webClientId: string): void {
 }
 
 function friendly(raw: string): string {
-  console.error('[Supabase Auth Error]:', raw);
+  console.warn('[Supabase Auth Warning]:', raw);
   const map: [string, string][] = [
     ['Invalid login credentials',   'Incorrect email or password.'],
     ['Email not confirmed',          'Please verify your email first.'],
@@ -30,8 +30,14 @@ function friendly(raw: string): string {
 function normalise(email: string) { return email.trim().toLowerCase(); }
 
 export async function signUp(name: string, email: string, password: string) {
+  const normalisedEmail = normalise(email);
+  const { data: exists, error: checkError } = await supabase.rpc('check_email_exists', { p_email: normalisedEmail });
+  if (!checkError && exists) {
+    return { success: false as const, error: 'An account with this email already exists.' };
+  }
+
   const { data, error } = await supabase.auth.signUp({
-    email: normalise(email), password,
+    email: normalisedEmail, password,
     options: {
       emailRedirectTo: Linking.createURL('auth/verify'),
       data: { full_name: name.trim() },

@@ -4,7 +4,7 @@
  * Each section taps through to its dedicated screen.
  */
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -44,6 +44,8 @@ import { useCouple } from '@features/couple/hooks/useCouple';
 import { supabase } from '@shared/lib/supabase';
 import { resolveAvatarUrl } from '@infrastructure/profile';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
+import * as futureService from '@infrastructure/home/futureService';
+import type { Letter } from '@features/home/types';
 
 function getRelationshipDuration(anniversaryDate: string | null): string {
   if (!anniversaryDate) return 'Connected';
@@ -488,6 +490,20 @@ export function HomeScreen({ navigation }: Props) {
   const [activeLetterSlide, setActiveLetterSlide] = useState(0);
   const [appState, setAppState] = useState(AppState.currentState);
 
+  const [personalLetters, setPersonalLetters] = useState<Letter[]>([]);
+  const [personalLettersLoading, setPersonalLettersLoading] = useState(false);
+  const [activePersonalLetterSlide, setActivePersonalLetterSlide] = useState(0);
+  const [personalCarouselWidth, setPersonalCarouselWidth] = useState(0);
+
+  const loadPersonalLetters = useCallback(async () => {
+    setPersonalLettersLoading(true);
+    const r = await futureService.fetchLetters();
+    setPersonalLettersLoading(false);
+    if (r.success) {
+      setPersonalLetters(r.data);
+    }
+  }, []);
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (status) => setAppState(status));
     return () => sub.remove();
@@ -499,6 +515,15 @@ export function HomeScreen({ navigation }: Props) {
       const offset = event.nativeEvent.contentOffset.x;
       const index = Math.round(offset / slideWidth);
       setActiveLetterSlide(index);
+    }
+  };
+
+  const handlePersonalLetterScroll = (event: any) => {
+    const slideWidth = event.nativeEvent.layoutMeasurement.width;
+    if (slideWidth > 0) {
+      const offset = event.nativeEvent.contentOffset.x;
+      const index = Math.round(offset / slideWidth);
+      setActivePersonalLetterSlide(index);
     }
   };
 
@@ -534,6 +559,7 @@ export function HomeScreen({ navigation }: Props) {
         loadCoupleAll();
       } else {
         refresh();
+        loadPersonalLetters();
       }
     });
     const unsubscribeBlur = navigation.addListener('blur', () => {
@@ -543,7 +569,7 @@ export function HomeScreen({ navigation }: Props) {
       unsubscribeFocus();
       unsubscribeBlur();
     };
-  }, [navigation, user?.activeSpace, loadCoupleAll, refresh]);
+  }, [navigation, user?.activeSpace, loadCoupleAll, refresh, loadPersonalLetters]);
 
   // Real-time ephemeral broadcast status when answering today's daily question
   useEffect(() => {
@@ -572,8 +598,10 @@ export function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     if (user?.activeSpace === 'couple') {
       loadCoupleAll();
+    } else {
+      loadPersonalLetters();
     }
-  }, [user?.activeSpace, user?.id, loadCoupleAll]);
+  }, [user?.activeSpace, user?.id, loadCoupleAll, loadPersonalLetters]);
 
   // Canvas floating animations
   const floatAnim1 = useRef(new Animated.Value(0)).current;
@@ -700,7 +728,10 @@ export function HomeScreen({ navigation }: Props) {
     if (user?.activeSpace === 'couple') {
       await loadCoupleAll();
     } else {
-      await refresh();
+      await Promise.all([
+        refresh(),
+        loadPersonalLetters(),
+      ]);
     }
     setRefreshing(false);
   };
@@ -899,7 +930,8 @@ export function HomeScreen({ navigation }: Props) {
     // Filter and sort letters for carousel (unlocked or locked/sealed, non-draft, non-archived)
     const lettersForSlide = coupleLetters
       .filter(l => !l.isDraft && !l.isArchived)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 3);
 
     const friendlyDaysUntil = (iso: string) => {
       const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
@@ -1800,6 +1832,11 @@ export function HomeScreen({ navigation }: Props) {
     );
   }
 
+  const personalLettersForSlide = personalLetters
+    .filter(l => !l.isDraft && !l.isArchived)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 3);
+
   return (
     <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
@@ -2030,17 +2067,122 @@ export function HomeScreen({ navigation }: Props) {
             </KamiText>
           </Tap>
 
-          <Tap onPress={() => navigation.navigate('Future')} style={s.premiumHalfCard}>
-            <View style={[s.premiumHalfIconWrap, { backgroundColor: Colors.creamDeep, borderColor: Colors.creamMid }]}>
-              <Text style={{ fontSize: 22 }}>✉️</Text>
+          <View style={[hsStyles.tornPaperWidget, { padding: 0, minHeight: 180 }]}>
+            <View style={[hsStyles.widgetTopRow, { paddingHorizontal: Space[4], paddingTop: Space[4] }]}>
+              <KamiText style={hsStyles.widgetHeader} bold>Letter Box</KamiText>
+              <Text style={{ fontSize: 13 }}>✉️</Text>
             </View>
-            <KamiText variant="label" bold color={Colors.textPrimary} align="center" style={{ marginTop: Space[2] }}>
-              Letters to Self
-            </KamiText>
-            <KamiText variant="caption" color={Colors.textMuted} align="center">
-              Time Capsules
-            </KamiText>
-          </Tap>
+
+            {personalLettersLoading ? (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator color={colors.primary} size="small" />
+              </View>
+            ) : personalLettersForSlide.length > 0 ? (
+              <View
+                style={{ flex: 1, justifyContent: 'center' }}
+                onLayout={(e) => setPersonalCarouselWidth(e.nativeEvent.layout.width)}
+              >
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={handlePersonalLetterScroll}
+                  scrollEventThrottle={16}
+                  contentContainerStyle={{ alignItems: 'center' }}
+                >
+                  {personalLettersForSlide.map((l) => {
+                    const isUnlocked = checkUnlocked(l);
+                    const excerpt = isUnlocked
+                      ? (l.body ? (l.body.length > 45 ? `“${l.body.substring(0, 42)}...”` : `“${l.body}”`) : 'No content')
+                      : 'A surprise sealed envelope. Ready to read in the future!';
+
+                    const friendlyDaysUntil = (iso: string) => {
+                      const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
+                      if (d <= 0) return 'Unlocked ✨';
+                      if (d === 1) return 'Tomorrow';
+                      return `${d} days left`;
+                    };
+
+                    const getTimeAgo = (date: Date | string): string => {
+                      const ms = Date.now() - new Date(date).getTime();
+                      const sec = Math.floor(ms / 1000);
+                      const min = Math.floor(sec / 60);
+                      const hr = Math.floor(min / 60);
+                      const day = Math.floor(hr / 24);
+                      if (day > 0) return `${day}d ago`;
+                      if (hr > 0) return `${hr}h ago`;
+                      if (min > 0) return `${min}m ago`;
+                      return 'Just now';
+                    };
+
+                    return (
+                      <View
+                        key={l.id}
+                        style={{
+                          width: personalCarouselWidth || 160,
+                          paddingHorizontal: Space[4],
+                          paddingBottom: Space[2],
+                          justifyContent: 'center',
+                          gap: Space[2]
+                        }}
+                      >
+                        <View style={hsStyles.toLabelRow}>
+                          <Text style={{ fontSize: 10 }}>{isUnlocked ? '✨' : '🔒'}</Text>
+                          <KamiText style={[hsStyles.toLabelText, { color: colors.primary }]} bold>
+                            Letter to Self
+                          </KamiText>
+                        </View>
+                        <KamiText style={[hsStyles.letterExcerptText, !isUnlocked && { fontStyle: 'italic', color: Colors.textMuted }]}>
+                          {excerpt}
+                        </KamiText>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                          <KamiText style={hsStyles.letterWrittenText}>
+                            {isUnlocked ? `Written ${getTimeAgo(l.createdAt)}` : friendlyDaysUntil(l.deliverAt)}
+                          </KamiText>
+                          <TouchableOpacity
+                            onPress={() => navigation.navigate('Future')}
+                            hitSlop={8}
+                          >
+                            <KamiText style={{ fontSize: 11, color: colors.primary, fontWeight: 'bold' }}>
+                              {isUnlocked ? 'Read →' : 'View 🔒'}
+                            </KamiText>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : (
+              <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: Space[4], paddingBottom: Space[4] }}>
+                <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
+                  No time capsules sealed yet. Write a letter to your future self!
+                </KamiText>
+                <TouchableOpacity
+                  style={[hsStyles.widgetFooterCta, { marginTop: Space[2] }]}
+                  onPress={() => navigation.navigate('Future')}
+                >
+                  <KamiText style={[hsStyles.widgetCtaText, { color: colors.primary }]} bold>
+                    Write Letter →
+                  </KamiText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {personalLettersForSlide.length > 1 && (
+              <View style={[hsStyles.carouselDots, { paddingBottom: Space[3] }]}>
+                {personalLettersForSlide.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      hsStyles.carouselDot,
+                      { backgroundColor: i === activePersonalLetterSlide ? colors.primary : Colors.border }
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={{ height: Space[8] }} />

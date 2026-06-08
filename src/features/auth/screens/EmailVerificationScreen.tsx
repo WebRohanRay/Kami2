@@ -11,8 +11,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
+import * as authService from '@infrastructure/auth';
+import { supabase } from '@shared/lib/supabase';
 
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import KamiText from '@shared/ui/atoms/KamiText';
@@ -25,6 +29,25 @@ type Props = AuthScreenProps<'EmailVerification'>;
 
 const POLL_INTERVAL_MS = 5000;
 const RESEND_COOLDOWN_SECONDS = 60;
+
+function extractTokens(url: string): { accessToken: string | null; refreshToken: string | null } {
+  let accessToken: string | null = null;
+  let refreshToken: string | null = null;
+
+  const cleanUrl = url.replace('#', '?');
+  const queryIndex = cleanUrl.indexOf('?');
+  if (queryIndex !== -1) {
+    const queryString = cleanUrl.substring(queryIndex + 1);
+    const pairs = queryString.split('&');
+    for (const pair of pairs) {
+      const [key, value] = pair.split('=');
+      if (key === 'access_token') accessToken = decodeURIComponent(value);
+      if (key === 'refresh_token') refreshToken = decodeURIComponent(value);
+    }
+  }
+
+  return { accessToken, refreshToken };
+}
 
 const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
   const storeEmail = useAuthStore((state) => state.user?.email);
@@ -44,17 +67,108 @@ const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
   const [backLoading,   setBackLoading]   = useState(false);
   const [cooldown,      setCooldown]      = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const checkVerification = useCallback(async () => {
+    setChecking(true);
+    try {
+      const { data } = await authService.getUser();
+      if (data?.user?.email_confirmed_at) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setChecking(false);
+        Alert.alert(
+          'Verification Successful! 🎉',
+          'Your email has been verified. Welcome to Kami! 🌸',
+          [
+            {
+              text: 'Start Journey',
+              onPress: async () => {
+                setChecking(true);
+                await refreshUserRef.current();
+                setChecking(false);
+              }
+            }
+          ]
+        );
+        return true;
+      }
+    } catch (e) {
+      console.error('Error checking verification:', e);
+    }
+    setChecking(false);
+    return false;
+  }, []);
 
   // Stable polling — interval never resets because deps are stable refs
   useEffect(() => {
-    const id = setInterval(async () => {
-      setChecking(true);
-      await refreshUserRef.current();
-      setChecking(false);
-    }, POLL_INTERVAL_MS);
+    const runCheck = async () => {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl && initialUrl.includes('verify')) {
+          const { accessToken, refreshToken } = extractTokens(initialUrl);
+          if (accessToken && refreshToken) {
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error handling initial URL session:', err);
+      }
+      const verified = await checkVerification();
+      if (verified) return;
+    };
 
-    return () => clearInterval(id);
-  }, []); // ← empty deps: intentional
+    // Run check immediately on mount
+    runCheck();
+
+    pollingRef.current = setInterval(runCheck, POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [checkVerification]);
+
+  // Check when the app returns to the foreground
+  useEffect(() => {
+    const handleAppState = (nextState: string) => {
+      if (nextState === 'active') {
+        checkVerification();
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppState);
+    return () => sub.remove();
+  }, [checkVerification]);
+
+  // Check when the app is opened via a verification deep link redirect
+  useEffect(() => {
+    const handleUrl = async ({ url }: { url: string }) => {
+      if (url.includes('verify')) {
+        const { accessToken, refreshToken } = extractTokens(url);
+        if (accessToken && refreshToken) {
+          try {
+            setChecking(true);
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            });
+          } catch (err) {
+            console.error('Error setting session from url:', err);
+          }
+        }
+        await checkVerification();
+      }
+    };
+    const sub = Linking.addEventListener('url', handleUrl);
+    return () => sub.remove();
+  }, [checkVerification]);
 
   useEffect(() => {
     return () => {
