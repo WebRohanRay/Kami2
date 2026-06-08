@@ -1058,8 +1058,8 @@ const PreviewModal: React.FC<{
   const carouselWidth = screenWidth - 40; // 20 padding on each side (Space[5] is 20)
 
   const handleOptionsPress = () => {
-    const options = [
-      { text: 'Cancel', style: 'cancel' as const },
+    const options: any[] = [
+      { text: 'Cancel', style: 'cancel' },
     ];
     if (canEdit) {
       options.unshift({
