@@ -19,7 +19,6 @@ if (Notifications) {
   // Configure standard foreground notification behavior
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: true,
@@ -87,7 +86,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     return tokenData.data;
   } catch (error) {
-    console.error('Error registering for push notifications:', error);
+    console.warn('Push notifications registration skipped (FCM credentials are not configured in Firebase console for com.rohanray12345.Kami):', error);
     return null;
   }
 }
@@ -133,9 +132,9 @@ export async function scheduleDailyReminderAsync(): Promise<string | null> {
         sound: true,
       },
       trigger: {
+        type: 'daily',
         hour: 21,
         minute: 0,
-        repeats: true,
       } as any,
     });
     return id;
@@ -176,10 +175,10 @@ export async function scheduleWeeklyDigestAsync(): Promise<string | null> {
         sound: true,
       },
       trigger: {
+        type: 'weekly',
         weekday: 1, // Sunday in Expo notifications
         hour: 20,
         minute: 0,
-        repeats: true,
       } as any,
     });
     return id;
@@ -220,9 +219,9 @@ export async function scheduleStreakAlertsAsync(): Promise<string | null> {
         sound: true,
       },
       trigger: {
+        type: 'daily',
         hour: 20,
         minute: 0,
-        repeats: true,
       } as any,
     });
     return id;

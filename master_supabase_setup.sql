@@ -48,6 +48,35 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+CREATE OR REPLACE FUNCTION public.on_couple_letter_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.deliver_at <= NOW() THEN
+    NEW.delivered_at := NOW();
+  ELSE
+    NEW.delivered_at := NEW.deliver_at;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE FUNCTION public.on_couple_letter_read()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.is_read = TRUE AND (OLD.is_read = FALSE OR OLD.is_read IS NULL) THEN
+    NEW.read_at := NOW();
+    IF NEW.delivered_at IS NULL THEN
+      IF NEW.deliver_at <= NOW() THEN
+        NEW.delivered_at := NOW();
+      ELSE
+        NEW.delivered_at := NEW.deliver_at;
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
 -- ─── 2. CORE TABLES & USER PROFILES ─────────────────────────
 CREATE TABLE public.profiles (
   id                      UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -256,20 +285,22 @@ CREATE TABLE public.couple_members (
 
 CREATE TABLE public.couple_invitations (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sender_id           UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  receiver_id         UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  sender_id           UUID,
+  receiver_id         UUID,
   status              TEXT CHECK (status IN ('pending', 'accepted', 'declined', 'expired')) DEFAULT 'pending',
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   expires_at          TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days'),
   UNIQUE (sender_id, receiver_id),
-  CHECK (sender_id != receiver_id)
+  CHECK (sender_id != receiver_id),
+  CONSTRAINT couple_invitations_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE CASCADE,
+  CONSTRAINT couple_invitations_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES public.profiles(id) ON DELETE CASCADE
 );
 
 -- Couple Journals, Comments, Reactions
 CREATE TABLE public.couple_journals (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  couple_id     UUID NOT NULL REFERENCES public.couples(id) ON DELETE CASCADE,
-  user_id       UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  couple_id     UUID NOT NULL,
+  user_id       UUID NOT NULL,
   title         TEXT,
   body          TEXT NOT NULL,
   mood_id       TEXT,
@@ -278,22 +309,32 @@ CREATE TABLE public.couple_journals (
   entry_date    DATE DEFAULT CURRENT_DATE,
   is_pinned     BOOLEAN DEFAULT FALSE,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
+  updated_at    TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT couple_journals_couple_id_fkey FOREIGN KEY (couple_id) REFERENCES public.couples(id) ON DELETE CASCADE,
+  CONSTRAINT couple_journals_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE
 );
+
+CREATE TRIGGER set_couple_journals_updated_at
+  BEFORE UPDATE ON public.couple_journals
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
 
 CREATE TABLE public.couple_journal_comments (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  entry_id      UUID NOT NULL REFERENCES public.couple_journals(id) ON DELETE CASCADE,
-  user_id       UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  entry_id      UUID NOT NULL,
+  user_id       UUID NOT NULL,
   body          TEXT NOT NULL,
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT couple_journal_comments_entry_id_fkey FOREIGN KEY (entry_id) REFERENCES public.couple_journals(id) ON DELETE CASCADE,
+  CONSTRAINT couple_journal_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE
 );
 
 CREATE TABLE public.couple_journal_reactions (
-  entry_id      UUID REFERENCES public.couple_journals(id) ON DELETE CASCADE,
-  user_id       UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  entry_id      UUID NOT NULL,
+  user_id       UUID NOT NULL,
   emoji         TEXT NOT NULL,
-  PRIMARY KEY (entry_id, user_id, emoji)
+  PRIMARY KEY (entry_id, user_id, emoji),
+  CONSTRAINT couple_journal_reactions_entry_id_fkey FOREIGN KEY (entry_id) REFERENCES public.couple_journals(id) ON DELETE CASCADE,
+  CONSTRAINT couple_journal_reactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE
 );
 
 -- Couple Memories, Goals, Letters, Answers, Events
@@ -305,8 +346,18 @@ CREATE TABLE public.couple_memories (
   image_urls    TEXT[] DEFAULT '{}',
   memory_date   DATE DEFAULT CURRENT_DATE,
   tags          TEXT[] DEFAULT '{}',
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  last_edited_by UUID,
+  location      TEXT,
+  mood          TEXT,
+  memory_time   TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT couple_memories_last_edited_by_fkey FOREIGN KEY (last_edited_by) REFERENCES public.profiles(id) ON DELETE SET NULL
 );
+
+CREATE TRIGGER set_couple_memories_updated_at
+  BEFORE UPDATE ON public.couple_memories
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
 
 CREATE TABLE public.couple_goals (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -323,6 +374,10 @@ CREATE TABLE public.couple_goals (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TRIGGER set_couple_goals_updated_at
+  BEFORE UPDATE ON public.couple_goals
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
+
 CREATE TABLE public.couple_letters (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   couple_id     UUID NOT NULL REFERENCES public.couples(id) ON DELETE CASCADE,
@@ -335,8 +390,24 @@ CREATE TABLE public.couple_letters (
   is_read       BOOLEAN DEFAULT FALSE,
   is_favorite   BOOLEAN DEFAULT FALSE,
   is_archived   BOOLEAN DEFAULT FALSE,
-  created_at    TIMESTAMPTZ DEFAULT NOW()
+  parent_letter_id UUID REFERENCES public.couple_letters(id) ON DELETE CASCADE,
+  delivered_at  TIMESTAMPTZ,
+  read_at       TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TRIGGER set_couple_letters_updated_at
+  BEFORE UPDATE ON public.couple_letters
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
+
+CREATE TRIGGER trigger_couple_letter_insert
+  BEFORE INSERT ON public.couple_letters
+  FOR EACH ROW EXECUTE FUNCTION public.on_couple_letter_insert();
+
+CREATE TRIGGER trigger_couple_letter_read
+  BEFORE UPDATE ON public.couple_letters
+  FOR EACH ROW EXECUTE FUNCTION public.on_couple_letter_read();
 
 CREATE TABLE public.couple_daily_questions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -364,6 +435,10 @@ CREATE TABLE public.relationship_events (
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TRIGGER set_relationship_events_updated_at
+  BEFORE UPDATE ON public.relationship_events
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
 
 -- Couple reactions tables
 CREATE TABLE public.couple_letter_reactions (
@@ -461,6 +536,75 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION public.fetch_unlocked_couple_letter(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.fetch_unlocked_couple_letter(UUID) TO authenticated;
+
+-- Secure couple letters list retrieval (with reactions & conditional body decryption)
+CREATE OR REPLACE FUNCTION public.fetch_couple_letters_secure(p_couple_id UUID)
+RETURNS TABLE (
+  id UUID,
+  couple_id UUID,
+  sender_id UUID,
+  subject TEXT,
+  body TEXT,
+  deliver_at TIMESTAMPTZ,
+  image_urls TEXT[],
+  is_draft BOOLEAN,
+  is_read BOOLEAN,
+  is_favorite BOOLEAN,
+  is_archived BOOLEAN,
+  created_at TIMESTAMPTZ,
+  parent_letter_id UUID,
+  delivered_at TIMESTAMPTZ,
+  read_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  sender_nickname TEXT,
+  reactions JSON
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    cl.id,
+    cl.couple_id,
+    cl.sender_id,
+    cl.subject,
+    CASE 
+      WHEN cl.deliver_at <= NOW() OR cl.is_draft = TRUE OR cl.sender_id = auth.uid() THEN cl.body 
+      ELSE NULL 
+    END AS body,
+    cl.deliver_at,
+    CASE 
+      WHEN cl.deliver_at <= NOW() OR cl.is_draft = TRUE OR cl.sender_id = auth.uid() THEN cl.image_urls 
+      ELSE NULL 
+    END AS image_urls,
+    cl.is_draft,
+    cl.is_read,
+    cl.is_favorite,
+    cl.is_archived,
+    cl.created_at,
+    cl.parent_letter_id,
+    cl.delivered_at,
+    cl.read_at,
+    cl.updated_at,
+    p.nickname AS sender_nickname,
+    COALESCE(
+      (
+        SELECT json_agg(json_build_object('user_id', clr.user_id, 'emoji', clr.emoji))
+        FROM public.couple_letter_reactions clr
+        WHERE clr.letter_id = cl.id
+      ),
+      '[]'::json
+    ) AS reactions
+  FROM public.couple_letters cl
+  LEFT JOIN public.profiles p ON p.id = cl.sender_id
+  WHERE cl.couple_id = p_couple_id
+    AND EXISTS (
+      SELECT 1 FROM public.couple_members cm
+      WHERE cm.couple_id = cl.couple_id AND cm.user_id = auth.uid()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.fetch_couple_letters_secure(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fetch_couple_letters_secure(UUID) TO authenticated;
 
 -- Secure Atomic Accept Couple Invitation transaction handler
 CREATE OR REPLACE FUNCTION public.accept_couple_invitation(
