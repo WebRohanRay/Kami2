@@ -743,7 +743,38 @@ export function HomeScreen({ navigation }: Props) {
 
   const { colors } = useTheme();
 
-  if (user?.activeSpace === 'couple' && couple) {
+  if (user?.activeSpace === 'couple') {
+    if (!couple) {
+      return (
+        <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg, alignItems: 'center', justifyContent: 'center' }]}>
+          <StatusBar style="dark" />
+          <View style={{ alignItems: 'center', padding: Space[6], gap: Space[4] }}>
+            <Text style={{ fontSize: 48 }}>🌸</Text>
+            <KamiText variant="subtitle" bold color={colors.primaryDark} align="center">
+              Opening your shared space... 💖
+            </KamiText>
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: Space[2] }} />
+            <TouchableOpacity
+              style={{
+                marginTop: Space[4],
+                paddingVertical: Space[2],
+                paddingHorizontal: Space[4],
+                borderRadius: Radii.button,
+                borderWidth: 1,
+                borderColor: colors.primary + '33',
+                backgroundColor: colors.primary + '08',
+              }}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <KamiText variant="caption" color={colors.primary} bold>
+                Go to Settings
+              </KamiText>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     const partnerName = partner?.nickname || partner?.email?.split('@')[0] || 'Partner';
     const isPartnerOnline = (() => {
       if (!partner?.lastSeenAt) return false;

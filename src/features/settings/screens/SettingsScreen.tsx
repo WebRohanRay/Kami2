@@ -322,7 +322,7 @@ export function SettingsScreen({ navigation }: Props) {
     couple, partner, receivedInvitations, sentInvitations, setCouple, setPartner, setReceivedInvitations, setSentInvitations 
   } = useCoupleStore();
 
-  const [loadingCouple, setLoadingCouple] = useState(false);
+  const [loadingCouple, setLoadingCouple] = useState(true);
   const [partnerIdInput, setPartnerIdInput] = useState('');
   const [searchingPartner, setSearchingPartner] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
@@ -333,7 +333,10 @@ export function SettingsScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadCoupleInfo = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoadingCouple(false);
+      return;
+    }
     setLoadingCouple(true);
     const r = await coupleService.fetchActiveCouple();
     if (r.success) {
@@ -864,7 +867,11 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/* ── Couple Space Connection / Switcher ── */}
         <SettingGroup title="Couple Space">
-          {!couple ? (
+          {loadingCouple && !couple ? (
+            <View style={{ padding: Space[4], alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : !couple ? (
             <>
               {/* Short ID Card */}
               <View style={[styles.kamiIdCard, { backgroundColor: colors.creamDeep }]}>
