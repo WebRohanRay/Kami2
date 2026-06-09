@@ -55,20 +55,20 @@ async function hydrateUser(
   }
 
   // Synchronize local reminders scheduling on hydration
-  const { 
+  const {
     scheduleDailyReminderAsync, cancelDailyReminderAsync,
     scheduleWeeklyDigestAsync, cancelWeeklyDigestAsync,
-    scheduleStreakAlertsAsync, cancelStreakAlertsAsync 
+    scheduleStreakAlertsAsync, cancelStreakAlertsAsync
   } = require('@infrastructure/notifications/notificationService');
 
-  if (authUser.dailyReminder ?? true) scheduleDailyReminderAsync().catch(() => {});
-  else cancelDailyReminderAsync().catch(() => {});
+  if (authUser.dailyReminder ?? true) scheduleDailyReminderAsync().catch(() => { });
+  else cancelDailyReminderAsync().catch(() => { });
 
-  if (authUser.weeklyDigest ?? true) scheduleWeeklyDigestAsync().catch(() => {});
-  else cancelWeeklyDigestAsync().catch(() => {});
+  if (authUser.weeklyDigest ?? true) scheduleWeeklyDigestAsync().catch(() => { });
+  else cancelWeeklyDigestAsync().catch(() => { });
 
-  if (authUser.streakAlerts ?? true) scheduleStreakAlertsAsync().catch(() => {});
-  else cancelStreakAlertsAsync().catch(() => {});
+  if (authUser.streakAlerts ?? true) scheduleStreakAlertsAsync().catch(() => { });
+  else cancelStreakAlertsAsync().catch(() => { });
 }
 
 export function useAuth() {
@@ -120,21 +120,35 @@ export function useAuth() {
       process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
     );
 
+    let sessionRestored = false;
+
+    // Timeout fallback (4 seconds) to prevent stuck loading screen if getSession hangs
+    const timeoutId = setTimeout(async () => {
+      if (!mounted || sessionRestored) return;
+      console.warn('[useAuth] Session restoration timed out. Falling back to unauthenticated.');
+      sessionRestored = true;
+      setStatus('unauthenticated');
+    }, 4000);
+
     // 1. Restore session on mount
     authService.getSession().then(async ({ data: { session }, error }) => {
-      if (!mounted) return;
+      if (!mounted || sessionRestored) return;
+      sessionRestored = true;
+      clearTimeout(timeoutId);
       if (error) {
         console.warn('[useAuth] Session restoration error (cleaning up local storage):', error.message);
-        await authService.signOut().catch(() => {});
+        await authService.signOut().catch(() => { });
         setStatus('unauthenticated');
         return;
       }
       if (!session?.user) { setStatus('unauthenticated'); return; }
       await hydrateRef.current(session.user as any, setUser, setStatus);
     }).catch(async (err) => {
-      if (!mounted) return;
+      if (!mounted || sessionRestored) return;
+      sessionRestored = true;
+      clearTimeout(timeoutId);
       console.error('[useAuth] Session restoration exception:', err);
-      await authService.signOut().catch(() => {});
+      await authService.signOut().catch(() => { });
       setError('Could not restore your session.');
       setStatus('error');
     });
@@ -148,7 +162,11 @@ export function useAuth() {
       }
     );
 
-    return () => { mounted = false; subscription.unsubscribe(); };
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
