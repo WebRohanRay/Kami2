@@ -21,7 +21,7 @@ import { supabase } from '@shared/lib/supabase';
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { Colors, Radii, Space } from '@shared/constants';
-import { useAuth } from '../hooks';
+import { useAuthActions } from '../hooks';
 import { useAuthStore } from '../store';
 import type { AuthScreenProps } from '@core/navigation/types';
 
@@ -53,8 +53,8 @@ const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
   const storeEmail = useAuthStore((state) => state.user?.email);
   const email = route.params?.email ?? storeEmail ?? '';
 
-  // Get stable function refs — don't put the whole useAuth() object in deps
-  const auth = useAuth();
+  // Get stable function refs — don't put the whole useAuthActions() object in deps
+  const auth = useAuthActions();
   const refreshUserRef = useRef(auth.refreshUser);
   const resendRef      = useRef(auth.resendVerificationEmail);
   const signOutRef     = useRef(auth.signOut);

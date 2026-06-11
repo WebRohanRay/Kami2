@@ -6,6 +6,7 @@ import { RootNavigator } from './src/core/navigation';
 WebBrowser.maybeCompleteAuthSession();
 
 export default function App() {
+
   return (
     <AppProviders>
       <RootNavigator />

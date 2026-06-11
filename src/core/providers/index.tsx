@@ -2,6 +2,7 @@ import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
+import { AuthProvider } from '@features/auth';
 
 /**
  * AppProviders — wraps the entire app with required context providers.
@@ -11,7 +12,9 @@ import { StyleSheet } from 'react-native';
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <GestureHandlerRootView style={s.root}>
     <SafeAreaProvider>
-      {children}
+      <AuthProvider>
+        {children}
+      </AuthProvider>
     </SafeAreaProvider>
   </GestureHandlerRootView>
 );

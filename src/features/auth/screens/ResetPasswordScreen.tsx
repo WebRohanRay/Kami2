@@ -28,7 +28,7 @@ import KamiButton from '@shared/ui/atoms/KamiButton';
 import InputField from '@shared/ui/atoms/InputField';
 import { Colors, Space, Radii } from '@shared/constants';
 
-import { useAuth } from '../hooks';
+import { useAuthActions } from '../hooks';
 import type { AuthScreenProps } from '@core/navigation/types';
 
 type Props = AuthScreenProps<'ResetPassword'>;
@@ -39,7 +39,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,   setLoading]   = useState(false);
   const [success,   setSuccess]   = useState(false);
 
-  const { resetPassword } = useAuth();
+  const { resetPassword } = useAuthActions();
 
   // ── Password rules ────────────────────────────────────────────────────────
   const has8   = password.length >= 8;

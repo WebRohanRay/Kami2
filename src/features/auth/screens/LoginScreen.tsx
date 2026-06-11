@@ -22,7 +22,7 @@ import InputField     from '@shared/ui/atoms/InputField';
 import SocialLoginRow from '@shared/ui/molecules/SocialLoginRow';
 import { Colors, Space } from '@shared/constants';
 
-import { useAuth }      from '../hooks';
+import { useAuthActions }      from '../hooks';
 import { useAuthStore } from '../store';
 import type { AuthScreenProps } from '@core/navigation/types';
 
@@ -44,7 +44,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,  setLoading]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle } = useAuthActions();
   const error = useAuthStore(s => s.error);
 
   // ── Email / Password Login ────────────────────────────────────────────────

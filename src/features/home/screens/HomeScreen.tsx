@@ -26,7 +26,7 @@ import {
   AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore, useAuth } from '@features/auth';
+import { useAuthStore, useAuthActions } from '@features/auth';
 import { useHome } from '../hooks';
 import { useHomeStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
@@ -452,7 +452,7 @@ export function HomeScreen({ navigation }: Props) {
   const [customMoodSaving, setCustomMoodSaving] = useState(false);
   const [resolvedHeroBg, setResolvedHeroBg] = useState<string | null>(null);
 
-  const { updateProfile } = useAuth();
+  const { updateProfile } = useAuthActions();
 
   // Couple Space Hooks & State
   const {

@@ -241,3 +241,4 @@ Always create a new numbered migration file.
 - [ ] `eas build --platform android --profile production` succeeded
 - [ ] `eas build --platform ios --profile production` succeeded
 - [ ] App tested on real device with production Supabase project
+

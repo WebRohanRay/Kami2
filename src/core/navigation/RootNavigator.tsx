@@ -3,7 +3,6 @@ import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '@features/auth';
-import { useAuth }      from '@features/auth';
 import { Colors }       from '@shared/constants';
 import { AuthNavigator } from './AuthNavigator';
 import MainNavigator     from './MainNavigator';
@@ -23,7 +22,6 @@ const Splash: React.FC = () => (
 
 export const RootNavigator: React.FC = () => {
   const navRef = useRef(navigationRef);
-  useAuth();
   useDeepLink(navRef);
 
   const { status } = useAuthStore();

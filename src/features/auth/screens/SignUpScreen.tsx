@@ -30,7 +30,7 @@ import {
   Colors, Space, Radii, Shadows, FontSize, FontWeight,
 } from '@shared/constants';
 
-import { useAuth }      from '../hooks';
+import { useAuthActions }      from '../hooks';
 import type { AuthScreenProps } from '@core/navigation/types';
 
 // ─── Polaroid Fan ─────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,  setLoading]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const { signUp, loginWithGoogle } = useAuth();
+  const { signUp, loginWithGoogle } = useAuthActions();
 
   const has8   = password.length >= 8;
   const hasUp  = /[A-Z]/.test(password);

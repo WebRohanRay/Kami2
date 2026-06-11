@@ -1,4 +1,4 @@
-# Kami — Couples Space & Security Architecture
+hi # Kami — Couples Space & Security Architecture
 
 The Couples Space in Kami is a highly secure, premium private sanctuary designed for couples to interact, reflect, and grow together. It provides private real-time communications, shared goals, journals with threaded commenting, sealed letters, and visual memory timelines.
 

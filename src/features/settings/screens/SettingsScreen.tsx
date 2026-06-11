@@ -39,7 +39,7 @@ import KamiText    from '@shared/ui/atoms/KamiText';
 import {
   Colors, FontSize, FontWeight, Radii, Shadows, Sizing, Space, FontFamily, applyTheme
 } from '@shared/constants';
-import { useAuth }      from '@features/auth';
+import { useAuthActions }      from '@features/auth';
 import { useAuthStore } from '@features/auth';
 import { useTheme }     from '@shared/hooks';
 import { pickAvatarImage, uploadAvatar, uploadHeroBg, uploadCoupleHeroBg, pickImages } from '@shared/lib/storage';
@@ -302,7 +302,7 @@ const selectorStyles = StyleSheet.create({
 export function SettingsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const { signOut, deleteAccount, updateProfile, exportData, refreshUser } = useAuth();
+  const { signOut, deleteAccount, updateProfile, exportData, refreshUser } = useAuthActions();
 
   const [nickname,       setNickname]       = useState(user?.nickname ?? '');
   const [editingProfile, setEditingProfile] = useState(false);
