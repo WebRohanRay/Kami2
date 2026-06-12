@@ -69,15 +69,6 @@ export default {
       'expo-file-system',
     ],
 
-    extra: {
-      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
 
-      supabaseAnonKey:
-        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-
-      eas: {
-        projectId: 'f298b22a-0745-413d-bf90-5156a5d009ff',
-      },
-    },
   },
 };
