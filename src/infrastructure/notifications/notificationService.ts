@@ -97,7 +97,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 export async function triggerLocalNotificationAsync(
   title: string,
   body: string,
-  data?: any
+  data?: Record<string, unknown>
 ): Promise<void> {
   if (!Notifications) {
     console.warn('Push notification native module is not available.');

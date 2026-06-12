@@ -38,42 +38,99 @@ export function useCouple() {
     s.setQuestionLoading('idle');
   }, []);
 
-  const loadJournals = useCallback(async () => {
+  const loadJournals = useCallback(async (page = 1) => {
     const s = store.getState();
     if (!s.couple) return;
     s.setJournalsLoading('loading');
-    const r = await coupleService.fetchCoupleJournals(s.couple.id);
-    if (r.success) s.setCoupleJournals(r.data);
-    else s.setJournalsError(r.error);
+    const r = await coupleService.fetchCoupleJournals(s.couple.id, 20, page);
+    if (r.success) {
+      if (page === 1) {
+        s.setCoupleJournals(r.data);
+      } else {
+        s.setCoupleJournals([...s.coupleJournals, ...r.data]);
+      }
+      s.setJournalsPage(page);
+      s.setJournalsHasMore(r.data.length === 20);
+    } else {
+      s.setJournalsError(r.error);
+    }
     s.setJournalsLoading('idle');
   }, []);
 
-  const loadGoals = useCallback(async () => {
+  const loadMoreJournals = useCallback(async () => {
+    const s = store.getState();
+    if (s.journalsLoading === 'loading' || !s.journalsHasMore) return;
+    await loadJournals(s.journalsPage + 1);
+  }, [loadJournals]);
+
+  const loadGoals = useCallback(async (page = 1) => {
     const s = store.getState();
     if (!s.couple) return;
     s.setGoalsLoading('loading');
-    const r = await coupleService.fetchCoupleGoals(s.couple.id);
-    if (r.success) s.setCoupleGoals(r.data);
+    const r = await coupleService.fetchCoupleGoals(s.couple.id, 20, page);
+    if (r.success) {
+      if (page === 1) {
+        s.setCoupleGoals(r.data);
+      } else {
+        s.setCoupleGoals([...s.coupleGoals, ...r.data]);
+      }
+      s.setGoalsPage(page);
+      s.setGoalsHasMore(r.data.length === 20);
+    }
     s.setGoalsLoading('idle');
   }, []);
 
-  const loadMemories = useCallback(async () => {
+  const loadMoreGoals = useCallback(async () => {
+    const s = store.getState();
+    if (s.goalsLoading === 'loading' || !s.goalsHasMore) return;
+    await loadGoals(s.goalsPage + 1);
+  }, [loadGoals]);
+
+  const loadMemories = useCallback(async (page = 1) => {
     const s = store.getState();
     if (!s.couple) return;
     s.setMemoriesLoading('loading');
-    const r = await coupleService.fetchCoupleMemories(s.couple.id);
-    if (r.success) s.setCoupleMemories(r.data);
+    const r = await coupleService.fetchCoupleMemories(s.couple.id, 15, page);
+    if (r.success) {
+      if (page === 1) {
+        s.setCoupleMemories(r.data);
+      } else {
+        s.setCoupleMemories([...s.coupleMemories, ...r.data]);
+      }
+      s.setMemoriesPage(page);
+      s.setMemoriesHasMore(r.data.length === 15);
+    }
     s.setMemoriesLoading('idle');
   }, []);
 
-  const loadLetters = useCallback(async () => {
+  const loadMoreMemories = useCallback(async () => {
+    const s = store.getState();
+    if (s.memoriesLoading === 'loading' || !s.memoriesHasMore) return;
+    await loadMemories(s.memoriesPage + 1);
+  }, [loadMemories]);
+
+  const loadLetters = useCallback(async (page = 1) => {
     const s = store.getState();
     if (!s.couple) return;
     s.setLettersLoading('loading');
-    const r = await coupleService.fetchCoupleLetters(s.couple.id);
-    if (r.success) s.setCoupleLetters(r.data);
+    const r = await coupleService.fetchCoupleLetters(s.couple.id, 20, page);
+    if (r.success) {
+      if (page === 1) {
+        s.setCoupleLetters(r.data);
+      } else {
+        s.setCoupleLetters([...s.coupleLetters, ...r.data]);
+      }
+      s.setLettersPage(page);
+      s.setLettersHasMore(r.data.length === 20);
+    }
     s.setLettersLoading('idle');
   }, []);
+
+  const loadMoreLetters = useCallback(async () => {
+    const s = store.getState();
+    if (s.lettersLoading === 'loading' || !s.lettersHasMore) return;
+    await loadLetters(s.lettersPage + 1);
+  }, [loadLetters]);
 
   const loadEvents = useCallback(async () => {
     const s = store.getState();
@@ -104,10 +161,26 @@ export function useCouple() {
         coupleService.fetchRelationshipEvents(cId)
       ]);
 
-      if (jRes.success) store.getState().setCoupleJournals(jRes.data);
-      if (gRes.success) store.getState().setCoupleGoals(gRes.data);
-      if (mRes.success) store.getState().setCoupleMemories(mRes.data);
-      if (lRes.success) store.getState().setCoupleLetters(lRes.data);
+      if (jRes.success) {
+        store.getState().setCoupleJournals(jRes.data);
+        store.getState().setJournalsPage(1);
+        store.getState().setJournalsHasMore(jRes.data.length === 20);
+      }
+      if (gRes.success) {
+        store.getState().setCoupleGoals(gRes.data);
+        store.getState().setGoalsPage(1);
+        store.getState().setGoalsHasMore(gRes.data.length === 20);
+      }
+      if (mRes.success) {
+        store.getState().setCoupleMemories(mRes.data);
+        store.getState().setMemoriesPage(1);
+        store.getState().setMemoriesHasMore(mRes.data.length === 15);
+      }
+      if (lRes.success) {
+        store.getState().setCoupleLetters(lRes.data);
+        store.getState().setLettersPage(1);
+        store.getState().setLettersHasMore(lRes.data.length === 20);
+      }
       if (eRes.success) store.getState().setRelationshipEvents(eRes.data);
     }
   }, [loadCoupleMeta]);
@@ -117,9 +190,13 @@ export function useCouple() {
     loadCoupleMeta,
     loadDailyQuestion,
     loadJournals,
+    loadMoreJournals,
     loadGoals,
+    loadMoreGoals,
     loadMemories,
+    loadMoreMemories,
     loadLetters,
+    loadMoreLetters,
     loadEvents,
     submitAnswer: async (qId: string, cId: string, response: string) => {
       const r = await coupleService.submitDailyAnswer(qId, cId, response);

@@ -21,6 +21,8 @@ import KamiButton     from '@shared/ui/atoms/KamiButton';
 import InputField     from '@shared/ui/atoms/InputField';
 import SocialLoginRow from '@shared/ui/molecules/SocialLoginRow';
 import { Colors, Space } from '@shared/constants';
+import { useNetworkStatus } from '@shared/network/NetworkProvider';
+import { loginSchema } from '@shared/lib/validation/schemas';
 
 import { useAuthActions }      from '../hooks';
 import { useAuthStore } from '../store';
@@ -44,6 +46,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,  setLoading]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  const { isConnected } = useNetworkStatus();
   const { login, loginWithGoogle } = useAuthActions();
   const error = useAuthStore(s => s.error);
 
@@ -51,12 +54,14 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const handleLogin = async () => {
     Keyboard.dismiss();
 
-    if (!email.trim()) {
-      Alert.alert('Kami', 'Please enter your email address.');
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
       return;
     }
-    if (!password) {
-      Alert.alert('Kami', 'Please enter your password.');
+
+    const validation = loginSchema.safeParse({ email, password });
+    if (!validation.success) {
+      Alert.alert('Kami', validation.error.issues[0].message);
       return;
     }
 
@@ -76,6 +81,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   // ── Google OAuth ──────────────────────────────────────────────────────────
   const handleGoogleLogin = async () => {
     Keyboard.dismiss();
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
     setGoogleLoading(true);
     const result = await loginWithGoogle();
     setGoogleLoading(false);
@@ -140,10 +149,16 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
 
           <KamiButton
-            label="Sign In"
+            label={isConnected ? "Sign In" : "Offline - Sign In Disabled"}
             loading={loading}
-            onPress={handleLogin}
+            onPress={isConnected ? handleLogin : undefined}
+            disabled={!isConnected}
           />
+          {!isConnected && (
+            <KamiText variant="caption" color="#f43f5e" align="center" style={{ marginTop: Space[2] }}>
+              ⚠️ Internet connection required to sign in.
+            </KamiText>
+          )}
         </View>
 
         <OrDivider />
@@ -154,7 +169,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
               id: 'google',
               label: 'Google',
               emoji: '🌐',
-              onPress: handleGoogleLogin,
+              onPress: isConnected ? handleGoogleLogin : () => Alert.alert('Kami', 'This action requires an internet connection.'),
               loading: googleLoading,
             },
           ]}

@@ -30,6 +30,8 @@ import {
   Colors, Space, Radii, Shadows, FontSize, FontWeight,
 } from '@shared/constants';
 
+import { useNetworkStatus } from '@shared/network/NetworkProvider';
+import { signUpSchema } from '@shared/lib/validation/schemas';
 import { useAuthActions }      from '../hooks';
 import type { AuthScreenProps } from '@core/navigation/types';
 
@@ -86,6 +88,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,  setLoading]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  const { isConnected } = useNetworkStatus();
   const { signUp, loginWithGoogle } = useAuthActions();
 
   const has8   = password.length >= 8;
@@ -99,8 +102,14 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const handleCreate = async () => {
     Keyboard.dismiss();
 
-    if (!valid) {
-      Alert.alert('Kami', 'Please fill in all fields and meet password requirements.');
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
+
+    const validation = signUpSchema.safeParse({ name, email, password });
+    if (!validation.success) {
+      Alert.alert('Kami', validation.error.issues[0].message);
       return;
     }
 
@@ -120,6 +129,10 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   // ── Google OAuth ──────────────────────────────────────────────────────────
   const handleGoogleSignUp = async () => {
     Keyboard.dismiss();
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
     setGoogleLoading(true);
     const result = await loginWithGoogle();
     setGoogleLoading(false);
@@ -205,12 +218,18 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
             )}
 
             <KamiButton
-              label="Create Account"
-              icon="✨"
+              label={isConnected ? "Create Account" : "Offline - Disabled"}
+              icon={isConnected ? "✨" : undefined}
               loading={loading}
-              onPress={handleCreate}
+              onPress={isConnected ? handleCreate : undefined}
+              disabled={!isConnected}
               style={{ marginTop: Space[2] }}
             />
+            {!isConnected && (
+              <KamiText variant="caption" color="#f43f5e" align="center" style={{ marginTop: Space[2] }}>
+                ⚠️ Internet connection required to register.
+              </KamiText>
+            )}
           </View>
 
           <OrDivider />
@@ -221,7 +240,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
                 id: 'google',
                 label: 'Google',
                 emoji: '🌐',
-                onPress: handleGoogleSignUp,
+                onPress: isConnected ? handleGoogleSignUp : () => Alert.alert('Kami', 'This action requires an internet connection.'),
                 loading: googleLoading,
               },
             ]}

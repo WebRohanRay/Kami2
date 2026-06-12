@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '@features/auth';
 import {
   LoginScreen, SignUpScreen, EmailVerificationScreen,
-  ForgotPasswordScreen, ResetPasswordScreen,
+  ForgotPasswordScreen,
 } from '@features/auth';
 import type { AuthStackParamList } from './types';
 
@@ -32,7 +32,6 @@ export const AuthNavigator: React.FC = () => {
         initialParams={{ email: user?.email }}
       />
       <Stack.Screen name="ForgotPassword"   component={ForgotPasswordScreen} />
-      <Stack.Screen name="ResetPassword"    component={ResetPasswordScreen} />
     </Stack.Navigator>
   );
 };

@@ -106,6 +106,12 @@ export async function getSession() {
   return supabase.auth.getSession();
 }
 
+export async function setSession(params: { access_token: string; refresh_token: string }): Promise<Result<void>> {
+  const { error } = await supabase.auth.setSession(params);
+  if (error) return { success: false, error: friendly(error.message) };
+  return { success: true, data: undefined };
+}
+
 export async function getUser() {
   return supabase.auth.getUser();
 }

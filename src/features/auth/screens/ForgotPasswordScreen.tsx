@@ -25,6 +25,8 @@ import KamiText   from '@shared/ui/atoms/KamiText';
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import InputField from '@shared/ui/atoms/InputField';
 import { Colors, Space, Radii } from '@shared/constants';
+import { useNetworkStatus } from '@shared/network/NetworkProvider';
+import { forgotPasswordSchema } from '@shared/lib/validation/schemas';
 
 import { useAuthActions } from '../hooks';
 import type { AuthScreenProps } from '@core/navigation/types';
@@ -36,20 +38,21 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [sent,    setSent]    = useState(false); // success state
 
+  const { isConnected } = useNetworkStatus();
   const { forgotPassword } = useAuthActions();
 
   // ── Send Reset Email ──────────────────────────────────────────────────────
   const handleSend = async () => {
     Keyboard.dismiss();
 
-    if (!email.trim()) {
-      Alert.alert('Kami', 'Please enter your email address.');
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      Alert.alert('Kami', 'Please enter a valid email address.');
+    const validation = forgotPasswordSchema.safeParse({ email });
+    if (!validation.success) {
+      Alert.alert('Kami', validation.error.issues[0].message);
       return;
     }
 
@@ -173,10 +176,16 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
             />
 
             <KamiButton
-              label="Send Reset Link"
+              label={isConnected ? "Send Reset Link" : "Offline - Disabled"}
               loading={loading}
-              onPress={handleSend}
+              onPress={isConnected ? handleSend : undefined}
+              disabled={!isConnected}
             />
+            {!isConnected && (
+              <KamiText variant="caption" color="#f43f5e" align="center" style={{ marginTop: Space[2] }}>
+                ⚠️ Internet connection required to request a reset link.
+              </KamiText>
+            )}
           </View>
 
           {/* Back to login */}

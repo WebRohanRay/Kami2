@@ -1,8 +1,11 @@
 export type AuthStatus =
   | 'loading'
-  | 'unauthenticated'
+  | 'restoring'
+  | 'authenticated_online'
+  | 'authenticated_offline'
   | 'unverified'
-  | 'authenticated'
+  | 'expired_requires_reauth'
+  | 'unauthenticated'
   | 'error';
 
 export type AuthUser = {
@@ -32,7 +35,4 @@ export type AuthState = {
   error: string | null;
 };
 
-/** Generic result — no exceptions thrown anywhere */
-export type Result<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+export type { Result } from '@shared/types/result';

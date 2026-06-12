@@ -1,9 +1,11 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps }  from '@react-navigation/native-stack';
 import type { BottomTabScreenProps }    from '@react-navigation/bottom-tabs';
 
 export type RootStackParamList = {
-  Auth: undefined;
+  Auth: NavigatorScreenParams<AuthStackParamList> | undefined;
   Main: undefined;
+  ResetPassword: undefined;
 };
 
 export type AuthStackParamList = {
@@ -11,7 +13,6 @@ export type AuthStackParamList = {
   SignUp:            undefined;
   EmailVerification: { email?: string } | undefined;
   ForgotPassword:    undefined;
-  ResetPassword:     undefined;
 };
 
 export type MainTabParamList = {

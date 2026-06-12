@@ -1,6 +1,9 @@
 import { supabase } from '@shared/lib/supabase';
 import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
 import type { Letter, CreateLetterInput, Result } from '@features/home/types';
+import { useAuthStore } from '@features/auth';
+import { letterRepo } from '@shared/db/repo';
+import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 
 function friendly(raw: string): string {
   if (raw.includes('JWT') || raw.includes('not authenticated'))
@@ -33,38 +36,43 @@ function mapLetterRow(row: Record<string, any>): Letter {
 }
 
 /** Fetch metadata for all letters (excludes body/imageUrls) */
-export async function fetchLetters(): Promise<Result<Letter[]>> {
+export async function fetchLetters(limit = 20, page = 1): Promise<Result<Letter[]>> {
   try {
-    const { data, error } = await supabase
-      .from('future_letters')
-      .select('id, user_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
-      .order('deliver_at', { ascending: true });
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error) return { success: false, error: friendly(error.message) };
-    return { success: true, data: (data ?? []).map(mapLetterRow) };
+    const rows = await letterRepo.fetchLetters(user.id, page, limit);
+    return { success: true, data: rows };
   } catch (e) {
     return { success: false, error: err(e) };
   }
 }
 
-/** Fetch body and image attachments for an unlocked letter using RPC */
+/** Fetch body and image attachments for an unlocked letter using local DB */
 export async function fetchLetter(
   id: string
 ): Promise<Result<{ body: string; imageUrls: string[] }>> {
   try {
-    const { data, error } = await supabase.rpc('fetch_unlocked_letter', { p_letter_id: id });
-    if (error || !data || data.length === 0) {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
+    const letter = await letterRepo.fetchLetterById(id);
+    if (!letter) return { success: false, error: 'Letter not found.' };
+
+    if (!letter.isUnlocked) {
       return { success: false, error: 'Could not unlock letter. It may still be sealed.' };
     }
 
-    const row = data[0];
-    const resolved = await resolveSignedUrls('letter_images', row.image_urls || []);
+    const localPickerUris = letter.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
+    const remotePaths = letter.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
+
+    const resolved = await resolveSignedUrls('letter_images', remotePaths);
 
     return {
       success: true,
       data: {
-        body: row.body,
-        imageUrls: resolved,
+        body: letter.body || '',
+        imageUrls: [...localPickerUris, ...resolved],
       },
     };
   } catch (e) {
@@ -78,22 +86,58 @@ export async function createLetter(
   input: CreateLetterInput
 ): Promise<Result<Letter>> {
   try {
-    const { data, error } = await supabase
-      .from('future_letters')
-      .insert({
-        id,
-        subject:    input.subject,
-        body:       input.body,
-        deliver_at: input.deliverAt,
-        image_urls: input.imageUrls ?? [],
-        is_draft:   input.isDraft ?? false,
-        is_archived:input.isArchived ?? false,
-      })
-      .select('id, user_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
-      .single();
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    return { success: true, data: mapLetterRow(data) };
+    const now = new Date().toISOString();
+
+    const localUris: string[] = [];
+    if (input.imageUrls && input.imageUrls.length > 0) {
+      for (let i = 0; i < input.imageUrls.length; i++) {
+        const pickerUri = input.imageUrls[i];
+        const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
+        const cachedUri = await enqueueUpload('future_letters', id, pickerUri, remotePath, 'letter_images');
+        localUris.push(cachedUri);
+      }
+    }
+
+    const localLetter = {
+      id,
+      userId: user.id,
+      subject: input.subject,
+      body: input.body,
+      deliverAt: input.deliverAt,
+      imageUrls: localUris,
+      createdAt: now,
+      updatedAt: now,
+      isRead: 0,
+      isFavorite: 0,
+      isDraft: input.isDraft ? 1 : 0,
+      isArchived: input.isArchived ? 1 : 0,
+      syncStatus: 'pending_insert',
+    };
+
+    await letterRepo.saveLetter(localLetter);
+
+    await enqueueMutation('future_letters', id, 'insert', localLetter);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return {
+      success: true,
+      data: {
+        id: localLetter.id,
+        userId: localLetter.userId,
+        subject: localLetter.subject,
+        deliverAt: localLetter.deliverAt,
+        isUnlocked: Date.now() >= new Date(localLetter.deliverAt).getTime(),
+        createdAt: localLetter.createdAt,
+        isRead: false,
+        isFavorite: false,
+        isDraft: !!localLetter.isDraft,
+        isArchived: !!localLetter.isArchived,
+      },
+    };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -102,18 +146,16 @@ export async function createLetter(
 /** Delete a future letter and all its attachments */
 export async function deleteLetter(id: string): Promise<Result<void>> {
   try {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (userRes?.user) {
-      await deleteImages('letter_images', userRes.user.id, id);
-    }
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { error } = await supabase
-      .from('future_letters')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userRes?.user?.id ?? '');
+    const now = new Date().toISOString();
+    await letterRepo.softDeleteLetter(id, now);
 
-    if (error) return { success: false, error: friendly(error.message) };
+    await enqueueMutation('future_letters', id, 'delete', { id });
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -122,12 +164,28 @@ export async function deleteLetter(id: string): Promise<Result<void>> {
 
 export async function toggleFavoriteLetter(id: string, currentVal: boolean): Promise<Result<boolean>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
+    const letter = await letterRepo.fetchLetterById(id);
+    if (!letter) return { success: false, error: 'Letter not found.' };
+
     const nextVal = !currentVal;
-    const { error } = await supabase
-      .from('future_letters')
-      .update({ is_favorite: nextVal })
-      .eq('id', id);
-    if (error) return { success: false, error: friendly(error.message) };
+    const now = new Date().toISOString();
+
+    const updated = {
+      ...letter,
+      isFavorite: nextVal ? 1 : 0,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
+
+    await letterRepo.saveLetter(updated);
+
+    await enqueueMutation('future_letters', id, 'update', updated);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: nextVal };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -136,11 +194,27 @@ export async function toggleFavoriteLetter(id: string, currentVal: boolean): Pro
 
 export async function markLetterRead(id: string): Promise<Result<void>> {
   try {
-    const { error } = await supabase
-      .from('future_letters')
-      .update({ is_read: true })
-      .eq('id', id);
-    if (error) return { success: false, error: friendly(error.message) };
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
+    const letter = await letterRepo.fetchLetterById(id);
+    if (!letter) return { success: false, error: 'Letter not found.' };
+
+    const now = new Date().toISOString();
+
+    const updated = {
+      ...letter,
+      isRead: 1,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
+
+    await letterRepo.saveLetter(updated);
+
+    await enqueueMutation('future_letters', id, 'update', updated);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -149,12 +223,28 @@ export async function markLetterRead(id: string): Promise<Result<void>> {
 
 export async function toggleLetterArchive(id: string, currentVal: boolean): Promise<Result<boolean>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
+    const letter = await letterRepo.fetchLetterById(id);
+    if (!letter) return { success: false, error: 'Letter not found.' };
+
     const nextVal = !currentVal;
-    const { error } = await supabase
-      .from('future_letters')
-      .update({ is_archived: nextVal })
-      .eq('id', id);
-    if (error) return { success: false, error: friendly(error.message) };
+    const now = new Date().toISOString();
+
+    const updated = {
+      ...letter,
+      isArchived: nextVal ? 1 : 0,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
+
+    await letterRepo.saveLetter(updated);
+
+    await enqueueMutation('future_letters', id, 'update', updated);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: nextVal };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -166,23 +256,60 @@ export async function updateLetter(
   fields: Partial<{ subject: string; body: string; deliverAt: string; isDraft: boolean; isArchived: boolean; imageUrls: string[] }>
 ): Promise<Result<Letter>> {
   try {
-    const updatePayload: any = {};
-    if (fields.subject !== undefined) updatePayload.subject = fields.subject;
-    if (fields.body !== undefined) updatePayload.body = fields.body;
-    if (fields.deliverAt !== undefined) updatePayload.deliver_at = fields.deliverAt;
-    if (fields.isDraft !== undefined) updatePayload.is_draft = fields.isDraft;
-    if (fields.isArchived !== undefined) updatePayload.is_archived = fields.isArchived;
-    if (fields.imageUrls !== undefined) updatePayload.image_urls = fields.imageUrls;
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { data, error } = await supabase
-      .from('future_letters')
-      .update(updatePayload)
-      .eq('id', id)
-      .select('id, user_id, subject, deliver_at, created_at, is_read, is_favorite, is_draft, is_archived')
-      .single();
+    const letter = await letterRepo.fetchLetterById(id);
+    if (!letter) return { success: false, error: 'Letter not found.' };
 
-    if (error) return { success: false, error: friendly(error.message) };
-    return { success: true, data: mapLetterRow(data) };
+    const now = new Date().toISOString();
+
+    const localUris = [...(fields.imageUrls ?? letter.imageUrls)];
+    if (fields.imageUrls) {
+      for (let i = 0; i < fields.imageUrls.length; i++) {
+        const url = fields.imageUrls[i];
+        if (url.startsWith('file://') || url.startsWith('content://')) {
+          const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
+          const cachedUri = await enqueueUpload('future_letters', id, url, remotePath, 'letter_images');
+          const idx = localUris.indexOf(url);
+          if (idx !== -1) localUris[idx] = cachedUri;
+        }
+      }
+    }
+
+    const updated = {
+      ...letter,
+      subject: fields.subject !== undefined ? fields.subject : letter.subject,
+      body: fields.body !== undefined ? fields.body : letter.body,
+      deliverAt: fields.deliverAt !== undefined ? fields.deliverAt : letter.deliverAt,
+      isDraft: fields.isDraft !== undefined ? (fields.isDraft ? 1 : 0) : letter.isDraft,
+      isArchived: fields.isArchived !== undefined ? (fields.isArchived ? 1 : 0) : letter.isArchived,
+      imageUrls: localUris,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
+
+    await letterRepo.saveLetter(updated);
+
+    await enqueueMutation('future_letters', id, 'update', updated);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return {
+      success: true,
+      data: {
+        id: updated.id,
+        userId: updated.userId,
+        subject: updated.subject,
+        deliverAt: updated.deliverAt,
+        isUnlocked: Date.now() >= new Date(updated.deliverAt).getTime(),
+        createdAt: updated.createdAt,
+        isRead: !!updated.isRead,
+        isFavorite: !!updated.isFavorite,
+        isDraft: !!updated.isDraft,
+        isArchived: !!updated.isArchived,
+      },
+    };
   } catch (e) {
     return { success: false, error: err(e) };
   }

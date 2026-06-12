@@ -27,11 +27,14 @@ import KamiText   from '@shared/ui/atoms/KamiText';
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import InputField from '@shared/ui/atoms/InputField';
 import { Colors, Space, Radii } from '@shared/constants';
+import { useNetworkStatus } from '@shared/network/NetworkProvider';
+import { resetPasswordSchema } from '@shared/lib/validation/schemas';
 
 import { useAuthActions } from '../hooks';
-import type { AuthScreenProps } from '@core/navigation/types';
+import type { RootStackParamList } from '@core/navigation/types';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-type Props = AuthScreenProps<'ResetPassword'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'ResetPassword'>;
 
 const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [password,  setPassword]  = useState('');
@@ -39,6 +42,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const [loading,   setLoading]   = useState(false);
   const [success,   setSuccess]   = useState(false);
 
+  const { isConnected } = useNetworkStatus();
   const { resetPassword } = useAuthActions();
 
   // ── Password rules ────────────────────────────────────────────────────────
@@ -52,13 +56,14 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   const handleReset = async () => {
     Keyboard.dismiss();
 
-    if (!has8 || !hasUp || !hasNum) {
-      Alert.alert('Kami', 'Password does not meet requirements.');
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
       return;
     }
 
-    if (!matches) {
-      Alert.alert('Kami', 'Passwords do not match.');
+    const validation = resetPasswordSchema.safeParse({ password, confirmPassword: confirm });
+    if (!validation.success) {
+      Alert.alert('Kami', validation.error.issues[0].message);
       return;
     }
 
@@ -98,7 +103,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
 
           <KamiButton
             label="Back to Login"
-            onPress={() => navigation.navigate('Login')}
+            onPress={() => navigation.navigate('Auth', { screen: 'Login' })}
             style={styles.successBtn}
           />
         </View>
@@ -172,11 +177,17 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
             )}
 
             <KamiButton
-              label="Update Password"
+              label={isConnected ? "Update Password" : "Offline - Disabled"}
               loading={loading}
-              onPress={handleReset}
+              onPress={isConnected ? handleReset : undefined}
+              disabled={!isConnected}
               style={{ marginTop: Space[2] }}
             />
+            {!isConnected && (
+              <KamiText variant="caption" color="#f43f5e" align="center" style={{ marginTop: Space[2] }}>
+                ⚠️ Internet connection required to update password.
+              </KamiText>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

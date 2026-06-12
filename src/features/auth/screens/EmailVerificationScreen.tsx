@@ -16,7 +16,6 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import * as authService from '@infrastructure/auth';
-import { supabase } from '@shared/lib/supabase';
 
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import KamiText from '@shared/ui/atoms/KamiText';
@@ -110,7 +109,7 @@ const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
         if (initialUrl && initialUrl.includes('verify')) {
           const { accessToken, refreshToken } = extractTokens(initialUrl);
           if (accessToken && refreshToken) {
-            await supabase.auth.setSession({
+            await authService.setSession({
               access_token: accessToken,
               refresh_token: refreshToken
             });
@@ -155,7 +154,7 @@ const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
         if (accessToken && refreshToken) {
           try {
             setChecking(true);
-            await supabase.auth.setSession({
+            await authService.setSession({
               access_token: accessToken,
               refresh_token: refreshToken
             });

@@ -40,6 +40,8 @@ export interface JournalEntry {
   isPinned:  boolean;
   createdAt: string;
   updatedAt: string;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
 }
 
 export type CreateJournalInput = {
@@ -143,6 +145,9 @@ export interface Memory {
   imageUrls:  string[];
   memoryDate: string;
   createdAt:  string;
+  updatedAt?:  string;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
 }
 
 export type CreateMemoryInput = {
@@ -181,8 +186,4 @@ export type CreateLetterInput = {
   isArchived?:boolean;
 };
 
-// ─── Result ──────────────────────────────────────────────────────────────────
-
-export type Result<T> =
-  | { success: true;  data: T }
-  | { success: false; error: string };
+export type { Result } from '@shared/types/result';

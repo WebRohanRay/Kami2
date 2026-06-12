@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useAuthStore } from '@features/auth';
+import { useAuthStore, ResetPasswordScreen }       from '@features/auth';
 import { Colors }       from '@shared/constants';
 import { AuthNavigator } from './AuthNavigator';
 import MainNavigator     from './MainNavigator';
@@ -25,18 +25,22 @@ export const RootNavigator: React.FC = () => {
   useDeepLink(navRef);
 
   const { status } = useAuthStore();
-  if (status === 'loading') return <Splash />;
+  const isLoading = status === 'loading' || status === 'restoring';
+  const isAuthenticated = status === 'authenticated_online' || status === 'authenticated_offline';
+
+  if (isLoading) return <Splash />;
 
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {status === 'authenticated' ? (
+        {isAuthenticated ? (
           <Stack.Screen name="Main" component={MainNavigator} />
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
+        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
       </Stack.Navigator>
-      {status === 'authenticated' && <CoupleRealtimeListener />}
+      {isAuthenticated && <CoupleRealtimeListener />}
     </NavigationContainer>
   );
 };

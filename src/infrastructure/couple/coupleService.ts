@@ -528,13 +528,17 @@ export async function submitDailyAnswer(questionId: string, coupleId: string, re
 // ─── RELATIONSHIP JOURNAL ────────────────────────────────────────────────────
 
 /** Fetch shared couple journals */
-export async function fetchCoupleJournals(coupleId: string): Promise<Result<CoupleJournal[]>> {
+export async function fetchCoupleJournals(coupleId: string, limit = 20, page = 1): Promise<Result<CoupleJournal[]>> {
   try {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     const { data, error } = await supabase
       .from('couple_journals')
       .select('*, couple_journal_comments(*, profiles(nickname, avatar_url)), couple_journal_reactions(*), profiles!couple_journals_user_id_fkey(nickname, avatar_url)')
       .eq('couple_id', coupleId)
-      .order('entry_date', { ascending: false });
+      .order('entry_date', { ascending: false })
+      .range(from, to);
 
     if (error) return { success: false, error: friendly(error.message) };
 
@@ -778,13 +782,17 @@ export async function toggleCoupleReaction(entryId: string, emoji: string): Prom
 // ─── RELATIONSHIP MEMORIES ───────────────────────────────────────────────────
 
 /** Fetch shared memory timeline */
-export async function fetchCoupleMemories(coupleId: string): Promise<Result<CoupleMemory[]>> {
+export async function fetchCoupleMemories(coupleId: string, limit = 15, page = 1): Promise<Result<CoupleMemory[]>> {
   try {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     const { data, error } = await supabase
       .from('couple_memories')
       .select('*, profiles!couple_memories_last_edited_by_fkey(nickname)')
       .eq('couple_id', coupleId)
-      .order('memory_date', { ascending: false });
+      .order('memory_date', { ascending: false })
+      .range(from, to);
 
     if (error) return { success: false, error: friendly(error.message) };
 
@@ -941,13 +949,17 @@ export async function deleteCoupleMemory(memoryId: string): Promise<Result<void>
 // ─── RELATIONSHIP GOALS ───────────────────────────────────────────────────────
 
 /** Fetch active shared goals */
-export async function fetchCoupleGoals(coupleId: string): Promise<Result<CoupleGoal[]>> {
+export async function fetchCoupleGoals(coupleId: string, limit = 20, page = 1): Promise<Result<CoupleGoal[]>> {
   try {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     const { data, error } = await supabase
       .from('couple_goals')
       .select('*')
       .eq('couple_id', coupleId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (error) return { success: false, error: friendly(error.message) };
 
@@ -1128,10 +1140,14 @@ export async function deleteCoupleGoal(goalId: string): Promise<Result<void>> {
 // ─── RELATIONSHIP LETTERS ─────────────────────────────────────────────────────
 
 /** Fetch sealed couple letters list */
-export async function fetchCoupleLetters(coupleId: string): Promise<Result<CoupleLetter[]>> {
+export async function fetchCoupleLetters(coupleId: string, limit = 20, page = 1): Promise<Result<CoupleLetter[]>> {
   try {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     const { data, error } = await supabase
-      .rpc('fetch_couple_letters_secure', { p_couple_id: coupleId });
+      .rpc('fetch_couple_letters_secure', { p_couple_id: coupleId })
+      .range(from, to);
 
     if (error) return { success: false, error: friendly(error.message) };
 

@@ -27,6 +27,11 @@ import type {
   Result,
 } from '@features/home/types';
 import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
+import { useAuthStore } from '@features/auth';
+import { journalRepo, goalRepo, moodRepo } from '@shared/db/repo';
+import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
+
+import { uuid } from '@shared/lib/uuid';
 
 // ─── Error normaliser ────────────────────────────────────────────────────────
 
@@ -55,25 +60,32 @@ export async function upsertMoodLog(
   input: CreateMoodLogInput,
 ): Promise<Result<MoodLog>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
     const today = new Date().toISOString().split('T')[0];
+    const now = new Date().toISOString();
 
-    const { data, error } = await supabase
-      .from('mood_logs')
-      .upsert(
-        {
-          mood_id:    input.moodId,
-          mood_emoji: input.moodEmoji,
-          mood_label: input.moodLabel,
-          note:       input.note ?? null,
-          logged_date: today,
-        },
-        { onConflict: 'user_id,logged_date' },
-      )
-      .select()
-      .single();
+    const localMood = {
+      id: uuid(),
+      userId: user.id,
+      moodId: input.moodId,
+      moodEmoji: input.moodEmoji,
+      moodLabel: input.moodLabel,
+      note: input.note ?? null,
+      loggedDate: today,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    return { success: true, data: mapMoodLog(data) };
+    await moodRepo.upsertMood(localMood);
+
+    await enqueueMutation('mood_logs', localMood.id, 'update', localMood);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: localMood };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -82,14 +94,10 @@ export async function upsertMoodLog(
 /** Fetch today's mood log for the current user. */
 export async function fetchTodayMood(): Promise<Result<MoodLog | null>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
     const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from('mood_logs')
-      .select('*')
-      .eq('logged_date', today)
-      .maybeSingle();
-
-    if (error) return { success: false, error: friendly(error.message) };
+    const data = await moodRepo.fetchTodayMood(user.id, today);
     return { success: true, data: data ? mapMoodLog(data) : null };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -99,18 +107,13 @@ export async function fetchTodayMood(): Promise<Result<MoodLog | null>> {
 /** Fetch last 7 days of mood logs for the mini-graph. */
 export async function fetchRecentMoods(days = 7): Promise<Result<MoodLog[]>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
     const since = new Date();
     since.setDate(since.getDate() - days);
     const sinceStr = since.toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('mood_logs')
-      .select('*')
-      .gte('logged_date', sinceStr)
-      .order('logged_date', { ascending: true });
-
-    if (error) return { success: false, error: friendly(error.message) };
-    return { success: true, data: (data ?? []).map(mapMoodLog) };
+    const data = await moodRepo.fetchRecentMoods(user.id, sinceStr);
+    return { success: true, data: data.map(mapMoodLog) };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -123,22 +126,50 @@ export async function createJournalEntry(
   input: CreateJournalInput,
 ): Promise<Result<JournalEntry>> {
   try {
-    const { data, error } = await supabase
-      .from('journal_entries')
-      .insert({
-        title:      input.title ?? null,
-        body:       input.body,
-        mood_id:    input.moodId ?? null,
-        tags:       input.tags ?? [],
-        image_urls: input.imageUrls ?? [],
-        entry_date: new Date().toISOString().split('T')[0],
-      })
-      .select()
-      .single();
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    const resolved = await resolveSignedUrls('journal_images', data.image_urls || []);
-    return { success: true, data: mapJournalEntry(data, resolved) };
+    const entryId = uuid();
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    // Handle local image attachment copying & queueing
+    const localUris: string[] = [];
+    if (input.imageUrls && input.imageUrls.length > 0) {
+      for (let i = 0; i < input.imageUrls.length; i++) {
+        const pickerUri = input.imageUrls[i];
+        const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+        const ownerId = user.id;
+        const timestamp = Date.now();
+        const remotePath = `${ownerId}/${entryId}/${timestamp}_${i}.jpg`;
+        
+        const cachedUri = await enqueueUpload('journal_entries', entryId, pickerUri, remotePath, bucket);
+        localUris.push(cachedUri);
+      }
+    }
+
+    const localEntry = {
+      id: entryId,
+      userId: user.id,
+      title: input.title ?? null,
+      body: input.body,
+      moodId: input.moodId ?? null,
+      tags: input.tags ?? [],
+      imageUrls: localUris,
+      entryDate: today,
+      isPinned: false,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending_insert',
+    };
+
+    await journalRepo.saveJournal(localEntry);
+
+    await enqueueMutation('journal_entries', entryId, 'insert', localEntry);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: localEntry };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -150,24 +181,50 @@ export async function updateJournalEntry(
   input: UpdateJournalInput,
 ): Promise<Result<JournalEntry>> {
   try {
-    const patch: Record<string, unknown> = {};
-    if (input.title     !== undefined) patch.title      = input.title;
-    if (input.body      !== undefined) patch.body       = input.body;
-    if (input.moodId    !== undefined) patch.mood_id    = input.moodId;
-    if (input.tags      !== undefined) patch.tags       = input.tags;
-    if (input.isPinned  !== undefined) patch.is_pinned  = input.isPinned;
-    if (input.imageUrls !== undefined) patch.image_urls = input.imageUrls;
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { data, error } = await supabase
-      .from('journal_entries')
-      .update(patch)
-      .eq('id', id)
-      .select()
-      .single();
+    const entry = await journalRepo.fetchJournalById(id);
+    if (!entry) return { success: false, error: 'Journal entry not found.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    const resolved = await resolveSignedUrls('journal_images', data.image_urls || []);
-    return { success: true, data: mapJournalEntry(data, resolved) };
+    const now = new Date().toISOString();
+    
+    // Copy new picker files if any
+    const localUris = [...(input.imageUrls ?? entry.imageUrls)];
+    if (input.imageUrls) {
+      for (let i = 0; i < input.imageUrls.length; i++) {
+        const url = input.imageUrls[i];
+        if (url.startsWith('file://') || url.startsWith('content://')) {
+          const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+          const ownerId = user.id;
+          const timestamp = Date.now();
+          const remotePath = `${ownerId}/${id}/${timestamp}_${i}.jpg`;
+          const cachedUri = await enqueueUpload('journal_entries', id, url, remotePath, bucket);
+          const idx = localUris.indexOf(url);
+          if (idx !== -1) localUris[idx] = cachedUri;
+        }
+      }
+    }
+
+    const updatedEntry = {
+      ...entry,
+      title: input.title !== undefined ? input.title : entry.title,
+      body: input.body !== undefined ? input.body : entry.body,
+      moodId: input.moodId !== undefined ? input.moodId : entry.moodId,
+      tags: input.tags !== undefined ? input.tags : entry.tags,
+      isPinned: input.isPinned !== undefined ? input.isPinned : entry.isPinned,
+      imageUrls: localUris,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
+
+    await journalRepo.saveJournal(updatedEntry);
+
+    await enqueueMutation('journal_entries', id, 'update', updatedEntry);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: updatedEntry };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -176,18 +233,16 @@ export async function updateJournalEntry(
 /** Delete a journal entry. */
 export async function deleteJournalEntry(id: string): Promise<Result<void>> {
   try {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (userRes?.user) {
-      await deleteImages('journal_images', userRes.user.id, id);
-    }
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { error } = await supabase
-      .from('journal_entries')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userRes?.user?.id ?? '');
+    const now = new Date().toISOString();
+    await journalRepo.softDeleteJournal(id, now);
 
-    if (error) return { success: false, error: friendly(error.message) };
+    await enqueueMutation('journal_entries', id, 'delete', { id });
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -198,31 +253,36 @@ export async function deleteJournalEntry(id: string): Promise<Result<void>> {
 export async function fetchJournalEntries(
   limit = 20,
   searchQuery?: string,
-  tagFilter?: string
+  tagFilter?: string,
+  page = 1
 ): Promise<Result<JournalEntry[]>> {
   try {
-    let query = supabase.from('journal_entries').select('*');
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (tagFilter) {
-      query = query.contains('tags', [tagFilter]);
-    }
-
-    if (searchQuery?.trim()) {
-      query = query.textSearch('fts', searchQuery.trim());
-    }
-
-    const { data, error } = await query
-      .order('is_pinned', { ascending: false })
-      .order('entry_date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (error) return { success: false, error: friendly(error.message) };
-
+    const rows = await journalRepo.fetchJournals(user.id, searchQuery, tagFilter, page, limit);
+    
     const mapped: JournalEntry[] = [];
-    for (const row of (data ?? [])) {
-      const resolved = await resolveSignedUrls('journal_images', row.image_urls || []);
-      mapped.push(mapJournalEntry(row, resolved));
+    for (const r of rows) {
+      const localPickerUris = r.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
+      const remotePaths = r.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
+      
+      const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+      const resolvedRemote = await resolveSignedUrls(bucket, remotePaths);
+      
+      mapped.push({
+        id: r.id,
+        userId: r.userId,
+        title: r.title,
+        body: r.body,
+        moodId: r.moodId,
+        tags: r.tags,
+        imageUrls: [...localPickerUris, ...resolvedRemote],
+        entryDate: r.entryDate,
+        isPinned: r.isPinned,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      });
     }
 
     return { success: true, data: mapped };
@@ -236,22 +296,43 @@ export async function fetchJournalEntries(
 /** Create a new goal. */
 export async function createGoal(input: CreateGoalInput): Promise<Result<Goal>> {
   try {
-    const { data, error } = await supabase
-      .from('goals')
-      .insert({
-        title:       input.title,
-        description: input.description ?? null,
-        category:    input.category,
-        target_date: input.targetDate ?? null,
-        emoji:       input.emoji ?? '🌱',
-        image_url:   input.imageUrl ?? null,
-      })
-      .select()
-      .single();
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    const resolved = data.image_url ? (await resolveSignedUrls('goal_images', [data.image_url]))[0] : null;
-    return { success: true, data: mapGoal(data, resolved) };
+    const goalId = uuid();
+    const now = new Date().toISOString();
+
+    let cachedUrl = input.imageUrl ?? null;
+    if (input.imageUrl && (input.imageUrl.startsWith('file://') || input.imageUrl.startsWith('content://'))) {
+      const remotePath = `${user.id}/${goalId}/${Date.now()}.jpg`;
+      cachedUrl = await enqueueUpload('goals', goalId, input.imageUrl, remotePath, 'goal_images');
+    }
+
+    const localGoal = {
+      id: goalId,
+      userId: user.id,
+      title: input.title,
+      description: input.description ?? null,
+      category: input.category,
+      status: 'active' as const,
+      progress: 0,
+      targetDate: input.targetDate ?? null,
+      completedAt: null,
+      emoji: input.emoji ?? '🌱',
+      sortOrder: 0,
+      imageUrl: cachedUrl,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending_insert',
+    };
+
+    await goalRepo.saveGoal(localGoal);
+
+    await enqueueMutation('goals', goalId, 'insert', localGoal);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: { ...localGoal, category: localGoal.category as Goal['category'], status: localGoal.status as Goal['status'] } };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -263,29 +344,42 @@ export async function updateGoal(
   input: UpdateGoalInput,
 ): Promise<Result<Goal>> {
   try {
-    const patch: Record<string, unknown> = {};
-    if (input.title       !== undefined) patch.title       = input.title;
-    if (input.description !== undefined) patch.description = input.description;
-    if (input.category    !== undefined) patch.category    = input.category;
-    if (input.status      !== undefined) {
-      patch.status = input.status;
-      if (input.status === 'completed') patch.completed_at = new Date().toISOString();
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
+    const goal = await goalRepo.fetchGoalById(id);
+    if (!goal) return { success: false, error: 'Goal not found.' };
+
+    const now = new Date().toISOString();
+
+    let cachedUrl = input.imageUrl !== undefined ? input.imageUrl : goal.imageUrl;
+    if (input.imageUrl && (input.imageUrl.startsWith('file://') || input.imageUrl.startsWith('content://'))) {
+      const remotePath = `${user.id}/${id}/${Date.now()}.jpg`;
+      cachedUrl = await enqueueUpload('goals', id, input.imageUrl, remotePath, 'goal_images');
     }
-    if (input.progress    !== undefined) patch.progress    = input.progress;
-    if (input.targetDate  !== undefined) patch.target_date = input.targetDate;
-    if (input.emoji       !== undefined) patch.emoji       = input.emoji;
-    if (input.imageUrl    !== undefined) patch.image_url   = input.imageUrl;
 
-    const { data, error } = await supabase
-      .from('goals')
-      .update(patch)
-      .eq('id', id)
-      .select()
-      .single();
+    const updatedGoal = {
+      ...goal,
+      title: input.title !== undefined ? input.title : goal.title,
+      description: input.description !== undefined ? input.description : goal.description,
+      category: input.category !== undefined ? input.category : goal.category,
+      status: input.status !== undefined ? input.status : goal.status,
+      progress: input.progress !== undefined ? input.progress : goal.progress,
+      targetDate: input.targetDate !== undefined ? input.targetDate : goal.targetDate,
+      completedAt: input.status === 'completed' ? now : (input.status ? null : goal.completedAt),
+      emoji: input.emoji !== undefined ? input.emoji : goal.emoji,
+      imageUrl: cachedUrl,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    const resolved = data.image_url ? (await resolveSignedUrls('goal_images', [data.image_url]))[0] : null;
-    return { success: true, data: mapGoal(data, resolved) };
+    await goalRepo.saveGoal(updatedGoal);
+
+    await enqueueMutation('goals', id, 'update', updatedGoal);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: { ...updatedGoal, category: updatedGoal.category as Goal['category'], status: updatedGoal.status as Goal['status'] } };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -294,18 +388,16 @@ export async function updateGoal(
 /** Delete a goal. */
 export async function deleteGoal(id: string): Promise<Result<void>> {
   try {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (userRes?.user) {
-      await deleteImages('goal_images', userRes.user.id, id);
-    }
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { error } = await supabase
-      .from('goals')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userRes?.user?.id ?? '');
+    const now = new Date().toISOString();
+    await goalRepo.softDeleteGoal(id, now);
 
-    if (error) return { success: false, error: friendly(error.message) };
+    await enqueueMutation('goals', id, 'delete', { id });
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: err(e) };
@@ -315,19 +407,33 @@ export async function deleteGoal(id: string): Promise<Result<void>> {
 /** Fetch active goals. */
 export async function fetchGoals(): Promise<Result<Goal[]>> {
   try {
-    const { data, error } = await supabase
-      .from('goals')
-      .select('*')
-      .in('status', ['active', 'paused'])
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: false });
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error) return { success: false, error: friendly(error.message) };
+    const rows = await goalRepo.fetchGoals(user.id);
 
     const mapped: Goal[] = [];
-    for (const row of (data ?? [])) {
-      const resolved = row.image_url ? (await resolveSignedUrls('goal_images', [row.image_url]))[0] : null;
-      mapped.push(mapGoal(row, resolved));
+    for (const r of rows) {
+      let resolved = r.imageUrl;
+      if (r.imageUrl && !r.imageUrl.startsWith('file://') && !r.imageUrl.startsWith('content://')) {
+        resolved = (await resolveSignedUrls('goal_images', [r.imageUrl]))[0] || null;
+      }
+      mapped.push({
+        id: r.id,
+        userId: r.userId,
+        title: r.title,
+        description: r.description,
+        category: r.category as Goal['category'],
+        status: r.status as Goal['status'],
+        progress: r.progress,
+        targetDate: r.targetDate,
+        completedAt: r.completedAt,
+        emoji: r.emoji,
+        sortOrder: r.sortOrder,
+        imageUrl: resolved,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      });
     }
 
     return { success: true, data: mapped };

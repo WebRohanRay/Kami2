@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../supabase';
+import { uploadManager } from './uploadManager';
 
 type PickResult =
   | { success: true; uri: string }
@@ -52,23 +53,6 @@ export async function uploadAvatar(
   uri: string
 ): Promise<UploadResult> {
   try {
-    const compressed = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 400 } }],
-      {
-        compress: 0.8,
-        format: ImageManipulator.SaveFormat.JPEG,
-        base64: true,
-      }
-    );
-
-    if (!compressed.base64) {
-      return {
-        success: false,
-        error: 'Could not process image.',
-      };
-    }
-
     // Fetch current profile to get old avatar path
     const { data: profile } = await supabase
       .from('profiles')
@@ -78,35 +62,30 @@ export async function uploadAvatar(
 
     const oldPath = profile?.avatar_url;
 
-    // Generate unique new path to bypass image caching issues
-    const path = `${userId}/avatar-${Date.now()}.jpg`;
+    // Use uploadManager to compress and upload
+    const result = await uploadManager.compressAndUpload(uri, {
+      bucket: 'avatars',
+      userId,
+      targetWidth: 400,
+      thumbWidth: 150,
+    });
 
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(path, decode(compressed.base64), {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return {
-        success: false,
-        error: 'Could not upload your photo.',
-      };
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    // Delete old avatar from storage bucket if it was a storage file
+    // Delete old avatar and thumbnail from storage bucket if it was a storage file
     if (oldPath && !oldPath.startsWith('http')) {
-      await supabase.storage.from('avatars').remove([oldPath]);
+      const oldThumbPath = oldPath.replace('.jpg', '_thumb.jpg');
+      await supabase.storage.from('avatars').remove([oldPath, oldThumbPath]);
     }
 
     return {
       success: true,
-      path,
+      path: result.path,
     };
   } catch (error) {
     console.error('uploadAvatar error:', error);
-
     return {
       success: false,
       error: 'Something went wrong uploading your photo.',
@@ -119,7 +98,7 @@ export async function uploadHeroBg(
   uri: string
 ): Promise<UploadResult> {
   try {
-    const compressed = await ImageManipulator.manipulateAsync(
+    const compressedOriginal = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 1200 } }],
       {
@@ -129,7 +108,17 @@ export async function uploadHeroBg(
       }
     );
 
-    if (!compressed.base64) {
+    const compressedThumb = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 300 } }],
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    if (!compressedOriginal.base64 || !compressedThumb.base64) {
       return {
         success: false,
         error: 'Could not process image.',
@@ -147,10 +136,11 @@ export async function uploadHeroBg(
 
     // Generate unique new path for cover image
     const path = `${userId}/hero_bg-${Date.now()}.jpg`;
+    const thumbPath = path.replace('.jpg', '_thumb.jpg');
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(path, decode(compressed.base64), {
+      .upload(path, decode(compressedOriginal.base64), {
         contentType: 'image/jpeg',
         upsert: true,
       });
@@ -162,9 +152,26 @@ export async function uploadHeroBg(
       };
     }
 
-    // Delete old cover image from storage bucket if it was a storage file
+    const { error: uploadThumbError } = await supabase.storage
+      .from('avatars')
+      .upload(thumbPath, decode(compressedThumb.base64), {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadThumbError) {
+      // Rollback original
+      await supabase.storage.from('avatars').remove([path]);
+      return {
+        success: false,
+        error: 'Could not upload cover image thumbnail.',
+      };
+    }
+
+    // Delete old cover image and thumbnail from storage bucket if it was a storage file
     if (oldPath && !oldPath.startsWith('http')) {
-      await supabase.storage.from('avatars').remove([oldPath]);
+      const oldThumbPath = oldPath.replace('.jpg', '_thumb.jpg');
+      await supabase.storage.from('avatars').remove([oldPath, oldThumbPath]);
     }
 
     return {
@@ -185,7 +192,7 @@ export async function uploadCoupleHeroBg(
   uri: string
 ): Promise<UploadResult> {
   try {
-    const compressed = await ImageManipulator.manipulateAsync(
+    const compressedOriginal = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: 1200 } }],
       {
@@ -195,7 +202,17 @@ export async function uploadCoupleHeroBg(
       }
     );
 
-    if (!compressed.base64) {
+    const compressedThumb = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 300 } }],
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    if (!compressedOriginal.base64 || !compressedThumb.base64) {
       return {
         success: false,
         error: 'Could not process image.',
@@ -213,10 +230,11 @@ export async function uploadCoupleHeroBg(
 
     // Generate unique new path for cover image
     const path = `${coupleId}/hero_bg-${Date.now()}.jpg`;
+    const thumbPath = path.replace('.jpg', '_thumb.jpg');
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(path, decode(compressed.base64), {
+      .upload(path, decode(compressedOriginal.base64), {
         contentType: 'image/jpeg',
         upsert: true,
       });
@@ -228,9 +246,26 @@ export async function uploadCoupleHeroBg(
       };
     }
 
-    // Delete old cover image from storage bucket if it was a storage file
+    const { error: uploadThumbError } = await supabase.storage
+      .from('avatars')
+      .upload(thumbPath, decode(compressedThumb.base64), {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadThumbError) {
+      // Rollback original
+      await supabase.storage.from('avatars').remove([path]);
+      return {
+        success: false,
+        error: 'Could not upload cover image thumbnail.',
+      };
+    }
+
+    // Delete old cover image and thumbnail from storage bucket if it was a storage file
     if (oldPath && !oldPath.startsWith('http')) {
-      await supabase.storage.from('avatars').remove([oldPath]);
+      const oldThumbPath = oldPath.replace('.jpg', '_thumb.jpg');
+      await supabase.storage.from('avatars').remove([oldPath, oldThumbPath]);
     }
 
     return {

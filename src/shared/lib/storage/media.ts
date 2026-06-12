@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../supabase';
+import { signedUrlCache } from './signedUrlCache';
 
 type PickResult =
   | { success: true; uris: string[] }
@@ -105,7 +106,7 @@ export async function uploadImages(
       const uri = uris[i];
 
       // Compress to max width 1200px (also strips EXIF metadata automatically)
-      const compressed = await ImageManipulator.manipulateAsync(
+      const compressedOriginal = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: 1200 } }],
         {
@@ -115,32 +116,59 @@ export async function uploadImages(
         }
       );
 
-      if (!compressed.base64) {
+      // Compress to max width 300px for thumbnail
+      const compressedThumb = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 300 } }],
+        {
+          compress: 0.8,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true,
+        }
+      );
+
+      if (!compressedOriginal.base64 || !compressedThumb.base64) {
         throw new Error('Image manipulation failed.');
       }
 
       // Unique filename within user/entity path
-      const path = `${userId}/${entityId}/${Date.now()}_${i}.jpg`;
+      const timestamp = Date.now();
+      const originalPath = `${userId}/${entityId}/${timestamp}_${i}.jpg`;
+      const thumbPath = `${userId}/${entityId}/${timestamp}_${i}_thumb.jpg`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadErrorOriginal } = await supabase.storage
         .from(bucketName)
-        .upload(path, decode(compressed.base64), {
+        .upload(originalPath, decode(compressedOriginal.base64), {
           contentType: 'image/jpeg',
           upsert: false,
         });
 
-      if (uploadError) {
-        throw uploadError;
+      if (uploadErrorOriginal) {
+        throw uploadErrorOriginal;
       }
 
-      uploadedPaths.push(path);
+      const { error: uploadErrorThumb } = await supabase.storage
+        .from(bucketName)
+        .upload(thumbPath, decode(compressedThumb.base64), {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+
+      if (uploadErrorThumb) {
+        // Rollback original
+        await supabase.storage.from(bucketName).remove([originalPath]);
+        throw uploadErrorThumb;
+      }
+
+      uploadedPaths.push(originalPath);
     } catch (error) {
       console.error(`uploadImages failure at index ${i}:`, error);
 
       // Rollback: Clean up any successfully uploaded images in this batch
       if (uploadedPaths.length > 0) {
         try {
-          await supabase.storage.from(bucketName).remove(uploadedPaths);
+          const pathsToDelete = uploadedPaths.flatMap(p => [p, p.replace('.jpg', '_thumb.jpg')]);
+          await supabase.storage.from(bucketName).remove(pathsToDelete);
         } catch (cleanupError) {
           console.error('Failed to roll back partial uploads:', cleanupError);
         }
@@ -204,16 +232,31 @@ export async function resolveSignedUrls(
   if (!paths || paths.length === 0) return [];
   
   try {
+    const { cached, missing } = signedUrlCache.getBatch(bucketName, paths);
+    
+    if (missing.length === 0) {
+      return paths.map(path => cached[path]).filter((url): url is string => !!url);
+    }
+    
     const { data, error } = await supabase.storage
       .from(bucketName)
-      .createSignedUrls(paths, 3600); // 1 hour expiry
+      .createSignedUrls(missing, 3600); // 1 hour expiry
 
     if (error || !data) {
       console.error(`resolveSignedUrls error in ${bucketName}:`, error);
-      return [];
+      return paths.map(path => cached[path]).filter((url): url is string => !!url);
     }
 
-    return data.map(item => item.signedUrl).filter((url): url is string => !!url);
+    const expiresAt = Date.now() + 3600 * 1000;
+    data.forEach((item, idx) => {
+      if (item.signedUrl) {
+        const path = missing[idx];
+        signedUrlCache.set(bucketName, path, item.signedUrl, expiresAt);
+        cached[path] = item.signedUrl;
+      }
+    });
+
+    return paths.map(path => cached[path]).filter((url): url is string => !!url);
   } catch (e) {
     console.error(`resolveSignedUrls error in ${bucketName}:`, e);
     return [];

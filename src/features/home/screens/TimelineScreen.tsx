@@ -1,32 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, ActivityIndicator, Alert, Animated, RefreshControl, Dimensions,
   Platform, StatusBar as RNStatusBar
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { FlashList } from '@shopify/flash-list';
 import { useAuthStore } from '@features/auth';
 import { useCoupleStore, PartnerActionType } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
 import KamiText from '@shared/ui/atoms/KamiText';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { useTheme } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
+import type { CoupleLetter, CoupleJournal, CoupleMemory, CoupleGoal, CoupleAnswer, CoupleReaction } from '@features/couple/types';
 
 type Props = MainTabScreenProps<'Timeline'>;
 
-interface TimelineEvent {
-  id: string;
-  type: 'letter' | 'journal' | 'memory' | 'goal' | 'comment' | 'reaction' | 'answer';
-  title: string;
-  description?: string;
-  time: string;
-  icon: string;
-  date: Date;
-  raw: any;
-}
+type TimelineEvent =
+  | { id: string; type: 'letter'; title: string; description?: string; time: string; icon: string; date: Date; raw: CoupleLetter }
+  | { id: string; type: 'journal'; title: string; description?: string; time: string; icon: string; date: Date; raw: CoupleJournal }
+  | { id: string; type: 'memory'; title: string; description?: string; time: string; icon: string; date: Date; raw: CoupleMemory }
+  | { id: string; type: 'goal'; title: string; description?: string; time: string; icon: string; date: Date; raw: CoupleGoal }
+  | { id: string; type: 'answer'; title: string; description?: string; time: string; icon: string; date: Date; raw: CoupleAnswer }
+  | { id: string; type: 'comment' | 'reaction'; title: string; description?: string; time: string; icon: string; date: Date; raw: any };
 
 export function TimelineScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -89,99 +89,103 @@ export function TimelineScreen({ navigation }: Props) {
     return 'Someone';
   };
 
-  // Extract all timeline events
-  const events: TimelineEvent[] = [];
+  // Extract all timeline events and memoize them
+  const events = useMemo(() => {
+    const list: TimelineEvent[] = [];
 
-  // Letters
-  coupleLetters.forEach(l => {
-    if (l.isDraft) return;
-    const isMe = l.senderId === user?.id;
-    const senderName = isMe ? 'You' : partnerName;
-    const isLocked = !checkUnlocked(l.deliverAt);
-    events.push({
-      id: `letter-${l.id}`,
-      type: 'letter',
-      title: isLocked 
-        ? `${senderName} sent a sealed capsule letter 🔒`
-        : `${senderName} wrote: "${l.subject || 'Love Letter'}"`,
-      description: isLocked 
-        ? 'Unlocks in the future' 
-        : (l.body ? (l.body.length > 100 ? `${l.body.substring(0, 97)}...` : l.body) : undefined),
-      time: getTimeAgo(l.createdAt),
-      icon: isLocked ? '🔒' : '✉️',
-      date: new Date(l.createdAt),
-      raw: l,
+    // Letters
+    coupleLetters.forEach(l => {
+      if (l.isDraft) return;
+      const isMe = l.senderId === user?.id;
+      const senderName = isMe ? 'You' : partnerName;
+      const isLocked = !checkUnlocked(l.deliverAt);
+      list.push({
+        id: `letter-${l.id}`,
+        type: 'letter',
+        title: isLocked 
+          ? `${senderName} sent a sealed capsule letter 🔒`
+          : `${senderName} wrote: "${l.subject || 'Love Letter'}"`,
+        description: isLocked 
+          ? 'Unlocks in the future' 
+          : (l.body ? (l.body.length > 100 ? `${l.body.substring(0, 97)}...` : l.body) : undefined),
+        time: getTimeAgo(l.createdAt),
+        icon: isLocked ? '🔒' : '✉️',
+        date: new Date(l.createdAt),
+        raw: l,
+      });
     });
-  });
 
-  // Journals
-  coupleJournals.forEach(j => {
-    const author = getMemberName(j.userId);
-    events.push({
-      id: `journal-${j.id}`,
-      type: 'journal',
-      title: `${author} wrote a journal: "${j.title || 'Untitled'}"`,
-      description: j.body ? (j.body.length > 120 ? `${j.body.substring(0, 117)}...` : j.body) : undefined,
-      time: getTimeAgo(j.entryDate || j.createdAt),
-      icon: '📓',
-      date: new Date(j.entryDate || j.createdAt),
-      raw: j,
+    // Journals
+    coupleJournals.forEach(j => {
+      const author = getMemberName(j.userId);
+      list.push({
+        id: `journal-${j.id}`,
+        type: 'journal',
+        title: `${author} wrote a journal: "${j.title || 'Untitled'}"`,
+        description: j.body ? (j.body.length > 120 ? `${j.body.substring(0, 117)}...` : j.body) : undefined,
+        time: getTimeAgo(j.entryDate || j.createdAt),
+        icon: '📓',
+        date: new Date(j.entryDate || j.createdAt),
+        raw: j,
+      });
     });
-  });
 
-  // Memories
-  coupleMemories.forEach(m => {
-    events.push({
-      id: `memory-${m.id}`,
-      type: 'memory',
-      title: `Shared memory: "${m.title}"`,
-      description: m.description || undefined,
-      time: getTimeAgo(m.memoryDate || m.createdAt),
-      icon: m.mood || '📸',
-      date: new Date(m.memoryDate || m.createdAt),
-      raw: m,
+    // Memories
+    coupleMemories.forEach(m => {
+      list.push({
+        id: `memory-${m.id}`,
+        type: 'memory',
+        title: `Shared memory: "${m.title}"`,
+        description: m.description || undefined,
+        time: getTimeAgo(m.memoryDate || m.createdAt),
+        icon: m.mood || '📸',
+        date: new Date(m.memoryDate || m.createdAt),
+        raw: m,
+      });
     });
-  });
 
-  // Goals
-  coupleGoals.forEach(g => {
-    events.push({
-      id: `goal-${g.id}`,
-      type: 'goal',
-      title: g.status === 'completed' ? `Shared Goal Completed! 🎉` : `New shared goal set`,
-      description: `"${g.title}" — progress: ${g.progress}%`,
-      time: getTimeAgo(g.completedAt || g.createdAt),
-      icon: g.status === 'completed' ? '🎉' : g.emoji || '🎯',
-      date: new Date(g.completedAt || g.createdAt),
-      raw: g,
+    // Goals
+    coupleGoals.forEach(g => {
+      list.push({
+        id: `goal-${g.id}`,
+        type: 'goal',
+        title: g.status === 'completed' ? `Shared Goal Completed! 🎉` : `New shared goal set`,
+        description: `"${g.title}" — progress: ${g.progress}%`,
+        time: getTimeAgo(g.completedAt || g.createdAt),
+        icon: g.status === 'completed' ? '🎉' : g.emoji || '🎯',
+        date: new Date(g.completedAt || g.createdAt),
+        raw: g,
+      });
     });
-  });
 
-  // Question Answers
-  dailyAnswers.forEach(a => {
-    const responderName = getMemberName(a.userId);
-    const bothAnswered = dailyAnswers.find(ans => ans.userId === user?.id) && 
-                        dailyAnswers.find(ans => ans.userId === partner?.id);
-    events.push({
-      id: `answer-${a.id}`,
-      type: 'answer',
-      title: `${responderName} responded to today's prompt`,
-      description: bothAnswered ? `"${a.response}"` : 'Answer is hidden until you both respond',
-      time: getTimeAgo(a.createdAt),
-      icon: '💭',
-      date: new Date(a.createdAt),
-      raw: a,
+    // Question Answers
+    dailyAnswers.forEach(a => {
+      const responderName = getMemberName(a.userId);
+      const bothAnswered = dailyAnswers.find(ans => ans.userId === user?.id) && 
+                          dailyAnswers.find(ans => ans.userId === partner?.id);
+      list.push({
+        id: `answer-${a.id}`,
+        type: 'answer',
+        title: `${responderName} responded to today's prompt`,
+        description: bothAnswered ? `"${a.response}"` : 'Answer is hidden until you both respond',
+        time: getTimeAgo(a.createdAt),
+        icon: '💭',
+        date: new Date(a.createdAt),
+        raw: a,
+      });
     });
-  });
 
-  // Sort newest first
-  events.sort((a, b) => b.date.getTime() - a.date.getTime());
+    // Sort newest first
+    return list.sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [coupleLetters, coupleJournals, coupleMemories, coupleGoals, dailyAnswers, partnerName, user?.id]);
 
-  // Filter events
-  const filteredEvents = events.filter(e => filterTab === 'all' || e.type === filterTab);
+  const filteredEvents = useMemo(() => {
+    return events.filter(e => filterTab === 'all' || e.type === filterTab);
+  }, [events, filterTab]);
 
-  // Paginated subset
-  const paginatedEvents = filteredEvents.slice(0, limit);
+  const paginatedEvents = useMemo(() => {
+    return filteredEvents.slice(0, limit);
+  }, [filteredEvents, limit]);
 
   // Group events by date/month headers (Indexing & Grouping details)
   const getGroupHeader = (date: Date) => {
@@ -241,9 +245,17 @@ export function TimelineScreen({ navigation }: Props) {
             {event.description ? <KamiText variant="body" color={Colors.textSecondary} style={styles.cardDesc}>{event.description}</KamiText> : null}
             {!isLocked && event.raw.imageUrls && event.raw.imageUrls.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosRow}>
-                {event.raw.imageUrls.map((url: string, idx: number) => (
-                  <Image key={idx} source={{ uri: url }} style={styles.photoThumb} />
-                ))}
+                {event.raw.imageUrls.map((url: string, idx: number) => {
+                  const thumbUrl = url.includes('.jpg') ? url.replace('.jpg', '_thumb.jpg') : url;
+                  return (
+                    <KamiImage
+                      key={idx}
+                      src={url}
+                      thumbnailSrc={thumbUrl}
+                      style={styles.photoThumb}
+                    />
+                  );
+                })}
               </ScrollView>
             )}
             <TouchableOpacity style={[styles.ctaButton, { backgroundColor: colors.primary + '11' }]} onPress={() => navigation.navigate('Future')}>
@@ -265,15 +277,23 @@ export function TimelineScreen({ navigation }: Props) {
             {event.description ? <KamiText variant="body" color={Colors.textSecondary} style={styles.cardDesc}>{event.description}</KamiText> : null}
             {event.raw.imageUrls && event.raw.imageUrls.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosRow}>
-                {event.raw.imageUrls.map((url: string, idx: number) => (
-                  <Image key={idx} source={{ uri: url }} style={styles.photoThumb} />
-                ))}
+                {event.raw.imageUrls.map((url: string, idx: number) => {
+                  const thumbUrl = url.includes('.jpg') ? url.replace('.jpg', '_thumb.jpg') : url;
+                  return (
+                    <KamiImage
+                      key={idx}
+                      src={url}
+                      thumbnailSrc={thumbUrl}
+                      style={styles.photoThumb}
+                    />
+                  );
+                })}
               </ScrollView>
             )}
             <View style={styles.metadataRow}>
               {event.raw.reactions && event.raw.reactions.length > 0 && (
                 <View style={styles.reactionsGrid}>
-                  {event.raw.reactions.map((rx: any, idx: number) => (
+                  {event.raw.reactions.map((rx: CoupleReaction, idx: number) => (
                     <Text key={idx} style={{ fontSize: 12 }}>{rx.emoji}</Text>
                   ))}
                 </View>
@@ -307,9 +327,17 @@ export function TimelineScreen({ navigation }: Props) {
             ) : null}
             {event.raw.imageUrls && event.raw.imageUrls.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosRow}>
-                {event.raw.imageUrls.map((url: string, idx: number) => (
-                  <Image key={idx} source={{ uri: url }} style={styles.photoThumb} />
-                ))}
+                {event.raw.imageUrls.map((url: string, idx: number) => {
+                  const thumbUrl = url.includes('.jpg') ? url.replace('.jpg', '_thumb.jpg') : url;
+                  return (
+                    <KamiImage
+                      key={idx}
+                      src={url}
+                      thumbnailSrc={thumbUrl}
+                      style={styles.photoThumb}
+                    />
+                  );
+                })}
               </ScrollView>
             )}
             <TouchableOpacity style={[styles.ctaButton, { backgroundColor: colors.primary + '11' }]} onPress={() => navigation.navigate('Memories')}>
@@ -382,6 +410,141 @@ export function TimelineScreen({ navigation }: Props) {
     }
   };
 
+
+
+  const renderHeader = () => {
+    if (!couple) return null;
+    return (
+      <View>
+        {/* Love Clock / Duration Header Stats */}
+        <LinearGradient
+          colors={[colors.primary + '12', colors.primary + '03']}
+          style={styles.statsPanel}
+        >
+          <View style={styles.statsRow}>
+            <View style={styles.statBox}>
+              <KamiText variant="caption" color={Colors.textMuted} bold>CONNECTED FOR</KamiText>
+              <KamiText variant="body" bold style={{ color: colors.primaryDark, fontSize: 16 }}>
+                {couple.anniversaryDate 
+                  ? `${Math.max(1, Math.ceil((Date.now() - new Date(couple.anniversaryDate).getTime()) / 86400000))} Days`
+                  : '1 Day'}
+              </KamiText>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <KamiText variant="caption" color={Colors.textMuted} bold>TIMELINE EVENTS</KamiText>
+              <KamiText variant="body" bold style={{ color: colors.primaryDark, fontSize: 16 }}>{events.length} Moments</KamiText>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* Live Partner Activity Presence Dot */}
+        {isPartnerOnline && (
+          <View style={styles.presenceBox}>
+            <View style={styles.greenDot} />
+            <KamiText variant="caption" bold color={colors.primary}>
+              {getPresenceDescription()}
+            </KamiText>
+          </View>
+        )}
+
+        {/* Categories / Filter ScrollView */}
+        <View style={styles.filterSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabsRow}>
+            {([
+              { id: 'all', emoji: '✦', label: 'All' },
+              { id: 'letter', emoji: '💌', label: 'Letters' },
+              { id: 'journal', emoji: '📓', label: 'Journals' },
+              { id: 'memory', emoji: '📸', label: 'Memories' },
+              { id: 'goal', emoji: '🎯', label: 'Goals' },
+              { id: 'answer', emoji: '💭', label: 'Answers' },
+            ] as const).map(tab => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[
+                  styles.filterTab,
+                  filterTab === tab.id && [styles.filterTabActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
+                ]}
+                onPress={() => {
+                  setFilterTab(tab.id);
+                  setLimit(10);
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>{tab.emoji}</Text>
+                <KamiText variant="caption" color={filterTab === tab.id ? '#fff' : Colors.textSecondary} bold={filterTab === tab.id}>
+                  {tab.label}
+                </KamiText>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  };
+
+  const renderItem = ({ item, index }: { item: TimelineEvent; index: number }) => {
+    const displayIndex = filteredEvents.length - index;
+    const showHeader = index === 0 || getGroupHeader(item.date) !== getGroupHeader(paginatedEvents[index - 1].date);
+    
+    return (
+      <View style={styles.timelineNodeRow}>
+        {showHeader && (
+          <View style={styles.dateGroupHeader}>
+            <KamiText variant="caption" color={colors.primary} bold style={styles.dateGroupText}>
+              {getGroupHeader(item.date)}
+            </KamiText>
+          </View>
+        )}
+        
+        <View style={styles.timelineInnerRow}>
+          {/* Visual Line Anchor */}
+          <View style={styles.lineCol}>
+            <View style={[styles.timelineDot, { borderColor: colors.primaryLight, backgroundColor: '#fff' }]}>
+              <View style={[styles.timelineDotInner, { backgroundColor: colors.primary }]} />
+            </View>
+            {index < paginatedEvents.length - 1 && (
+              <View style={[styles.timelineLine, { borderColor: colors.primaryLight + '44' }]} />
+            )}
+          </View>
+
+          {/* Styled timeline card */}
+          <View style={{ flex: 1 }}>
+            {renderCard(item, displayIndex)}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderEmpty = () => {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={{ fontSize: 56, marginBottom: Space[4] }}>⏳</Text>
+        <KamiText variant="subtitle" align="center">No moments found</KamiText>
+        <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
+          There are no couple events matching this category filter.
+        </KamiText>
+      </View>
+    );
+  };
+
+  const renderFooter = () => {
+    if (filteredEvents.length <= limit) {
+      return <View style={{ height: Space[10] }} />;
+    }
+    return (
+      <View style={{ paddingBottom: Space[10] }}>
+        <TouchableOpacity
+          style={[styles.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
+          onPress={() => setLimit(prev => prev + 10)}
+          activeOpacity={0.8}
+        >
+          <KamiText variant="label" color={colors.primary} bold>Load More Moments</KamiText>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style="dark" />
@@ -398,136 +561,24 @@ export function TimelineScreen({ navigation }: Props) {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <FlashList
+        data={paginatedEvents}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
-      >
-        {/* Love Clock / Duration Header Stats */}
-        {couple && (
-          <LinearGradient
-            colors={[colors.primary + '12', colors.primary + '03']}
-            style={styles.statsPanel}
-          >
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <KamiText variant="caption" color={Colors.textMuted} bold>CONNECTED FOR</KamiText>
-                <KamiText variant="body" bold style={{ color: colors.primaryDark, fontSize: 16 }}>
-                  {couple.anniversaryDate 
-                    ? `${Math.max(1, Math.ceil((Date.now() - new Date(couple.anniversaryDate).getTime()) / 86400000))} Days`
-                    : '1 Day'}
-                </KamiText>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statBox}>
-                <KamiText variant="caption" color={Colors.textMuted} bold>TIMELINE EVENTS</KamiText>
-                <KamiText variant="body" bold style={{ color: colors.primaryDark, fontSize: 16 }}>{events.length} Moments</KamiText>
-              </View>
-            </View>
-          </LinearGradient>
-        )}
-
-        {/* Live Partner Activity Presence Dot */}
-        {isPartnerOnline && (
-          <View style={styles.presenceBox}>
-            <View style={styles.greenDot} />
-            <KamiText variant="caption" bold color={colors.primary}>
-              {getPresenceDescription()}
-            </KamiText>
-          </View>
-        )}
-
-        {/* Categories / Filter ScrollView */}
-        <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabsRow}>
-            {[
-              { id: 'all', emoji: '✦', label: 'All' },
-              { id: 'letter', emoji: '💌', label: 'Letters' },
-              { id: 'journal', emoji: '📓', label: 'Journals' },
-              { id: 'memory', emoji: '📸', label: 'Memories' },
-              { id: 'goal', emoji: '🎯', label: 'Goals' },
-              { id: 'answer', emoji: '💭', label: 'Answers' },
-            ].map(tab => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[
-                  styles.filterTab,
-                  filterTab === tab.id && [styles.filterTabActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
-                ]}
-                onPress={() => {
-                  setFilterTab(tab.id as any);
-                  setLimit(10);
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>{tab.emoji}</Text>
-                <KamiText variant="caption" color={filterTab === tab.id ? '#fff' : Colors.textSecondary} bold={filterTab === tab.id}>
-                  {tab.label}
-                </KamiText>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Timeline Events List */}
-        {filteredEvents.length > 0 ? (
-          <View style={styles.timelineList}>
-            {paginatedEvents.map((event, index) => {
-              const displayIndex = filteredEvents.length - index;
-              const showHeader = index === 0 || getGroupHeader(event.date) !== getGroupHeader(paginatedEvents[index - 1].date);
-              
-              return (
-                <View key={event.id} style={styles.timelineNodeRow}>
-                  {showHeader && (
-                    <View style={styles.dateGroupHeader}>
-                      <KamiText variant="caption" color={colors.primary} bold style={styles.dateGroupText}>
-                        {getGroupHeader(event.date)}
-                      </KamiText>
-                    </View>
-                  )}
-                  
-                  <View style={styles.timelineInnerRow}>
-                    {/* Visual Line Anchor */}
-                    <View style={styles.lineCol}>
-                      <View style={[styles.timelineDot, { borderColor: colors.primaryLight, backgroundColor: '#fff' }]}>
-                        <View style={[styles.timelineDotInner, { backgroundColor: colors.primary }]} />
-                      </View>
-                      {index < paginatedEvents.length - 1 && (
-                        <View style={[styles.timelineLine, { borderColor: colors.primaryLight + '44' }]} />
-                      )}
-                    </View>
-
-                    {/* Styled timeline card */}
-                    <View style={{ flex: 1 }}>
-                      {renderCard(event, displayIndex)}
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-
-            {/* Pagination Button */}
-            {filteredEvents.length > limit && (
-              <TouchableOpacity
-                style={[styles.loadMoreBtn, { backgroundColor: colors.creamDeep }]}
-                onPress={() => setLimit(prev => prev + 10)}
-                activeOpacity={0.8}
-              >
-                <KamiText variant="label" color={colors.primary} bold>Load More Moments</KamiText>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={{ fontSize: 56, marginBottom: Space[4] }}>⏳</Text>
-            <KamiText variant="subtitle" align="center">No moments found</KamiText>
-            <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
-              There are no couple events matching this category filter.
-            </KamiText>
-          </View>
-        )}
-
-        <View style={{ height: Space[10] }} />
-      </ScrollView>
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        ListFooterComponent={renderFooter}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      />
     </SafeAreaView>
   );
 }

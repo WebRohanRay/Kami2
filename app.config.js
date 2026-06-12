@@ -65,6 +65,8 @@ export default {
       'expo-web-browser',
       'expo-image-picker',
       '@react-native-google-signin/google-signin',
+      'expo-sqlite',
+      'expo-file-system',
     ],
 
     extra: {

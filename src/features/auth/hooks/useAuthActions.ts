@@ -6,8 +6,9 @@ import { applyTheme } from '@shared/constants';
 import { useAuthStore } from '../store';
 import type { AuthUser, AuthStatus, Result } from '../types';
 
-function statusFor(user: AuthUser): AuthStatus {
-  return user.emailVerified ? 'authenticated' : 'unverified';
+function statusFor(user: AuthUser, online: boolean = true): AuthStatus {
+  if (!user.emailVerified) return 'unverified';
+  return online ? 'authenticated_online' : 'authenticated_offline';
 }
 
 async function hydrateUser(
@@ -33,7 +34,17 @@ async function hydrateUser(
   }
 
   setUser(authUser);
-  setStatus(statusFor(authUser));
+
+  if (!result.success) {
+    if (result.error === 'network_error') {
+      setStatus('authenticated_offline');
+    } else {
+      setStatus('error');
+      return;
+    }
+  } else {
+    setStatus('authenticated_online');
+  }
 
   // If email is verified/authenticated, request push notification permission and sync token
   if (authUser.emailVerified) {

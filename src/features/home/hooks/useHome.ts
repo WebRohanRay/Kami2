@@ -56,14 +56,29 @@ export function useHome() {
     s.setMoodLoading('idle');
   }, []);
 
-  const loadJournal = useCallback(async (searchQuery?: string, tagFilter?: string) => {
+  const loadJournal = useCallback(async (searchQuery?: string, tagFilter?: string, page = 1) => {
     const s = store();
     s.setJournalLoading('loading');
-    const result = await homeService.fetchJournalEntries(20, searchQuery, tagFilter);
-    if (result.success) s.setJournalEntries(result.data);
-    else                s.setJournalError(result.error);
+    const result = await homeService.fetchJournalEntries(20, searchQuery, tagFilter, page);
+    if (result.success) {
+      if (page === 1) {
+        s.setJournalEntries(result.data);
+      } else {
+        s.setJournalEntries([...s.journalEntries, ...result.data]);
+      }
+      s.setJournalPage(page);
+      s.setJournalHasMore(result.data.length === 20);
+    } else {
+      s.setJournalError(result.error);
+    }
     s.setJournalLoading('idle');
   }, []);
+
+  const loadMoreJournal = useCallback(async (searchQuery?: string, tagFilter?: string) => {
+    const s = store();
+    if (s.journalLoading === 'loading' || !s.journalHasMore) return;
+    await loadJournal(searchQuery, tagFilter, s.journalPage + 1);
+  }, [loadJournal]);
 
   const loadGoals = useCallback(async () => {
     const s = store();
@@ -258,6 +273,7 @@ export function useHome() {
   return {
     logMood,
     loadJournal,
+    loadMoreJournal,
     addJournalEntry,
     editJournalEntry,
     removeJournalEntry,

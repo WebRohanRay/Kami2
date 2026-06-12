@@ -28,6 +28,8 @@ interface HomeState {
   journalEntries:  JournalEntry[];
   journalLoading:  LoadingState;
   journalError:    string | null;
+  journalPage:     number;
+  journalHasMore:  boolean;
 
   // ── Goals ───────────────────────────────────────────────
   goals:           Goal[];
@@ -58,6 +60,8 @@ interface HomeState {
   removeJournal:      (id: string)              => void;
   setJournalLoading:  (s: LoadingState)         => void;
   setJournalError:    (e: string | null)        => void;
+  setJournalPage:     (p: number)               => void;
+  setJournalHasMore:  (hm: boolean)             => void;
 
   setGoals:           (g: Goal[])               => void;
   prependGoal:        (g: Goal)                 => void;
@@ -77,29 +81,25 @@ interface HomeState {
   reset:              ()                        => void;
 }
 
-const initial: Omit<HomeState, keyof Omit<HomeState, keyof {
-  todayMood: null; recentMoods: []; moodLoading: 'idle'; moodError: null;
-  journalEntries: []; journalLoading: 'idle'; journalError: null;
-  goals: []; goalsLoading: 'idle'; goalsError: null;
-  todayPrompt: null; promptResponse: null; promptLoading: 'idle';
-  streak: null; isInitialised: false; lastRefreshed: null;
-}>> = {
+const initial = {
   todayMood:       null,
   recentMoods:     [],
-  moodLoading:     'idle',
+  moodLoading:     'idle' as LoadingState,
   moodError:       null,
 
   journalEntries:  [],
-  journalLoading:  'idle',
+  journalLoading:  'idle' as LoadingState,
   journalError:    null,
+  journalPage:     1,
+  journalHasMore:  true,
 
   goals:           [],
-  goalsLoading:    'idle',
+  goalsLoading:    'idle' as LoadingState,
   goalsError:      null,
 
   todayPrompt:     null,
   promptResponse:  null,
-  promptLoading:   'idle',
+  promptLoading:   'idle' as LoadingState,
 
   streak:          null,
 
@@ -125,6 +125,8 @@ export const useHomeStore = create<HomeState>((set) => ({
   })),
   setJournalLoading:  (s)  => set({ journalLoading: s }),
   setJournalError:    (e)  => set({ journalError: e }),
+  setJournalPage:     (p)  => set({ journalPage: p }),
+  setJournalHasMore:  (hm) => set({ journalHasMore: hm }),
 
   setGoals:           (g)  => set({ goals: g }),
   prependGoal:        (g)  => set((s) => ({ goals: [g, ...s.goals] })),

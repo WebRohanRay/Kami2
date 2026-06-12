@@ -1,6 +1,9 @@
 import { supabase } from '@shared/lib/supabase';
 import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
 import type { Memory, CreateMemoryInput, UpdateMemoryInput, Result } from '@features/home/types';
+import { useAuthStore } from '@features/auth';
+import { memoryRepo } from '@shared/db/repo';
+import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 
 function friendly(raw: string): string {
   if (raw.includes('JWT') || raw.includes('not authenticated'))
@@ -31,26 +34,32 @@ function mapMemory(row: Record<string, any>, resolvedUrls?: string[]): Memory {
 }
 
 /** Fetch recent memories, supporting text search */
-export async function fetchMemories(searchQuery?: string): Promise<Result<Memory[]>> {
+export async function fetchMemories(searchQuery?: string, limit = 15, page = 1): Promise<Result<Memory[]>> {
   try {
-    let query = supabase.from('memories').select('*');
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (searchQuery?.trim()) {
-      const trimmed = searchQuery.trim();
-      query = query.or(`title.ilike.%${trimmed}%,body.ilike.%${trimmed}%`);
+    const rows = await memoryRepo.fetchMemories(user.id, searchQuery, page, limit);
+
+    const mapped: Memory[] = [];
+    for (const r of rows) {
+      const localPickerUris = r.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
+      const remotePaths = r.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
+
+      const resolvedRemote = await resolveSignedUrls('memory_images', remotePaths);
+
+      mapped.push({
+        id: r.id,
+        userId: r.userId,
+        title: r.title,
+        body: r.body || '',
+        emoji: r.emoji,
+        mood: r.mood,
+        imageUrls: [...localPickerUris, ...resolvedRemote],
+        memoryDate: r.memoryDate,
+        createdAt: r.createdAt,
+      });
     }
-
-    const { data, error } = await query
-      .order('memory_date', { ascending: false })
-      .order('created_at', { ascending: false });
-
-    if (error) return { success: false, error: friendly(error.message) };
-
-    const resolvedImgsList = await Promise.all(
-      (data ?? []).map(row => resolveSignedUrls('memory_images', row.image_urls || []))
-    );
-
-    const mapped = (data ?? []).map((row, i) => mapMemory(row, resolvedImgsList[i]));
 
     return { success: true, data: mapped };
   } catch (e) {
@@ -64,24 +73,43 @@ export async function createMemory(
   input: CreateMemoryInput
 ): Promise<Result<Memory>> {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from('memories')
-      .insert({
-        id,
-        title:       input.title,
-        body:        input.body ?? null,
-        emoji:       input.emoji ?? '🌸',
-        mood:        input.mood ?? null,
-        image_urls:  input.imageUrls ?? [],
-        memory_date: today,
-      })
-      .select()
-      .single();
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    const resolved = await resolveSignedUrls('memory_images', data.image_urls || []);
-    return { success: true, data: mapMemory(data, resolved) };
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    const localUris: string[] = [];
+    if (input.imageUrls && input.imageUrls.length > 0) {
+      for (let i = 0; i < input.imageUrls.length; i++) {
+        const pickerUri = input.imageUrls[i];
+        const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
+        const cachedUri = await enqueueUpload('memories', id, pickerUri, remotePath, 'memory_images');
+        localUris.push(cachedUri);
+      }
+    }
+
+    const localMemory = {
+      id,
+      userId: user.id,
+      title: input.title,
+      body: input.body ?? null,
+      emoji: input.emoji ?? '🌸',
+      mood: input.mood ?? null,
+      imageUrls: localUris,
+      memoryDate: today,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending_insert',
+    };
+
+    await memoryRepo.saveMemory(localMemory);
+
+    await enqueueMutation('memories', id, 'insert', localMemory);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: { ...localMemory, body: localMemory.body ?? '' } };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -93,23 +121,45 @@ export async function updateMemory(
   input: UpdateMemoryInput
 ): Promise<Result<Memory>> {
   try {
-    const patch: Record<string, any> = {};
-    if (input.title     !== undefined) patch.title      = input.title;
-    if (input.body      !== undefined) patch.body       = input.body;
-    if (input.emoji     !== undefined) patch.emoji      = input.emoji;
-    if (input.mood      !== undefined) patch.mood       = input.mood;
-    if (input.imageUrls !== undefined) patch.image_urls = input.imageUrls;
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { data, error } = await supabase
-      .from('memories')
-      .update(patch)
-      .eq('id', id)
-      .select()
-      .single();
+    const entry = await memoryRepo.fetchMemoryById(id);
+    if (!entry) return { success: false, error: 'Memory not found.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
-    const resolved = await resolveSignedUrls('memory_images', data.image_urls || []);
-    return { success: true, data: mapMemory(data, resolved) };
+    const now = new Date().toISOString();
+
+    const localUris = [...(input.imageUrls ?? entry.imageUrls)];
+    if (input.imageUrls) {
+      for (let i = 0; i < input.imageUrls.length; i++) {
+        const url = input.imageUrls[i];
+        if (url.startsWith('file://') || url.startsWith('content://')) {
+          const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
+          const cachedUri = await enqueueUpload('memories', id, url, remotePath, 'memory_images');
+          const idx = localUris.indexOf(url);
+          if (idx !== -1) localUris[idx] = cachedUri;
+        }
+      }
+    }
+
+    const updatedMemory = {
+      ...entry,
+      title: input.title !== undefined ? input.title : entry.title,
+      body: input.body !== undefined ? (input.body ?? null) : entry.body,
+      emoji: input.emoji !== undefined ? input.emoji : entry.emoji,
+      mood: input.mood !== undefined ? input.mood : entry.mood,
+      imageUrls: localUris,
+      updatedAt: now,
+      syncStatus: 'pending_update',
+    };
+
+    await memoryRepo.saveMemory(updatedMemory);
+
+    await enqueueMutation('memories', id, 'update', updatedMemory);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
+    return { success: true, data: { ...updatedMemory, body: updatedMemory.body ?? '' } };
   } catch (e) {
     return { success: false, error: err(e) };
   }
@@ -118,18 +168,16 @@ export async function updateMemory(
 /** Delete a memory and all its storage image attachments */
 export async function deleteMemory(id: string): Promise<Result<void>> {
   try {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (userRes?.user) {
-      await deleteImages('memory_images', userRes.user.id, id);
-    }
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const { error } = await supabase
-      .from('memories')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userRes?.user?.id ?? '');
+    const now = new Date().toISOString();
+    await memoryRepo.softDeleteMemory(id, now);
 
-    if (error) return { success: false, error: friendly(error.message) };
+    await enqueueMutation('memories', id, 'delete', { id });
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: err(e) };

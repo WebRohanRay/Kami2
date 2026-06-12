@@ -10,14 +10,12 @@
  *  - Account (email, sign out, delete account)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Image,
   Keyboard,
-  Modal,
   Platform,
   RefreshControl,
   SafeAreaView,
@@ -29,19 +27,19 @@ import {
   TouchableOpacity,
   View,
   StatusBar as RNStatusBar,
-  DevSettings,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
-import KamiButton  from '@shared/ui/atoms/KamiButton';
-import InputField  from '@shared/ui/atoms/InputField';
-import KamiText    from '@shared/ui/atoms/KamiText';
+import KamiButton from '@shared/ui/atoms/KamiButton';
+import InputField from '@shared/ui/atoms/InputField';
+import KamiText from '@shared/ui/atoms/KamiText';
 import {
-  Colors, FontSize, FontWeight, Radii, Shadows, Sizing, Space, FontFamily, applyTheme
+  Colors, FontSize, FontWeight, Radii, Shadows, Space, FontFamily, applyTheme
 } from '@shared/constants';
-import { useAuthActions }      from '@features/auth';
+import { useAuthActions } from '@features/auth';
+import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { useAuthStore } from '@features/auth';
-import { useTheme }     from '@shared/hooks';
+import { useTheme } from '@shared/hooks';
 import { pickAvatarImage, uploadAvatar, uploadHeroBg, uploadCoupleHeroBg, pickImages } from '@shared/lib/storage';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import * as Clipboard from 'expo-clipboard';
@@ -50,276 +48,44 @@ import { useCoupleStore } from '@features/couple/store/coupleStore';
 import type { CoupleInvitation } from '@features/couple/types';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '@shared/lib/supabase';
+import { profileSchema } from '@shared/lib/validation/schemas';
 
-function getDaysRemaining(deleteAtStr: string | null): number {
-  if (!deleteAtStr) return 7;
-  const diffTime = new Date(deleteAtStr).getTime() - Date.now();
-  const diffDays = Math.ceil(diffTime / 86400000);
-  return Math.max(0, diffDays);
-}
+import {
+  THEMES,
+  TEXT_SIZES,
+  TIMEZONES,
+  getDaysRemaining,
+  initialsFor,
+  SettingRow,
+  SettingGroup,
+  InfoSheet,
+  SelectorSheet,
+} from '../components';
 
 type Props = MainTabScreenProps<'Settings'>;
-
-// ─── Constants & Helpers ───────────────────────────────────────────────────
-
-const THEMES = [
-  { id: 'blush', label: 'Blush Pink', emoji: '🌸' },
-  { id: 'indigo', label: 'Midnight Indigo', emoji: '🌙' },
-  { id: 'slate', label: 'Slate Gray', emoji: '⛰️' },
-  { id: 'sage', label: 'Sage Green', emoji: '🌿' },
-  { id: 'honey', label: 'Honey Gold', emoji: '🍯' },
-  { id: 'lavender', label: 'Lavender Mist', emoji: '🪻' },
-  { id: 'coral', label: 'Coral Peach', emoji: '🍑' },
-  { id: 'ocean', label: 'Ocean Breeze', emoji: '🌊' },
-  { id: 'crimson', label: 'Crimson Rose', emoji: '🌹' },
-] as const;
-
-const TEXT_SIZES = [
-  { id: 'small', label: 'Small', emoji: '▫️' },
-  { id: 'medium', label: 'Medium', emoji: '◽' },
-  { id: 'large', label: 'Large', emoji: '◻️' },
-] as const;
-
-const TIMEZONES = [
-  { id: 'Asia/Kolkata', label: 'India (UTC+5:30)', emoji: '🇮🇳' },
-  { id: 'Asia/Manila', label: 'Philippines (UTC+8:00)', emoji: '🇵🇭' },
-  { id: 'Asia/Jakarta', label: 'Indonesia (UTC+7:00)', emoji: '🇮🇩' },
-  { id: 'Asia/Singapore', label: 'Singapore (UTC+8:00)', emoji: '🇸🇬' },
-  { id: 'Europe/London', label: 'London (UTC+1:00)', emoji: '🇬🇧' },
-  { id: 'America/New_York', label: 'New York (UTC-4:00)', emoji: '🇺🇸' },
-  { id: 'America/Los_Angeles', label: 'Los Angeles (UTC-7:00)', emoji: '🇺🇸' },
-  { id: 'UTC', label: 'Universal Coordinated Time (UTC)', emoji: '🌐' },
-] as const;
-
-function initialsFor(name?: string, email?: string) {
-  return (name?.trim() || email?.trim() || 'K').slice(0, 1).toUpperCase();
-}
-
-// ─── Sub-components ─────────────────────────────────────────────────────────
-
-const SettingRow: React.FC<{
-  icon: string;
-  label: string;
-  value?: string;
-  onPress?: () => void;
-  showChevron?: boolean;
-  danger?: boolean;
-  rightEl?: React.ReactNode;
-}> = ({ icon, label, value, onPress, showChevron = true, danger, rightEl }) => {
-  const { colors } = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const onPressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 30 }).start();
-
-  return (
-    <TouchableOpacity
-      activeOpacity={onPress ? 0.7 : 1}
-      onPress={onPress}
-      onPressIn={onPress ? onPressIn : undefined}
-      onPressOut={onPress ? onPressOut : undefined}
-      disabled={!onPress}
-      accessibilityRole={onPress ? 'button' : 'text'}
-      accessibilityLabel={label}
-    >
-      <Animated.View style={[rowStyles.row, { transform: [{ scale }] }]}>
-        <View style={[rowStyles.iconWrap, { backgroundColor: colors.creamDeep }]}>
-          <Text style={rowStyles.icon}>{icon}</Text>
-        </View>
-        <View style={rowStyles.middle}>
-          <KamiText
-            variant="body"
-            color={danger ? Colors.error : Colors.textPrimary}
-            bold={danger}
-          >
-            {label}
-          </KamiText>
-          {value ? (
-            <KamiText variant="caption" color={Colors.textMuted}>{value}</KamiText>
-          ) : null}
-        </View>
-        {rightEl ?? (
-          showChevron && onPress
-            ? <Text style={[rowStyles.chevron, danger && { color: Colors.error }]}>›</Text>
-            : null
-        )}
-      </Animated.View>
-    </TouchableOpacity>
-  );
-};
-
-const rowStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Space[3] + 2,
-    paddingHorizontal: Space[4],
-    gap: Space[3],
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.creamDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  icon:    { fontSize: FontSize.md },
-  middle:  { flex: 1, gap: 1 },
-  chevron: { fontSize: FontSize.xl, color: Colors.textMuted, marginTop: -2 },
-});
-
-const SettingGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <View style={groupStyles.wrap}>
-    <KamiText variant="overline" style={groupStyles.title}>{title}</KamiText>
-    <View style={groupStyles.card}>
-      {React.Children.map(children, (child, i) => (
-        <React.Fragment key={i}>
-          {child}
-          {i < React.Children.count(children) - 1 && <View style={groupStyles.divider} />}
-        </React.Fragment>
-      ))}
-    </View>
-  </View>
-);
-
-const groupStyles = StyleSheet.create({
-  wrap:    { gap: Space[2] },
-  title:   { paddingHorizontal: Space[1], marginBottom: Space[1] },
-  card: {
-    backgroundColor: Colors.cardBg,
-    borderRadius: Radii.card,
-    borderWidth: 1,
-    borderColor: Colors.border + '55',
-    overflow: 'hidden',
-    ...Shadows.card,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border + '44',
-    marginLeft: 36 + Space[3] + Space[4],
-  },
-});
-
-// ─── Text / Info Sheet Modal ───────────────────────────────────────────────
-
-const InfoSheet: React.FC<{
-  visible: boolean;
-  title: string;
-  content: string;
-  onClose: () => void;
-}> = ({ visible, title, content, onClose }) => {
-  const { colors } = useTheme();
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[sheetStyles.root, { backgroundColor: colors.pageBg }]}>
-        <View style={sheetStyles.header}>
-          <KamiText variant="title">{title}</KamiText>
-          <TouchableOpacity onPress={onClose} style={sheetStyles.closeBtn}>
-            <KamiText variant="label" color={colors.primary} bold>Done</KamiText>
-          </TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={sheetStyles.scroll}>
-          <KamiText variant="body" style={sheetStyles.text}>{content}</KamiText>
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
-  );
-};
-
-const sheetStyles = StyleSheet.create({
-  root:     { flex: 1, backgroundColor: Colors.pageBg },
-  header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
-  closeBtn: { padding: Space[2] },
-  scroll:   { padding: Space[5] },
-  text:     { lineHeight: 24, color: Colors.textSecondary },
-});
-
-// ─── Selection Selector Sheet Modal ───────────────────────────────────────
-
-interface SelectOption {
-  id: string;
-  label: string;
-  emoji: string;
-}
-
-const SelectorSheet: React.FC<{
-  visible: boolean;
-  title: string;
-  options: readonly SelectOption[];
-  selectedValue: string;
-  onSelect: (id: string) => void;
-  onClose: () => void;
-}> = ({ visible, title, options, selectedValue, onSelect, onClose }) => {
-  const { colors } = useTheme();
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[selectorStyles.root, { backgroundColor: colors.pageBg }]}>
-        <View style={selectorStyles.header}>
-          <KamiText variant="title">{title}</KamiText>
-          <TouchableOpacity onPress={onClose} style={selectorStyles.closeBtn}>
-            <KamiText variant="label" color={colors.primary} bold>Cancel</KamiText>
-          </TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={selectorStyles.scroll}>
-          <View style={selectorStyles.list}>
-            {options.map((opt) => {
-              const active = opt.id === selectedValue;
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  style={[selectorStyles.item, active && { backgroundColor: colors.primary + '0a' }]}
-                  onPress={() => { onSelect(opt.id); onClose(); }}
-                >
-                  <Text style={selectorStyles.emoji}>{opt.emoji}</Text>
-                  <KamiText variant="body" style={{ flex: 1 }} bold={active} color={active ? colors.primary : Colors.textPrimary}>
-                    {opt.label}
-                  </KamiText>
-                  {active && <KamiText variant="label" color={colors.primary}>✓</KamiText>}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
-  );
-};
-
-const selectorStyles = StyleSheet.create({
-  root:     { flex: 1, backgroundColor: Colors.pageBg },
-  header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
-  closeBtn: { padding: Space[2] },
-  scroll:   { padding: Space[5] },
-  list:     { backgroundColor: Colors.cardBg, borderRadius: Radii.card, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border + '44' },
-  item:     { flexDirection: 'row', alignItems: 'center', paddingVertical: Space[4], paddingHorizontal: Space[5], gap: Space[3], borderBottomWidth: 1, borderBottomColor: Colors.border + '11' },
-  itemActive: { backgroundColor: Colors.primary + '0a' },
-  emoji:    { fontSize: 18 },
-});
-
-// ─── Main Component ────────────────────────────────────────────────────────
 
 export function SettingsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const user = useAuthStore((s) => s.user);
+  const { isConnected } = useNetworkStatus();
   const { signOut, deleteAccount, updateProfile, exportData, refreshUser } = useAuthActions();
 
-  const [nickname,       setNickname]       = useState(user?.nickname ?? '');
+  const [nickname, setNickname] = useState(user?.nickname ?? '');
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingNickname, setSavingNickname] = useState(false);
-  const [avatarLoading,  setAvatarLoading]  = useState(false);
-  const [signingOut,     setSigningOut]     = useState(false);
-  const [deleting,       setDeleting]       = useState(false);
-  const [exporting,      setExporting]      = useState(false);
-  const [heroBgLoading,  setHeroBgLoading]  = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [heroBgLoading, setHeroBgLoading] = useState(false);
 
   // Selector & Info Sheets
   const [activeSelector, setActiveSelector] = useState<'theme' | 'textSize' | 'timezone' | null>(null);
-  const [activeInfo,     setActiveInfo]     = useState<'privacy' | 'terms' | null>(null);
+  const [activeInfo, setActiveInfo] = useState<'privacy' | 'terms' | null>(null);
 
   // Couple Space State
-  const { 
-    couple, partner, receivedInvitations, sentInvitations, setCouple, setPartner, setReceivedInvitations, setSentInvitations 
+  const {
+    couple, partner, receivedInvitations, sentInvitations, setCouple, setPartner, setReceivedInvitations, setSentInvitations
   } = useCoupleStore();
 
   const [loadingCouple, setLoadingCouple] = useState(true);
@@ -409,8 +175,12 @@ export function SettingsScreen({ navigation }: Props) {
   const handleSaveNickname = async () => {
     Keyboard.dismiss();
     if (!user?.id) { Alert.alert('Kami', 'Please sign in again.'); return; }
+    const validation = profileSchema.safeParse({ nickname });
+    if (!validation.success) {
+      Alert.alert('Kami', validation.error.issues[0].message);
+      return;
+    }
     const next = nickname.trim();
-    if (!next) { Alert.alert('Kami', 'Nickname cannot be empty.'); return; }
 
     setSavingNickname(true);
     const result = await updateProfile({ nickname: next });
@@ -422,6 +192,10 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleInvitePartner = async () => {
     Keyboard.dismiss();
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
     const cleanId = partnerIdInput.trim();
     if (!cleanId) return;
     if (cleanId === user?.kamiId) {
@@ -435,10 +209,10 @@ export function SettingsScreen({ navigation }: Props) {
       Alert.alert('Kami', searchRes.error);
       return;
     }
-    
+
     const partnerInfo = searchRes.data;
     setSearchingPartner(false);
-    
+
     Alert.alert(
       'Invite Partner',
       `Would you like to invite ${partnerInfo.nickname || partnerInfo.email} to create a private Couple Space?`,
@@ -554,6 +328,10 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleDeleteCoupleSpace = () => {
     if (!couple) return;
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
     Alert.alert(
       'Delete Couple Space ⚠️',
       'This will schedule your Couple Space for permanent deletion in 7 days. All shared journals, comments, timeline memories, shared goals, and calendar events will be wiped. This action can be cancelled by visiting Settings at any time within the next 7 days.',
@@ -602,7 +380,7 @@ export function SettingsScreen({ navigation }: Props) {
     setAvatarLoading(true);
     const uploaded = await uploadAvatar(user.id, picked.uri);
     if (!uploaded.success) { setAvatarLoading(false); Alert.alert('Kami', uploaded.error); return; }
-    
+
     // Save relative path, profileRepo resolves fresh signed URL
     const saved = await updateProfile({ avatarUrl: uploaded.path });
     setAvatarLoading(false);
@@ -613,7 +391,7 @@ export function SettingsScreen({ navigation }: Props) {
   const handleHeroBgPress = async () => {
     if (!user?.id) { Alert.alert('Kami', 'Please sign in again.'); return; }
     if (user.activeSpace === 'couple' && !couple) { Alert.alert('Kami', 'Please connect with a partner first.'); return; }
-    
+
     const picked = await pickImages(false);
     if (!picked.success) {
       if (!picked.cancelled) Alert.alert('Kami', picked.error);
@@ -623,7 +401,7 @@ export function SettingsScreen({ navigation }: Props) {
     if (!uri) return;
 
     setHeroBgLoading(true);
-    
+
     if (user.activeSpace === 'couple') {
       const uploaded = await uploadCoupleHeroBg(couple!.id, uri);
       if (!uploaded.success) { setHeroBgLoading(false); Alert.alert('Kami', uploaded.error); return; }
@@ -631,10 +409,10 @@ export function SettingsScreen({ navigation }: Props) {
       const saved = await coupleService.updateCoupleHeroBg(couple!.id, uploaded.path);
       setHeroBgLoading(false);
       if (!saved.success) { Alert.alert('Kami', saved.error); return; }
-      
+
       // Update local couple state to trigger re-renders
       setCouple({ ...couple!, heroBgUrl: uploaded.path });
-      Alert.alert('Kami', "Couple Moment cover image updated! 🖼️");
+      Alert.alert('Kami', 'Couple Moment cover image updated! 🖼️');
     } else {
       const uploaded = await uploadHeroBg(user.id, uri);
       if (!uploaded.success) { setHeroBgLoading(false); Alert.alert('Kami', uploaded.error); return; }
@@ -654,10 +432,10 @@ export function SettingsScreen({ navigation }: Props) {
       return;
     }
 
-    const { 
+    const {
       scheduleDailyReminderAsync, cancelDailyReminderAsync,
       scheduleWeeklyDigestAsync, cancelWeeklyDigestAsync,
-      scheduleStreakAlertsAsync, cancelStreakAlertsAsync 
+      scheduleStreakAlertsAsync, cancelStreakAlertsAsync
     } = require('@infrastructure/notifications/notificationService');
 
     if (key === 'dailyReminder') {
@@ -696,6 +474,10 @@ export function SettingsScreen({ navigation }: Props) {
 
   const handleExportData = async () => {
     if (!user?.id) return;
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
     setExporting(true);
     const r = await exportData();
     setExporting(false);
@@ -732,6 +514,10 @@ export function SettingsScreen({ navigation }: Props) {
   };
 
   const handleDeleteAccount = () => {
+    if (!isConnected) {
+      Alert.alert('Kami', 'This action requires an internet connection.');
+      return;
+    }
     Alert.alert(
       'Delete Account ⚠️',
       'This will permanently delete your account and all of your data, including photos, notes, goals, and history. This action cannot be undone.',
@@ -767,7 +553,7 @@ export function SettingsScreen({ navigation }: Props) {
   // ── Render ───────────────────────────────────────────────────────────────
 
   const themeLabel = THEMES.find(t => t.id === (user?.theme ?? 'blush'))?.label ?? 'Blush Pink';
-  const sizeLabel  = TEXT_SIZES.find(t => t.id === (user?.textSize ?? 'medium'))?.label ?? 'Medium';
+  const sizeLabel = TEXT_SIZES.find(t => t.id === (user?.textSize ?? 'medium'))?.label ?? 'Medium';
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
@@ -880,7 +666,7 @@ export function SettingsScreen({ navigation }: Props) {
                   <KamiText variant="subtitle" bold style={{ color: colors.primary }}>
                     {user?.kamiId ?? 'KAMI-XXXXXX'}
                   </KamiText>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.copyBtn, { backgroundColor: colors.primary + '18' }]}
                     onPress={async () => {
                       if (user?.kamiId) {
@@ -905,9 +691,9 @@ export function SettingsScreen({ navigation }: Props) {
                   maxLength={11}
                 />
                 <KamiButton
-                  label="Invite Partner"
+                  label={isConnected ? 'Invite Partner' : 'Offline - Disabled'}
                   loading={searchingPartner || sendingInvite}
-                  disabled={!partnerIdInput.trim() || searchingPartner || sendingInvite}
+                  disabled={!partnerIdInput.trim() || searchingPartner || sendingInvite || !isConnected}
                   onPress={handleInvitePartner}
                 />
               </View>
@@ -945,29 +731,33 @@ export function SettingsScreen({ navigation }: Props) {
                         <KamiText variant="label" bold>{inv.receiverNickname || 'Partner'}</KamiText>
                         <KamiText variant="caption" color={Colors.textMuted}>{inv.receiverEmail}</KamiText>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Space[1], gap: Space[1] }}>
-                          <KamiText variant="caption" color={
-                            inv.status === 'declined' ? Colors.error :
-                            inv.status === 'accepted' ? Colors.success :
-                            colors.primary
-                          } bold>
-                            {inv.status === 'pending' ? 'Pending ⏳' : 
-                             inv.status === 'declined' ? 'Rejected/Declined ❌' : 
-                             inv.status === 'accepted' ? 'Accepted 🎉' : 
+                          <KamiText
+                            variant="caption"
+                            color={
+                              inv.status === 'declined' ? Colors.error :
+                              inv.status === 'accepted' ? Colors.success :
+                              colors.primary
+                            }
+                            bold
+                          >
+                            {inv.status === 'pending' ? 'Pending ⏳' :
+                             inv.status === 'declined' ? 'Rejected/Declined ❌' :
+                             inv.status === 'accepted' ? 'Accepted 🎉' :
                              inv.status}
                           </KamiText>
                         </View>
                       </View>
                       <View style={{ flexDirection: 'row', gap: Space[2] }}>
                         {inv.status === 'pending' ? (
-                          <TouchableOpacity 
-                            style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]} 
+                          <TouchableOpacity
+                            style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]}
                             onPress={() => handleCancelSentInvite(inv)}
                           >
                             <KamiText variant="caption" color={Colors.error} bold>Cancel</KamiText>
                           </TouchableOpacity>
                         ) : (
-                          <TouchableOpacity 
-                            style={[styles.inviteActionBtn, { backgroundColor: Colors.textMuted + '15' }]} 
+                          <TouchableOpacity
+                            style={[styles.inviteActionBtn, { backgroundColor: Colors.textMuted + '15' }]}
                             onPress={() => handleDismissSentInvite(inv)}
                           >
                             <KamiText variant="caption" color={Colors.textMuted} bold>Dismiss</KamiText>
@@ -988,7 +778,7 @@ export function SettingsScreen({ navigation }: Props) {
                 value={partner?.nickname || partner?.email?.split('@')[0] || 'Connected'}
                 showChevron={false}
               />
-              
+
               {/* Space Switcher */}
               <SettingRow
                 icon="🌱"
@@ -1123,7 +913,7 @@ export function SettingsScreen({ navigation }: Props) {
           />
           <SettingRow
             icon="📤"
-            label={exporting ? "Preparing file..." : "Export My Data"}
+            label={exporting ? 'Preparing file...' : 'Export My Data'}
             onPress={exporting ? undefined : handleExportData}
             showChevron={!exporting}
             rightEl={exporting ? <ActivityIndicator size="small" color={colors.primary} /> : undefined}
@@ -1225,21 +1015,19 @@ export function SettingsScreen({ navigation }: Props) {
       <InfoSheet
         visible={activeInfo === 'privacy'}
         title="Privacy Statement"
-        content="At Kami, your privacy is our primary engineering metric.\n\nAll personal reflections, moods, goal progress logs, and letters are locked down using database Row Level Security (RLS) policies. Only your logged-in session can access your data.\n\nAll image uploads, memory photos, and profile pictures are hosted in secure, private Supabase Storage buckets. Access to these items requires freshly signed, temporary URLs that are generated client-side and automatically expire.\n\nWe do not monitor, parse, or sell your thoughts, nor do we run analytical telemetry on your journals. You can export your data at any time in raw JSON format using the Export tool."
+        content={'At Kami, your privacy is our primary engineering metric.\n\nAll personal reflections, moods, goal progress logs, and letters are locked down using database Row Level Security (RLS) policies. Only your logged-in session can access your data.\n\nAll image uploads, memory photos, and profile pictures are hosted in secure, private Supabase Storage buckets. Access to these items requires freshly signed, temporary URLs that are generated client-side and automatically expire.\n\nWe do not monitor, parse, or sell your thoughts, nor do we run analytical telemetry on your journals. You can export your data at any time in raw JSON format using the Export tool.'}
         onClose={() => setActiveInfo(null)}
       />
 
       <InfoSheet
         visible={activeInfo === 'terms'}
         title="Terms of Service"
-        content="Welcome to Kami. By using this software, you agree to the following conditions:\n\n1. Ownership of Content: You retain full ownership and intellectual copyright of all text, emojis, and photos you upload to the database. We claim zero rights over your entries.\n\n2. Acceptable Use: You must use the database storage responsibly. Refrain from attempting to bypass RLS policies, injecting malicious scripts via triggers, or flooding storage buckets with oversized uploads.\n\n3. Deletion Guarantee: Tapping 'Delete Account' triggers a cascading database query that removes all of your rows and storage objects. This deletion is absolute and cannot be recovered by the team."
+        content={'Welcome to Kami. By using this software, you agree to the following conditions:\n\n1. Ownership of Content: You retain full ownership and intellectual copyright of all text, emojis, and photos you upload to the database. We claim zero rights over your entries.\n\n2. Acceptable Use: You must use the database storage responsibly. Refrain from attempting to bypass RLS policies, injecting malicious scripts via triggers, or flooding storage buckets with oversized uploads.\n\n3. Deletion Guarantee: Tapping \'Delete Account\' triggers a cascading database query that removes all of your rows and storage objects. This deletion is absolute and cannot be recovered by the team.'}
         onClose={() => setActiveInfo(null)}
       />
     </SafeAreaView>
   );
 }
-
-export default SettingsScreen;
 
 const AVATAR_SIZE = 72;
 
@@ -1402,3 +1190,5 @@ const styles = StyleSheet.create({
     borderRadius: Radii.sm,
   },
 });
+
+export default SettingsScreen;

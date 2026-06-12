@@ -7,8 +7,9 @@ import { applyTheme } from '@shared/constants';
 import { useAuthStore } from '../store';
 import type { AuthUser, AuthStatus } from '../types';
 
-function statusFor(user: AuthUser): AuthStatus {
-  return user.emailVerified ? 'authenticated' : 'unverified';
+function statusFor(user: AuthUser, online: boolean = true): AuthStatus {
+  if (!user.emailVerified) return 'unverified';
+  return online ? 'authenticated_online' : 'authenticated_offline';
 }
 
 async function hydrateUser(
@@ -34,7 +35,17 @@ async function hydrateUser(
   }
 
   setUser(authUser);
-  setStatus(statusFor(authUser));
+
+  if (!result.success) {
+    if (result.error === 'network_error') {
+      setStatus('authenticated_offline');
+    } else {
+      setStatus('error');
+      return;
+    }
+  } else {
+    setStatus('authenticated_online');
+  }
 
   // If email is verified/authenticated, request push notification permission and sync token
   if (authUser.emailVerified) {
@@ -117,42 +128,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let sessionRestored = false;
 
-    // Timeout fallback (4 seconds) to prevent stuck loading screen if getSession hangs
-    const timeoutId = setTimeout(async () => {
+    // Timeout fallback (4 seconds) to warn about slow connection
+    const timeoutId = setTimeout(() => {
       if (!mounted || sessionRestored) return;
-      console.warn('[useAuth] Session restoration timed out. Falling back to unauthenticated.');
-      sessionRestored = true;
-      setStatus('unauthenticated');
+      console.warn('[useAuth] Session restoration is taking longer than usual.');
+      setError('Connecting to Kami is taking longer than usual. Please check your network connection.');
     }, 4000);
 
     // 1. Restore session on mount
+    setStatus('restoring');
+
     authService.getSession().then(async ({ data: { session }, error }) => {
       if (!mounted || sessionRestored) return;
       sessionRestored = true;
       clearTimeout(timeoutId);
+      setError(null); // Clear any connection warning error
+      
       if (error) {
-        console.warn('[useAuth] Session restoration error (cleaning up local storage):', error.message);
-        await authService.signOut().catch(() => { });
-        setStatus('unauthenticated');
+        console.warn('[useAuth] Session restoration error:', error.message);
+        const isNet = error.message?.toLowerCase().includes('network') || 
+                      error.message?.toLowerCase().includes('fetch') || 
+                      error.message?.toLowerCase().includes('connection');
+        
+        if (isNet && session?.user) {
+          await hydrateRef.current(session.user as any, setUser, setStatus);
+          return;
+        }
+
+        const isExpired = error.message?.toLowerCase().includes('expired') || 
+                          error.message?.toLowerCase().includes('invalid') || 
+                          error.message?.toLowerCase().includes('revoked');
+        
+        if (isExpired) {
+          setStatus('expired_requires_reauth');
+        } else {
+          setStatus('unauthenticated');
+        }
         return;
       }
-      if (!session?.user) { setStatus('unauthenticated'); return; }
+      
+      if (!session?.user) { 
+        setStatus('unauthenticated'); 
+        return; 
+      }
+      
       await hydrateRef.current(session.user as any, setUser, setStatus);
     }).catch(async (err) => {
       if (!mounted || sessionRestored) return;
       sessionRestored = true;
       clearTimeout(timeoutId);
       console.error('[useAuth] Session restoration exception:', err);
-      await authService.signOut().catch(() => { });
       setError('Could not restore your session.');
       setStatus('error');
     });
 
     // 2. React to Supabase auth events (email verified, token refresh, sign out)
     const { data: { subscription } } = authService.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return;
-        if (!session?.user) { reset(); setStatus('unauthenticated'); return; }
+        
+        if (event === 'SIGNED_OUT') {
+          reset();
+          setStatus('unauthenticated');
+          return;
+        }
+
+        if (!session?.user) {
+          reset();
+          setStatus('unauthenticated');
+          return;
+        }
+
         await hydrateRef.current(session.user as any, setUser, setStatus);
       }
     );

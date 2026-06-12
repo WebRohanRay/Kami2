@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { uuid } from '@shared/lib/uuid';
 import type { 
   Couple, CoupleInvitation, CoupleJournal, CoupleComment, CoupleReaction, 
   CoupleMemory, CoupleGoal, CoupleLetter, CoupleDailyQuestion, CoupleAnswer, 
@@ -57,6 +58,16 @@ interface CoupleState {
   coupleLetters: CoupleLetter[];
   lettersLoading: LoadingState;
 
+  // ── Pagination State ─────────────────────────────────────
+  journalsPage: number;
+  journalsHasMore: boolean;
+  memoriesPage: number;
+  memoriesHasMore: boolean;
+  goalsPage: number;
+  goalsHasMore: boolean;
+  lettersPage: number;
+  lettersHasMore: boolean;
+
   // ── Calendar Events ─────────────────────────────────────
   relationshipEvents: RelationshipEvent[];
   eventsLoading: LoadingState;
@@ -112,8 +123,18 @@ interface CoupleState {
 
   setCoupleLetters: (l: CoupleLetter[]) => void;
   prependCoupleLetter: (l: CoupleLetter) => void;
+  updateCoupleLetterInList: (l: CoupleLetter) => void;
   removeCoupleLetterFromList: (id: string) => void;
   setLettersLoading: (s: LoadingState) => void;
+
+  setJournalsPage: (p: number) => void;
+  setJournalsHasMore: (hm: boolean) => void;
+  setMemoriesPage: (p: number) => void;
+  setMemoriesHasMore: (hm: boolean) => void;
+  setGoalsPage: (p: number) => void;
+  setGoalsHasMore: (hm: boolean) => void;
+  setLettersPage: (p: number) => void;
+  setLettersHasMore: (hm: boolean) => void;
 
   setRelationshipEvents: (e: RelationshipEvent[]) => void;
   prependRelationshipEvent: (e: RelationshipEvent) => void;
@@ -149,6 +170,15 @@ const initial = {
 
   coupleLetters: [],
   lettersLoading: 'idle' as LoadingState,
+
+  journalsPage: 1,
+  journalsHasMore: true,
+  memoriesPage: 1,
+  memoriesHasMore: true,
+  goalsPage: 1,
+  goalsHasMore: true,
+  lettersPage: 1,
+  lettersHasMore: true,
 
   relationshipEvents: [],
   eventsLoading: 'idle' as LoadingState,
@@ -207,10 +237,22 @@ export const useCoupleStore = create<CoupleState>((set) => ({
 
   setCoupleLetters: (l) => set({ coupleLetters: l }),
   prependCoupleLetter: (l) => set((s) => ({ coupleLetters: [l, ...s.coupleLetters] })),
+  updateCoupleLetterInList: (l) => set((s) => ({
+    coupleLetters: s.coupleLetters.map((x) => x.id === l.id ? l : x),
+  })),
   removeCoupleLetterFromList: (id) => set((s) => ({
     coupleLetters: s.coupleLetters.filter((x) => x.id !== id),
   })),
   setLettersLoading: (s) => set({ lettersLoading: s }),
+
+  setJournalsPage: (p) => set({ journalsPage: p }),
+  setJournalsHasMore: (hm) => set({ journalsHasMore: hm }),
+  setMemoriesPage: (p) => set({ memoriesPage: p }),
+  setMemoriesHasMore: (hm) => set({ memoriesHasMore: hm }),
+  setGoalsPage: (p) => set({ goalsPage: p }),
+  setGoalsHasMore: (hm) => set({ goalsHasMore: hm }),
+  setLettersPage: (p) => set({ lettersPage: p }),
+  setLettersHasMore: (hm) => set({ lettersHasMore: hm }),
 
   setRelationshipEvents: (e) => set({ relationshipEvents: e }),
   prependRelationshipEvent: (e) => set((s) => ({ relationshipEvents: [...s.relationshipEvents, e].sort((a, b) => a.eventDate.localeCompare(b.eventDate)) })),
@@ -224,7 +266,7 @@ export const useCoupleStore = create<CoupleState>((set) => ({
   setToast: (toast) => set({ toast }),
 
   addHomeAlert: (alert) => set((s) => ({
-    homeAlerts: [...s.homeAlerts, { ...alert, id: Math.random().toString(36).substring(7) }]
+    homeAlerts: [...s.homeAlerts, { ...alert, id: uuid() }]
   })),
   removeHomeAlert: (id) => set((s) => ({
     homeAlerts: s.homeAlerts.filter((x) => x.id !== id)
