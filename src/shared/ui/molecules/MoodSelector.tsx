@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors, Radii, FontSize, Space } from '@shared/constants';
+import { useTextScale } from '@shared/hooks';
 
 export interface Mood {
   id:    string;
@@ -29,6 +30,7 @@ const MoodSelector: React.FC<MoodSelectorProps> = ({
   selected,
   onSelect,
 }) => {
+  const { scaleSize } = useTextScale();
   const [local, setLocal] = useState<string | undefined>(selected);
 
   const pick = (id: string) => {
@@ -54,8 +56,8 @@ const MoodSelector: React.FC<MoodSelectorProps> = ({
             accessibilityLabel={m.label}
             accessibilityState={{ selected: active }}
           >
-            <Text style={styles.emoji}>{m.emoji}</Text>
-            <Text style={[styles.label, active && styles.labelActive]}>{m.label}</Text>
+            <Text style={[styles.emoji, { fontSize: scaleSize(FontSize.base) }]}>{m.emoji}</Text>
+            <Text style={[styles.label, active && styles.labelActive, { fontSize: scaleSize(FontSize.sm) }]}>{m.label}</Text>
           </TouchableOpacity>
         );
       })}

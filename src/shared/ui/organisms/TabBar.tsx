@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Colors, Radii, Shadows, Space, FontSize, FontWeight } from '@shared/constants';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useTextScale } from '@shared/hooks';
 
 export interface TabItem {
   id:    string;
@@ -31,6 +31,7 @@ interface TabBarProps {
 
 const TabBar: React.FC<TabBarProps> = ({ tabs = DEFAULT_TABS, active, onPress }) => {
   const { colors } = useTheme();
+  const { scaleSize } = useTextScale();
 
   return (
     <View style={styles.bar}>
@@ -47,8 +48,8 @@ const TabBar: React.FC<TabBarProps> = ({ tabs = DEFAULT_TABS, active, onPress })
             accessibilityState={{ selected: isActive }}
           >
             {isActive && <View style={[styles.pill, { backgroundColor: colors.primary }]} />}
-            <Text style={[styles.icon, isActive && styles.iconActive]}>{tab.icon}</Text>
-            <Text style={[styles.label, isActive && [styles.labelActive, { color: colors.primary }]]}>{tab.label}</Text>
+            <Text style={[styles.icon, isActive && styles.iconActive, { fontSize: scaleSize(FontSize.xl) }]}>{tab.icon}</Text>
+            <Text style={[styles.label, isActive && [styles.labelActive, { color: colors.primary }], { fontSize: scaleSize(FontSize.xs) }]}>{tab.label}</Text>
           </TouchableOpacity>
         );
       })}

@@ -67,6 +67,7 @@ export default {
       '@react-native-google-signin/google-signin',
       'expo-sqlite',
       'expo-file-system',
+      'expo-font',
     ],
 
     extra: {

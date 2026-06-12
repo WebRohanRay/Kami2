@@ -37,10 +37,42 @@ export const signedUrlCache = {
   /** Store a resolved signed URL in the cache */
   set(bucket: string, path: string, url: string, expiresAt: number): void {
     const key = getKey(bucket, path);
+
+    // Evict items if size is >= 500 before inserting
+    const keys = Object.keys(cache);
+    if (keys.length >= 500) {
+      const now = Date.now();
+      // 1. Delete expired entries
+      for (const k of keys) {
+        const entry = cache[k];
+        if (now >= (entry.expiresAt - 5 * 60 * 1000)) {
+          delete cache[k];
+        }
+      }
+
+      // 2. If still >= 500, sort by expiresAt and delete oldest 50
+      const remainingKeys = Object.keys(cache);
+      if (remainingKeys.length >= 500) {
+        const sorted = remainingKeys.map(k => ({ key: k, expiresAt: cache[k].expiresAt }));
+        sorted.sort((a, b) => a.expiresAt - b.expiresAt);
+        const toEvict = sorted.slice(0, 50);
+        for (const item of toEvict) {
+          delete cache[item.key];
+        }
+      }
+    }
+
     cache[key] = {
       signedUrl: url,
       expiresAt,
     };
+  },
+
+  /** Clear the entire in-memory cache */
+  clear(): void {
+    for (const key of Object.keys(cache)) {
+      delete cache[key];
+    }
   },
 
   /** Retrieve a batch of paths from the cache */

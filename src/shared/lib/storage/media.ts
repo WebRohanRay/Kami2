@@ -140,7 +140,7 @@ export async function uploadImages(
         .from(bucketName)
         .upload(originalPath, decode(compressedOriginal.base64), {
           contentType: 'image/jpeg',
-          upsert: false,
+          upsert: true,
         });
 
       if (uploadErrorOriginal) {
@@ -151,7 +151,7 @@ export async function uploadImages(
         .from(bucketName)
         .upload(thumbPath, decode(compressedThumb.base64), {
           contentType: 'image/jpeg',
-          upsert: false,
+          upsert: true,
         });
 
       if (uploadErrorThumb) {
@@ -231,8 +231,11 @@ export async function resolveSignedUrls(
 ): Promise<string[]> {
   if (!paths || paths.length === 0) return [];
   
+  let cached: Record<string, string> = {};
   try {
-    const { cached, missing } = signedUrlCache.getBatch(bucketName, paths);
+    const batch = signedUrlCache.getBatch(bucketName, paths);
+    cached = batch.cached;
+    const missing = batch.missing;
     
     if (missing.length === 0) {
       return paths.map(path => cached[path]).filter((url): url is string => !!url);
@@ -259,6 +262,6 @@ export async function resolveSignedUrls(
     return paths.map(path => cached[path]).filter((url): url is string => !!url);
   } catch (e) {
     console.error(`resolveSignedUrls error in ${bucketName}:`, e);
-    return [];
+    return paths.map(path => cached[path]).filter((url): url is string => !!url);
   }
 }

@@ -48,6 +48,12 @@ interface HomeState {
   isInitialised:   boolean;
   lastRefreshed:   number | null; // unix ms
 
+  // ── Sync ────────────────────────────────────────────────
+  isSyncing:        boolean;
+  syncError:        string | null;
+  pendingSyncCount: number;
+  lastSyncedAt:     string | null;
+
   // ── Setters ─────────────────────────────────────────────
   setTodayMood:       (m: MoodLog | null)       => void;
   setRecentMoods:     (m: MoodLog[])            => void;
@@ -78,6 +84,7 @@ interface HomeState {
 
   setInitialised:     (v: boolean)              => void;
   setLastRefreshed:   (t: number)               => void;
+  setSyncState:       (state: Partial<{ isSyncing: boolean; syncError: string | null; pendingSyncCount: number; lastSyncedAt: string | null }>) => void;
   reset:              ()                        => void;
 }
 
@@ -105,6 +112,11 @@ const initial = {
 
   isInitialised:   false,
   lastRefreshed:   null,
+
+  isSyncing:        false,
+  syncError:        null,
+  pendingSyncCount: 0,
+  lastSyncedAt:     null,
 };
 
 export const useHomeStore = create<HomeState>((set) => ({
@@ -147,5 +159,6 @@ export const useHomeStore = create<HomeState>((set) => ({
 
   setInitialised:     (v)  => set({ isInitialised: v }),
   setLastRefreshed:   (t)  => set({ lastRefreshed: t }),
+  setSyncState:       (state) => set((s) => ({ ...s, ...state })),
   reset:              ()   => set({ ...initial }),
 }));

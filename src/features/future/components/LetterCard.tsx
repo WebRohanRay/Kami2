@@ -5,6 +5,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Vibration,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { useTheme } from '@shared/hooks';
@@ -62,7 +63,13 @@ export const LetterCard: React.FC<LetterCardProps> = ({
       <View style={{ flex: 1, maxWidth: '85%' }}>
         <TouchableOpacity
           activeOpacity={0.9}
-          onPress={onOpen}
+          onPress={() => {
+            if (!isUnlocked) {
+              // Quick double pulse representing "locked" physical capsule
+              Vibration.vibrate([0, 10, 50, 10]);
+            }
+            onOpen();
+          }}
           onPressIn={() => Animated.spring(sc, { toValue: 0.98, useNativeDriver: true, speed: 60 }).start()}
           onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
         >

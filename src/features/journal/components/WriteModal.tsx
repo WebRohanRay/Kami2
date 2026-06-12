@@ -235,7 +235,7 @@ const wm = StyleSheet.create({
   content: { padding: Space[5], gap: Space[4], paddingBottom: Space[10] },
   titleInput: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.textPrimary },
   rule: { height: 1, backgroundColor: Colors.border + '44' },
-  bodyInput: { fontSize: FontSize.base, color: Colors.textPrimary, lineHeight: 26, minHeight: 250, textAlignVertical: 'top' },
+  bodyInput: { fontSize: 16, color: 'rgba(28, 25, 23, 0.85)', lineHeight: 29, minHeight: 250, textAlignVertical: 'top' },
   sectionLabel: { marginTop: Space[2] },
   tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2], marginVertical: Space[1] },
   tagChip: { paddingHorizontal: Space[3], paddingVertical: Space[1] + 2, borderRadius: Radii.full, backgroundColor: Colors.creamDeep, borderWidth: 1, borderColor: Colors.border },

@@ -181,7 +181,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 
           {/* Body */}
           <View style={pv.bodyContainer}>
-            <KamiText variant="body" color={Colors.textSecondary} style={pv.bodyText}>
+            <KamiText variant="body" style={pv.bodyText}>
               {entry.body}
             </KamiText>
           </View>
@@ -218,7 +218,7 @@ const pv = StyleSheet.create({
   dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
   dot: { width: 6, height: 6, borderRadius: 3 },
   bodyContainer: { paddingVertical: Space[2] },
-  bodyText: { fontSize: FontSize.base, lineHeight: 26 },
+  bodyText: { fontSize: 16, lineHeight: 29, color: 'rgba(28, 25, 23, 0.85)' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2], marginTop: Space[2] },
   tagChip: { paddingVertical: 4, paddingHorizontal: Space[3], borderRadius: Radii.full },
 });

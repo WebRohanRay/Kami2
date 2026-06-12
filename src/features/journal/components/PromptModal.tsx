@@ -68,7 +68,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={pm.content}>
           <View style={[pm.promptBox, { backgroundColor: colors.primary + '11', borderLeftColor: colors.primary, borderColor: colors.primary + '33' }]}>
             <Text style={[pm.quoteMark, { color: colors.primary + '44' }]}>"</Text>
-            <KamiText variant="body" style={{ fontStyle: 'italic', lineHeight: 26 }}>{prompt}</KamiText>
+            <KamiText style={{ fontFamily: 'Lora-Regular', fontSize: FontSize.md, lineHeight: 31, textAlign: 'center' }}>{prompt}</KamiText>
           </View>
           <TextInput
             style={[pm.input, { borderColor: focused ? colors.primary : Colors.border }]}

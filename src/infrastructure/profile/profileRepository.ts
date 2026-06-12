@@ -3,6 +3,7 @@
  * Only place in the app that reads/writes the `profiles` table.
  * Returns typed Result<T> — never throws.
  */
+import NetInfo from '@react-native-community/netinfo';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@shared/lib/supabase';
 import type { AuthUser, Result } from '@features/auth/types';
@@ -152,7 +153,7 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
         .eq('id', user.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data) {
+          if (data && data.id === user.id) {
             profileRepo.upsertProfile({
               id: data.id,
               email: data.email,
@@ -295,11 +296,29 @@ export async function updateProfile(userId: string, input: UpdateInput): Promise
     // Save locally
     await profileRepo.updateProfile(userId, patch);
 
-    // Enqueue background sync mutation
-    await enqueueMutation('profiles', userId, 'update', patch);
+    const isHeartbeatOnly = Object.keys(input).length === 1 && 'lastSeenAt' in input;
 
-    // Attempt sync
-    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+    if (isHeartbeatOnly) {
+      // Bypass outbox, write directly to Supabase if online
+      NetInfo.fetch().then((netState) => {
+        if (netState.isConnected) {
+          supabase
+            .from('profiles')
+            .update({ last_seen_at: input.lastSeenAt })
+            .eq('id', userId)
+            .then(({ error }) => {
+              if (error) {
+                console.warn('[ProfileRepository] Direct heartbeat sync failed:', error);
+              }
+            });
+        }
+      });
+    } else {
+      // Enqueue background sync mutation
+      await enqueueMutation('profiles', userId, 'update', { ...patch, id: userId });
+      // Attempt sync
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+    }
 
     const updated = {
       id: userId,

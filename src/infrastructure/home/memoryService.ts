@@ -6,6 +6,7 @@ import { memoryRepo } from '@shared/db/repo';
 import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 
 function friendly(raw: string): string {
+  console.error('[MemoryService friendly error debug]:', raw);
   if (raw.includes('JWT') || raw.includes('not authenticated'))
     return 'Your session expired. Please sign in again.';
   if (raw.includes('network') || raw.includes('fetch'))
@@ -14,6 +15,7 @@ function friendly(raw: string): string {
 }
 
 function err(e: unknown): string {
+  console.error('[MemoryService err exception caught]:', e);
   if (e instanceof Error) return friendly(e.message);
   if (typeof e === 'string') return friendly(e);
   return 'Something went wrong.';

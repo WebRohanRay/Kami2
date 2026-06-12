@@ -28,7 +28,7 @@ import type {
 } from '@features/home/types';
 import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
 import { useAuthStore } from '@features/auth';
-import { journalRepo, goalRepo, moodRepo } from '@shared/db/repo';
+import { journalRepo, goalRepo, moodRepo, dailyPromptRepo, streakRepo, promptResponseRepo } from '@shared/db/repo';
 import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 
 import { uuid } from '@shared/lib/uuid';
@@ -66,22 +66,28 @@ export async function upsertMoodLog(
     const today = new Date().toISOString().split('T')[0];
     const now = new Date().toISOString();
 
+    const existing = await moodRepo.fetchTodayMood(user.id, today);
+    const moodId = existing ? existing.id : uuid();
+    const actionType = existing ? 'update' : 'insert';
+    const createdAt = existing ? existing.createdAt : now;
+    const syncStatus = existing ? 'pending_update' : 'pending_insert';
+
     const localMood = {
-      id: uuid(),
+      id: moodId,
       userId: user.id,
       moodId: input.moodId,
       moodEmoji: input.moodEmoji,
       moodLabel: input.moodLabel,
       note: input.note ?? null,
       loggedDate: today,
-      createdAt: now,
+      createdAt: createdAt,
       updatedAt: now,
-      syncStatus: 'pending_update',
+      syncStatus: syncStatus,
     };
 
     await moodRepo.upsertMood(localMood);
 
-    await enqueueMutation('mood_logs', localMood.id, 'update', localMood);
+    await enqueueMutation('mood_logs', localMood.id, actionType, localMood);
 
     processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
 
@@ -138,7 +144,7 @@ export async function createJournalEntry(
     if (input.imageUrls && input.imageUrls.length > 0) {
       for (let i = 0; i < input.imageUrls.length; i++) {
         const pickerUri = input.imageUrls[i];
-        const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+        const bucket = 'journal_images';
         const ownerId = user.id;
         const timestamp = Date.now();
         const remotePath = `${ownerId}/${entryId}/${timestamp}_${i}.jpg`;
@@ -195,7 +201,7 @@ export async function updateJournalEntry(
       for (let i = 0; i < input.imageUrls.length; i++) {
         const url = input.imageUrls[i];
         if (url.startsWith('file://') || url.startsWith('content://')) {
-          const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+          const bucket = 'journal_images';
           const ownerId = user.id;
           const timestamp = Date.now();
           const remotePath = `${ownerId}/${id}/${timestamp}_${i}.jpg`;
@@ -267,7 +273,7 @@ export async function fetchJournalEntries(
       const localPickerUris = r.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
       const remotePaths = r.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
       
-      const bucket = user.activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images';
+      const bucket = 'journal_images';
       const resolvedRemote = await resolveSignedUrls(bucket, remotePaths);
       
       mapped.push({
@@ -453,18 +459,42 @@ export async function fetchTodayPrompt(): Promise<Result<DailyPrompt>> {
       .eq('is_active', true)
       .order('display_order', { ascending: true });
 
-    if (error || !data?.length)
-      return { success: false, error: 'Could not load today\'s prompt.' };
+    if (!error && data?.length) {
+      // Cache prompts locally
+      for (const p of data) {
+        await dailyPromptRepo.savePrompt({
+          id: p.id,
+          content: p.content,
+          category: p.category,
+          isActive: 1,
+        });
+      }
 
-    // Deterministic selection: day-of-year mod total count
-    const dayOfYear = Math.floor(
-      (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000,
-    );
-    const prompt = data[dayOfYear % data.length];
-    return { success: true, data: { id: prompt.id, content: prompt.content, category: prompt.category } };
+      const dayOfYear = Math.floor(
+        (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000,
+      );
+      const prompt = data[dayOfYear % data.length];
+      return { success: true, data: { id: prompt.id, content: prompt.content, category: prompt.category } };
+    }
   } catch (e) {
-    return { success: false, error: err(e) };
+    console.warn('[fetchTodayPrompt] Online fetch failed, trying offline cache:', e);
   }
+
+  // Fallback to local cache
+  try {
+    const cachedPrompts = await dailyPromptRepo.fetchActivePrompts();
+    if (cachedPrompts && cachedPrompts.length > 0) {
+      const dayOfYear = Math.floor(
+        (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000,
+      );
+      const prompt = cachedPrompts[dayOfYear % cachedPrompts.length];
+      return { success: true, data: { id: prompt.id, content: prompt.content, category: prompt.category } };
+    }
+  } catch (localErr) {
+    console.error('[fetchTodayPrompt] Local cache read failed:', localErr);
+  }
+
+  return { success: false, error: 'Could not load today\'s prompt.' };
 }
 
 /** Save user's response to today's prompt. */
@@ -473,26 +503,44 @@ export async function savePromptResponse(
   response: string,
 ): Promise<Result<PromptResponse>> {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from('prompt_responses')
-      .upsert(
-        { prompt_id: promptId, response, response_date: today },
-        { onConflict: 'user_id,prompt_id,response_date' },
-      )
-      .select()
-      .single();
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    if (error || !data) return { success: false, error: friendly(error?.message ?? '') };
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date().toISOString();
+
+    const existing = await promptResponseRepo.fetchTodayResponse(user.id, promptId, today);
+    const responseId = existing ? existing.id : uuid();
+    const actionType = existing ? 'update' : 'insert';
+    const createdAt = existing ? existing.createdAt : now;
+    const syncStatus = existing ? 'pending_update' : 'pending_insert';
+
+    const localResponse = {
+      id: responseId,
+      userId: user.id,
+      promptId,
+      response,
+      responseDate: today,
+      createdAt,
+      updatedAt: now,
+      syncStatus,
+    };
+
+    await promptResponseRepo.saveResponse(localResponse);
+
+    await enqueueMutation('prompt_responses', responseId, actionType, localResponse);
+
+    processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+
     return {
       success: true,
       data: {
-        id:           data.id,
-        userId:       data.user_id,
-        promptId:     data.prompt_id,
-        response:     data.response,
-        responseDate: data.response_date,
-        createdAt:    data.created_at,
+        id:           localResponse.id,
+        userId:       localResponse.userId,
+        promptId:     localResponse.promptId,
+        response:     localResponse.response,
+        responseDate: localResponse.responseDate,
+        createdAt:    localResponse.createdAt,
       },
     };
   } catch (e) {
@@ -505,7 +553,26 @@ export async function fetchTodayPromptResponse(
   promptId: string,
 ): Promise<Result<PromptResponse | null>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
     const today = new Date().toISOString().split('T')[0];
+
+    const cached = await promptResponseRepo.fetchTodayResponse(user.id, promptId, today);
+    if (cached) {
+      return {
+        success: true,
+        data: {
+          id:           cached.id,
+          userId:       cached.userId,
+          promptId:     cached.promptId,
+          response:     cached.response,
+          responseDate: cached.responseDate,
+          createdAt:    cached.createdAt,
+        },
+      };
+    }
+
     const { data, error } = await supabase
       .from('prompt_responses')
       .select('*')
@@ -515,15 +582,29 @@ export async function fetchTodayPromptResponse(
 
     if (error) return { success: false, error: friendly(error.message) };
     if (!data) return { success: true, data: null };
+
+    const responseData = {
+      id:           data.id,
+      userId:       data.user_id,
+      promptId:     data.prompt_id,
+      response:     data.response,
+      responseDate: data.response_date,
+      createdAt:    data.created_at,
+      updatedAt:    data.updated_at || data.created_at,
+      syncStatus:   'synced',
+    };
+
+    await promptResponseRepo.saveResponse(responseData);
+
     return {
       success: true,
       data: {
-        id:           data.id,
-        userId:       data.user_id,
-        promptId:     data.prompt_id,
-        response:     data.response,
-        responseDate: data.response_date,
-        createdAt:    data.created_at,
+        id:           responseData.id,
+        userId:       responseData.userId,
+        promptId:     responseData.promptId,
+        response:     responseData.response,
+        responseDate: responseData.responseDate,
+        createdAt:    responseData.createdAt,
       },
     };
   } catch (e) {
@@ -536,40 +617,72 @@ export async function fetchTodayPromptResponse(
 /** Fetch streak for the current user. */
 export async function fetchStreak(): Promise<Result<Streak>> {
   try {
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
+
     const { data, error } = await supabase
       .from('streaks')
       .select('*')
       .maybeSingle();
 
-    if (error) return { success: false, error: friendly(error.message) };
-
-    // No row yet — user hasn't checked in
-    if (!data) {
-      return {
-        success: true,
-        data: {
-          userId:          '',
+    if (!error) {
+      if (!data) {
+        const defaultStreak = {
+          userId:          user.id,
           currentStreak:   0,
           longestStreak:   0,
           lastCheckinDate: null,
           totalCheckins:   0,
-        },
-      };
-    }
+        };
+        await streakRepo.saveStreak(user.id, defaultStreak);
+        return { success: true, data: defaultStreak };
+      }
 
-    return {
-      success: true,
-      data: {
+      const streakData = {
         userId:          data.user_id,
         currentStreak:   data.current_streak,
         longestStreak:   data.longest_streak,
         lastCheckinDate: data.last_checkin_date,
         totalCheckins:   data.total_checkins,
-      },
-    };
+      };
+      await streakRepo.saveStreak(user.id, streakData);
+      return { success: true, data: streakData };
+    }
   } catch (e) {
-    return { success: false, error: err(e) };
+    console.warn('[fetchStreak] Online fetch failed, trying local cache:', e);
   }
+
+  try {
+    const user = useAuthStore.getState().user;
+    if (user) {
+      const cached = await streakRepo.fetchStreak(user.id);
+      if (cached) {
+        return {
+          success: true,
+          data: {
+            userId:          cached.userId,
+            currentStreak:   cached.currentStreak,
+            longestStreak:   cached.longestStreak,
+            lastCheckinDate: cached.lastCheckinDate,
+            totalCheckins:   cached.totalCheckins,
+          },
+        };
+      }
+    }
+  } catch (localErr) {
+    console.error('[fetchStreak] Local cache read failed:', localErr);
+  }
+
+  return {
+    success: true,
+    data: {
+      userId:          '',
+      currentStreak:   0,
+      longestStreak:   0,
+      lastCheckinDate: null,
+      totalCheckins:   0,
+    },
+  };
 }
 
 

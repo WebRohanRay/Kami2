@@ -808,3 +808,574 @@ export const letterRepo = {
       .where(eq(schema.futureLetters.id, id));
   },
 };
+
+// ==========================================
+// Prompt Responses Repository
+// ==========================================
+export const promptResponseRepo = {
+  async fetchTodayResponse(userId: string, promptId: string, responseDate: string) {
+    const rows = await db
+      .select()
+      .from(schema.promptResponses)
+      .where(
+        and(
+          eq(schema.promptResponses.userId, userId),
+          eq(schema.promptResponses.promptId, promptId),
+          eq(schema.promptResponses.responseDate, responseDate),
+          isNull(schema.promptResponses.deletedAt)
+        )
+      );
+    return rows[0] || null;
+  },
+
+  async saveResponse(r: any): Promise<void> {
+    await db
+      .insert(schema.promptResponses)
+      .values({
+        id: r.id,
+        userId: r.userId,
+        promptId: r.promptId,
+        response: r.response,
+        responseDate: r.responseDate,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        syncStatus: r.syncStatus || 'synced',
+        serverUpdatedAt: r.serverUpdatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [schema.promptResponses.userId, schema.promptResponses.promptId, schema.promptResponses.responseDate],
+        set: {
+          response: r.response,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          syncStatus: r.syncStatus || 'synced',
+          serverUpdatedAt: r.serverUpdatedAt,
+          deletedAt: r.deletedAt || null,
+        },
+      });
+  },
+};
+
+// ==========================================
+// Streaks Repository
+// ==========================================
+export const streakRepo = {
+  async fetchStreak(userId: string) {
+    const rows = await db
+      .select()
+      .from(schema.streaks)
+      .where(eq(schema.streaks.userId, userId));
+    return rows[0] || null;
+  },
+
+  async saveStreak(userId: string, r: any): Promise<void> {
+    await db
+      .insert(schema.streaks)
+      .values({
+        userId,
+        currentStreak: r.currentStreak,
+        longestStreak: r.longestStreak,
+        lastCheckinDate: r.lastCheckinDate,
+        totalCheckins: r.totalCheckins,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: schema.streaks.userId,
+        set: {
+          currentStreak: r.currentStreak,
+          longestStreak: r.longestStreak,
+          lastCheckinDate: r.lastCheckinDate,
+          totalCheckins: r.totalCheckins,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+        },
+      });
+  },
+};
+
+// ==========================================
+// Daily Prompts Repository
+// ==========================================
+export const dailyPromptRepo = {
+  async fetchActivePrompts() {
+    return db
+      .select()
+      .from(schema.dailyPrompts)
+      .where(eq(schema.dailyPrompts.isActive, 1))
+      .orderBy(asc(schema.dailyPrompts.displayOrder));
+  },
+
+  async savePrompt(p: any): Promise<void> {
+    await db
+      .insert(schema.dailyPrompts)
+      .values({
+        id: p.id,
+        content: p.content,
+        category: p.category,
+        isActive: p.isActive !== undefined ? p.isActive : 1,
+        displayOrder: p.displayOrder || 0,
+      })
+      .onConflictDoUpdate({
+        target: schema.dailyPrompts.id,
+        set: {
+          content: p.content,
+          category: p.category,
+          isActive: p.isActive !== undefined ? p.isActive : 1,
+          displayOrder: p.displayOrder || 0,
+        },
+      });
+  },
+};
+
+// ==========================================
+// Couple Space Input Interfaces
+// ==========================================
+export interface CoupleLetterInput {
+  id: string;
+  coupleId: string;
+  senderId: string;
+  subject: string;
+  body: string;
+  deliverAt: string;
+  imageUrls?: string[] | string;
+  createdAt: string;
+  updatedAt?: string | null;
+  isRead?: boolean | number;
+  isFavorite?: boolean | number;
+  isDraft?: boolean | number;
+  isArchived?: boolean | number;
+  parentLetterId?: string | null;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
+  deletedAt?: string | null;
+  retryCount?: number;
+}
+
+export interface CoupleJournalInput {
+  id: string;
+  coupleId: string;
+  userId: string;
+  title?: string | null;
+  body: string;
+  moodId?: string | null;
+  tags?: string[] | string;
+  imageUrls?: string[] | string;
+  entryDate: string;
+  isPinned?: boolean | number;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
+  deletedAt?: string | null;
+  retryCount?: number;
+}
+
+export interface CoupleMemoryInput {
+  id: string;
+  coupleId: string;
+  title: string;
+  description?: string | null;
+  imageUrls?: string[] | string;
+  memoryDate: string;
+  tags?: string[] | string;
+  lastEditedBy?: string | null;
+  location?: string | null;
+  mood?: string | null;
+  memoryTime?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
+  deletedAt?: string | null;
+  retryCount?: number;
+}
+
+export interface CoupleGoalInput {
+  id: string;
+  coupleId: string;
+  title: string;
+  description?: string | null;
+  category?: string;
+  status?: string;
+  progress?: number;
+  targetDate?: string | null;
+  completedAt?: string | null;
+  emoji?: string;
+  createdAt: string;
+  updatedAt: string;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
+  deletedAt?: string | null;
+  retryCount?: number;
+}
+
+export interface CoupleCommentInput {
+  id: string;
+  entryId: string;
+  userId: string;
+  body: string;
+  createdAt: string;
+  updatedAt?: string | null;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
+  deletedAt?: string | null;
+  retryCount?: number;
+}
+
+// ==========================================
+// Couple Space Repositories
+// ==========================================
+export const coupleLetterRepo = {
+  async fetchLetters(coupleId: string, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const rows = await db
+      .select()
+      .from(schema.coupleLetters)
+      .where(and(eq(schema.coupleLetters.coupleId, coupleId), isNull(schema.coupleLetters.deletedAt)))
+      .orderBy(desc(schema.coupleLetters.deliverAt), desc(schema.coupleLetters.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return rows.map(r => ({
+      ...r,
+      imageUrls: fromJSON(r.imageUrls),
+      isRead: fromInt(r.isRead),
+      isFavorite: fromInt(r.isFavorite),
+      isDraft: fromInt(r.isDraft),
+      isArchived: fromInt(r.isArchived),
+    }));
+  },
+  async fetchLetterById(id: string) {
+    const rows = await db.select().from(schema.coupleLetters).where(eq(schema.coupleLetters.id, id));
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      ...r,
+      imageUrls: fromJSON(r.imageUrls),
+      isRead: fromInt(r.isRead),
+      isFavorite: fromInt(r.isFavorite),
+      isDraft: fromInt(r.isDraft),
+      isArchived: fromInt(r.isArchived),
+    };
+  },
+  async saveLetter(r: CoupleLetterInput): Promise<void> {
+    await db
+      .insert(schema.coupleLetters)
+      .values({
+        id: r.id,
+        coupleId: r.coupleId,
+        senderId: r.senderId,
+        subject: r.subject,
+        body: r.body,
+        deliverAt: r.deliverAt,
+        imageUrls: toJSON(r.imageUrls as any),
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        isRead: toInt(r.isRead) ?? 0,
+        isFavorite: toInt(r.isFavorite) ?? 0,
+        isDraft: toInt(r.isDraft) ?? 0,
+        isArchived: toInt(r.isArchived) ?? 0,
+        parentLetterId: r.parentLetterId,
+        syncStatus: r.syncStatus || 'synced',
+        serverUpdatedAt: r.serverUpdatedAt,
+        deletedAt: r.deletedAt,
+        retryCount: r.retryCount || 0,
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleLetters.id,
+        set: {
+          subject: r.subject,
+          body: r.body,
+          deliverAt: r.deliverAt,
+          imageUrls: toJSON(r.imageUrls as any),
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          isRead: toInt(r.isRead) ?? 0,
+          isFavorite: toInt(r.isFavorite) ?? 0,
+          isDraft: toInt(r.isDraft) ?? 0,
+          isArchived: toInt(r.isArchived) ?? 0,
+          parentLetterId: r.parentLetterId,
+          syncStatus: r.syncStatus || 'synced',
+          serverUpdatedAt: r.serverUpdatedAt,
+          deletedAt: r.deletedAt,
+          retryCount: r.retryCount || 0,
+        }
+      });
+  },
+  async softDeleteLetter(id: string, deletedAt: string): Promise<void> {
+    await db
+      .update(schema.coupleLetters)
+      .set({
+        deletedAt,
+        syncStatus: 'pending_update',
+      })
+      .where(eq(schema.coupleLetters.id, id));
+  }
+};
+
+export const coupleJournalRepo = {
+  async fetchJournals(coupleId: string, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const rows = await db
+      .select()
+      .from(schema.coupleJournals)
+      .where(and(eq(schema.coupleJournals.coupleId, coupleId), isNull(schema.coupleJournals.deletedAt)))
+      .orderBy(desc(schema.coupleJournals.entryDate), desc(schema.coupleJournals.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return rows.map(r => ({
+      ...r,
+      imageUrls: fromJSON(r.imageUrls),
+      tags: fromJSON(r.tags),
+      isPinned: fromInt(r.isPinned),
+    }));
+  },
+  async fetchJournalById(id: string) {
+    const rows = await db.select().from(schema.coupleJournals).where(eq(schema.coupleJournals.id, id));
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      ...r,
+      imageUrls: fromJSON(r.imageUrls),
+      tags: fromJSON(r.tags),
+      isPinned: fromInt(r.isPinned),
+    };
+  },
+  async saveJournal(r: CoupleJournalInput): Promise<void> {
+    await db
+      .insert(schema.coupleJournals)
+      .values({
+        id: r.id,
+        coupleId: r.coupleId,
+        userId: r.userId,
+        title: r.title,
+        body: r.body,
+        moodId: r.moodId,
+        tags: toJSON(r.tags as any),
+        imageUrls: toJSON(r.imageUrls as any),
+        entryDate: r.entryDate,
+        isPinned: toInt(r.isPinned) ?? 0,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        syncStatus: r.syncStatus || 'synced',
+        serverUpdatedAt: r.serverUpdatedAt,
+        deletedAt: r.deletedAt,
+        retryCount: r.retryCount || 0,
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleJournals.id,
+        set: {
+          title: r.title,
+          body: r.body,
+          moodId: r.moodId,
+          tags: toJSON(r.tags as any),
+          imageUrls: toJSON(r.imageUrls as any),
+          entryDate: r.entryDate,
+          isPinned: toInt(r.isPinned) ?? 0,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          syncStatus: r.syncStatus || 'synced',
+          serverUpdatedAt: r.serverUpdatedAt,
+          deletedAt: r.deletedAt,
+          retryCount: r.retryCount || 0,
+        }
+      });
+  },
+  async softDeleteJournal(id: string, deletedAt: string): Promise<void> {
+    await db
+      .update(schema.coupleJournals)
+      .set({
+        deletedAt,
+        syncStatus: 'pending_update',
+      })
+      .where(eq(schema.coupleJournals.id, id));
+  }
+};
+
+export const coupleMemoryRepo = {
+  async fetchMemories(coupleId: string, page = 1, limit = 15) {
+    const offset = (page - 1) * limit;
+    const rows = await db
+      .select()
+      .from(schema.coupleMemories)
+      .where(and(eq(schema.coupleMemories.coupleId, coupleId), isNull(schema.coupleMemories.deletedAt)))
+      .orderBy(desc(schema.coupleMemories.memoryDate), desc(schema.coupleMemories.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return rows.map(r => ({
+      ...r,
+      imageUrls: fromJSON(r.imageUrls),
+      tags: fromJSON(r.tags),
+    }));
+  },
+  async fetchMemoryById(id: string) {
+    const rows = await db.select().from(schema.coupleMemories).where(eq(schema.coupleMemories.id, id));
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      ...r,
+      imageUrls: fromJSON(r.imageUrls),
+      tags: fromJSON(r.tags),
+    };
+  },
+  async saveMemory(r: CoupleMemoryInput): Promise<void> {
+    await db
+      .insert(schema.coupleMemories)
+      .values({
+        id: r.id,
+        coupleId: r.coupleId,
+        title: r.title,
+        description: r.description,
+        imageUrls: toJSON(r.imageUrls as any),
+        memoryDate: r.memoryDate,
+        tags: toJSON(r.tags as any),
+        lastEditedBy: r.lastEditedBy,
+        location: r.location,
+        mood: r.mood,
+        memoryTime: r.memoryTime,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        syncStatus: r.syncStatus || 'synced',
+        serverUpdatedAt: r.serverUpdatedAt,
+        deletedAt: r.deletedAt,
+        retryCount: r.retryCount || 0,
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleMemories.id,
+        set: {
+          title: r.title,
+          description: r.description,
+          imageUrls: toJSON(r.imageUrls as any),
+          memoryDate: r.memoryDate,
+          tags: toJSON(r.tags as any),
+          lastEditedBy: r.lastEditedBy,
+          location: r.location,
+          mood: r.mood,
+          memoryTime: r.memoryTime,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          syncStatus: r.syncStatus || 'synced',
+          serverUpdatedAt: r.serverUpdatedAt,
+          deletedAt: r.deletedAt,
+          retryCount: r.retryCount || 0,
+        }
+      });
+  },
+  async softDeleteMemory(id: string, deletedAt: string): Promise<void> {
+    await db
+      .update(schema.coupleMemories)
+      .set({
+        deletedAt,
+        syncStatus: 'pending_update',
+      })
+      .where(eq(schema.coupleMemories.id, id));
+  }
+};
+
+export const coupleGoalRepo = {
+  async fetchGoals(coupleId: string, page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+    const rows = await db
+      .select()
+      .from(schema.coupleGoals)
+      .where(and(eq(schema.coupleGoals.coupleId, coupleId), isNull(schema.coupleGoals.deletedAt)))
+      .orderBy(desc(schema.coupleGoals.createdAt))
+      .limit(limit)
+      .offset(offset);
+    return rows;
+  },
+  async fetchGoalById(id: string) {
+    const rows = await db.select().from(schema.coupleGoals).where(eq(schema.coupleGoals.id, id));
+    if (rows.length === 0) return null;
+    return rows[0];
+  },
+  async saveGoal(r: CoupleGoalInput): Promise<void> {
+    await db
+      .insert(schema.coupleGoals)
+      .values({
+        id: r.id,
+        coupleId: r.coupleId,
+        title: r.title,
+        description: r.description,
+        category: r.category || 'relationship',
+        status: r.status || 'active',
+        progress: r.progress || 0,
+        targetDate: r.targetDate,
+        completedAt: r.completedAt,
+        emoji: r.emoji || '🌱',
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        syncStatus: r.syncStatus || 'synced',
+        serverUpdatedAt: r.serverUpdatedAt,
+        deletedAt: r.deletedAt,
+        retryCount: r.retryCount || 0,
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleGoals.id,
+        set: {
+          title: r.title,
+          description: r.description,
+          category: r.category || 'relationship',
+          status: r.status || 'active',
+          progress: r.progress || 0,
+          targetDate: r.targetDate,
+          completedAt: r.completedAt,
+          emoji: r.emoji || '🌱',
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          syncStatus: r.syncStatus || 'synced',
+          serverUpdatedAt: r.serverUpdatedAt,
+          deletedAt: r.deletedAt,
+          retryCount: r.retryCount || 0,
+        }
+      });
+  },
+  async softDeleteGoal(id: string, deletedAt: string): Promise<void> {
+    await db
+      .update(schema.coupleGoals)
+      .set({
+        deletedAt,
+        syncStatus: 'pending_update',
+      })
+      .where(eq(schema.coupleGoals.id, id));
+  }
+};
+
+export const coupleCommentRepo = {
+  async fetchCommentsForEntry(entryId: string) {
+    return db
+      .select()
+      .from(schema.coupleComments)
+      .where(and(eq(schema.coupleComments.entryId, entryId), isNull(schema.coupleComments.deletedAt)))
+      .orderBy(asc(schema.coupleComments.createdAt));
+  },
+  async saveComment(r: CoupleCommentInput): Promise<void> {
+    await db
+      .insert(schema.coupleComments)
+      .values({
+        id: r.id,
+        entryId: r.entryId,
+        userId: r.userId,
+        body: r.body,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        syncStatus: r.syncStatus || 'synced',
+        serverUpdatedAt: r.serverUpdatedAt,
+        deletedAt: r.deletedAt,
+        retryCount: r.retryCount || 0,
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleComments.id,
+        set: {
+          body: r.body,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          syncStatus: r.syncStatus || 'synced',
+          serverUpdatedAt: r.serverUpdatedAt,
+          deletedAt: r.deletedAt,
+          retryCount: r.retryCount || 0,
+        }
+      });
+  },
+  async softDeleteComment(id: string, deletedAt: string): Promise<void> {
+    await db
+      .update(schema.coupleComments)
+      .set({
+        deletedAt,
+        syncStatus: 'pending_update',
+      })
+      .where(eq(schema.coupleComments.id, id));
+  }
+};

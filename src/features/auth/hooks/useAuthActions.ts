@@ -5,76 +5,7 @@ import { registerForPushNotificationsAsync } from '@infrastructure/notifications
 import { applyTheme } from '@shared/constants';
 import { useAuthStore } from '../store';
 import type { AuthUser, AuthStatus, Result } from '../types';
-
-function statusFor(user: AuthUser, online: boolean = true): AuthStatus {
-  if (!user.emailVerified) return 'unverified';
-  return online ? 'authenticated_online' : 'authenticated_offline';
-}
-
-async function hydrateUser(
-  supabaseUser: Awaited<ReturnType<typeof authService.getSession>>['data']['session'] extends null
-    ? never
-    : NonNullable<Awaited<ReturnType<typeof authService.getSession>>['data']['session']>['user'],
-  setUser: (u: AuthUser) => void,
-  setStatus: (s: AuthStatus) => void,
-) {
-  const emailVerified = Boolean(supabaseUser.email_confirmed_at);
-  if (!emailVerified) {
-    const authUser = profileRepo.supabaseUserToAuthUser(supabaseUser);
-    setUser(authUser);
-    setStatus('unverified');
-    return;
-  }
-
-  const result = await profileRepo.fetchOrCreateProfile(supabaseUser);
-  const authUser = result.success ? result.data : profileRepo.supabaseUserToAuthUser(supabaseUser);
-
-  if (authUser.theme) {
-    applyTheme(authUser.theme);
-  }
-
-  setUser(authUser);
-
-  if (!result.success) {
-    if (result.error === 'network_error') {
-      setStatus('authenticated_offline');
-    } else {
-      setStatus('error');
-      return;
-    }
-  } else {
-    setStatus('authenticated_online');
-  }
-
-  // If email is verified/authenticated, request push notification permission and sync token
-  if (authUser.emailVerified) {
-    registerForPushNotificationsAsync().then((token) => {
-      if (token && token !== authUser.pushToken) {
-        profileRepo.updateProfile(authUser.id, { pushToken: token }).then((updateResult) => {
-          if (updateResult.success) {
-            setUser(updateResult.data);
-          }
-        }).catch(err => console.error('Failed to update push token in profiles:', err));
-      }
-    }).catch(err => console.error('Push token registration failed:', err));
-  }
-
-  // Synchronize local reminders scheduling on hydration
-  const {
-    scheduleDailyReminderAsync, cancelDailyReminderAsync,
-    scheduleWeeklyDigestAsync, cancelWeeklyDigestAsync,
-    scheduleStreakAlertsAsync, cancelStreakAlertsAsync
-  } = require('@infrastructure/notifications/notificationService');
-
-  if (authUser.dailyReminder ?? true) scheduleDailyReminderAsync().catch(() => { });
-  else cancelDailyReminderAsync().catch(() => { });
-
-  if (authUser.weeklyDigest ?? true) scheduleWeeklyDigestAsync().catch(() => { });
-  else cancelWeeklyDigestAsync().catch(() => { });
-
-  if (authUser.streakAlerts ?? true) scheduleStreakAlertsAsync().catch(() => { });
-  else cancelStreakAlertsAsync().catch(() => { });
-}
+import { hydrateUser } from '../providers/AuthProvider';
 
 export function useAuthActions() {
   const user = useAuthStore(s => s.user);

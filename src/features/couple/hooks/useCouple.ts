@@ -2,6 +2,16 @@ import { useCallback } from 'react';
 import { useCoupleStore } from '../store/coupleStore';
 import * as coupleService from '@infrastructure/couple/coupleService';
 import { useAuthStore } from '@features/auth';
+import { 
+  coupleLetterRepo, 
+  coupleJournalRepo, 
+  coupleMemoryRepo, 
+  coupleGoalRepo, 
+  coupleCommentRepo 
+} from '@shared/db/repo';
+import { enqueueMutation, processSyncQueue } from '@shared/db/sync';
+import { uuid } from '@shared/lib/uuid';
+import type { Result } from '@shared/types/result';
 
 export function useCouple() {
   const user = useAuthStore(s => s.user);
@@ -42,17 +52,53 @@ export function useCouple() {
     const s = store.getState();
     if (!s.couple) return;
     s.setJournalsLoading('loading');
-    const r = await coupleService.fetchCoupleJournals(s.couple.id, 20, page);
-    if (r.success) {
+
+    try {
+      const local = await coupleJournalRepo.fetchJournals(s.couple.id, page, 20);
+      const currentUser = useAuthStore.getState().user;
+      const partner = s.partner;
+
+      const mapped = await Promise.all(local.map(async (entry) => {
+        const comments = await coupleCommentRepo.fetchCommentsForEntry(entry.id);
+        const commentsMapped = comments.map(c => ({
+          id: c.id,
+          entryId: c.entryId,
+          userId: c.userId,
+          body: c.body,
+          createdAt: c.createdAt,
+          userNickname: c.userId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+          userAvatarUrl: c.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl,
+        }));
+
+        return {
+          id: entry.id,
+          coupleId: entry.coupleId,
+          userId: entry.userId,
+          title: entry.title,
+          body: entry.body,
+          moodId: entry.moodId,
+          imageUrls: entry.imageUrls,
+          tags: entry.tags,
+          entryDate: entry.entryDate,
+          isPinned: !!entry.isPinned,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+          comments: commentsMapped,
+          reactions: [], // reactions fetched online or realtime
+          userNickname: entry.userId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+          userAvatarUrl: entry.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl,
+        };
+      }));
+
       if (page === 1) {
-        s.setCoupleJournals(r.data);
+        s.setCoupleJournals(mapped as any);
       } else {
-        s.setCoupleJournals([...s.coupleJournals, ...r.data]);
+        s.setCoupleJournals([...s.coupleJournals, ...mapped] as any);
       }
       s.setJournalsPage(page);
-      s.setJournalsHasMore(r.data.length === 20);
-    } else {
-      s.setJournalsError(r.error);
+      s.setJournalsHasMore(local.length === 20);
+    } catch (err) {
+      s.setJournalsError(err instanceof Error ? err.message : String(err));
     }
     s.setJournalsLoading('idle');
   }, []);
@@ -67,15 +113,33 @@ export function useCouple() {
     const s = store.getState();
     if (!s.couple) return;
     s.setGoalsLoading('loading');
-    const r = await coupleService.fetchCoupleGoals(s.couple.id, 20, page);
-    if (r.success) {
+
+    try {
+      const local = await coupleGoalRepo.fetchGoals(s.couple.id, page, 20);
+      const mapped = local.map((g) => ({
+        id: g.id,
+        coupleId: g.coupleId,
+        title: g.title,
+        description: g.description,
+        category: g.category,
+        status: g.status as any,
+        progress: g.progress,
+        targetDate: g.targetDate,
+        completedAt: g.completedAt,
+        emoji: g.emoji,
+        createdAt: g.createdAt,
+        updatedAt: g.updatedAt,
+      }));
+
       if (page === 1) {
-        s.setCoupleGoals(r.data);
+        s.setCoupleGoals(mapped);
       } else {
-        s.setCoupleGoals([...s.coupleGoals, ...r.data]);
+        s.setCoupleGoals([...s.coupleGoals, ...mapped]);
       }
       s.setGoalsPage(page);
-      s.setGoalsHasMore(r.data.length === 20);
+      s.setGoalsHasMore(local.length === 20);
+    } catch (err) {
+      console.error('[loadGoals] Failed:', err);
     }
     s.setGoalsLoading('idle');
   }, []);
@@ -90,15 +154,37 @@ export function useCouple() {
     const s = store.getState();
     if (!s.couple) return;
     s.setMemoriesLoading('loading');
-    const r = await coupleService.fetchCoupleMemories(s.couple.id, 15, page);
-    if (r.success) {
+
+    try {
+      const local = await coupleMemoryRepo.fetchMemories(s.couple.id, page, 15);
+      const currentUser = useAuthStore.getState().user;
+      const partner = s.partner;
+
+      const mapped = local.map((m) => ({
+        id: m.id,
+        coupleId: m.coupleId,
+        title: m.title,
+        description: m.description,
+        imageUrls: m.imageUrls,
+        memoryDate: m.memoryDate,
+        tags: m.tags,
+        createdAt: m.createdAt,
+        location: m.location,
+        mood: m.mood,
+        memoryTime: m.memoryTime,
+        lastEditedBy: m.lastEditedBy,
+        lastEditedNickname: m.lastEditedBy === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+      }));
+
       if (page === 1) {
-        s.setCoupleMemories(r.data);
+        s.setCoupleMemories(mapped);
       } else {
-        s.setCoupleMemories([...s.coupleMemories, ...r.data]);
+        s.setCoupleMemories([...s.coupleMemories, ...mapped]);
       }
       s.setMemoriesPage(page);
-      s.setMemoriesHasMore(r.data.length === 15);
+      s.setMemoriesHasMore(local.length === 15);
+    } catch (err) {
+      console.error('[loadMemories] Failed:', err);
     }
     s.setMemoriesLoading('idle');
   }, []);
@@ -113,15 +199,40 @@ export function useCouple() {
     const s = store.getState();
     if (!s.couple) return;
     s.setLettersLoading('loading');
-    const r = await coupleService.fetchCoupleLetters(s.couple.id, 20, page);
-    if (r.success) {
+
+    try {
+      const local = await coupleLetterRepo.fetchLetters(s.couple.id, page, 20);
+      const currentUser = useAuthStore.getState().user;
+      const partner = s.partner;
+
+      const mapped = local.map((l) => ({
+        id: l.id,
+        coupleId: l.coupleId,
+        senderId: l.senderId,
+        subject: l.subject,
+        deliverAt: l.deliverAt,
+        isUnlocked: new Date(l.deliverAt).getTime() <= Date.now(),
+        createdAt: l.createdAt,
+        body: l.body,
+        imageUrls: l.imageUrls,
+        senderNickname: l.senderId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+        isRead: !!l.isRead,
+        isFavorite: !!l.isFavorite,
+        isDraft: !!l.isDraft,
+        isArchived: !!l.isArchived,
+        parentLetterId: l.parentLetterId,
+        updatedAt: l.updatedAt,
+      }));
+
       if (page === 1) {
-        s.setCoupleLetters(r.data);
+        s.setCoupleLetters(mapped);
       } else {
-        s.setCoupleLetters([...s.coupleLetters, ...r.data]);
+        s.setCoupleLetters([...s.coupleLetters, ...mapped]);
       }
       s.setLettersPage(page);
-      s.setLettersHasMore(r.data.length === 20);
+      s.setLettersHasMore(local.length === 20);
+    } catch (err) {
+      console.error('[loadLetters] Failed:', err);
     }
     s.setLettersLoading('idle');
   }, []);
@@ -145,7 +256,7 @@ export function useCouple() {
     const metaRes = await loadCoupleMeta();
     if (metaRes.success && metaRes.data.couple) {
       const cId = metaRes.data.couple.id;
-      // Load other tables using couple ID
+      // Load daily question and answers (online)
       const qRes = await coupleService.fetchTodayDailyQuestion(user?.timezone);
       if (qRes.success) {
         store.getState().setTodayQuestion(qRes.data);
@@ -153,37 +264,16 @@ export function useCouple() {
         if (aRes.success) store.getState().setDailyAnswers(aRes.data);
       }
       
-      const [jRes, gRes, mRes, lRes, eRes] = await Promise.all([
-        coupleService.fetchCoupleJournals(cId),
-        coupleService.fetchCoupleGoals(cId),
-        coupleService.fetchCoupleMemories(cId),
-        coupleService.fetchCoupleLetters(cId),
-        coupleService.fetchRelationshipEvents(cId)
+      // Load SQLite components & relationship events in parallel
+      await Promise.all([
+        loadJournals(1),
+        loadGoals(1),
+        loadMemories(1),
+        loadLetters(1),
+        loadEvents(),
       ]);
-
-      if (jRes.success) {
-        store.getState().setCoupleJournals(jRes.data);
-        store.getState().setJournalsPage(1);
-        store.getState().setJournalsHasMore(jRes.data.length === 20);
-      }
-      if (gRes.success) {
-        store.getState().setCoupleGoals(gRes.data);
-        store.getState().setGoalsPage(1);
-        store.getState().setGoalsHasMore(gRes.data.length === 20);
-      }
-      if (mRes.success) {
-        store.getState().setCoupleMemories(mRes.data);
-        store.getState().setMemoriesPage(1);
-        store.getState().setMemoriesHasMore(mRes.data.length === 15);
-      }
-      if (lRes.success) {
-        store.getState().setCoupleLetters(lRes.data);
-        store.getState().setLettersPage(1);
-        store.getState().setLettersHasMore(lRes.data.length === 20);
-      }
-      if (eRes.success) store.getState().setRelationshipEvents(eRes.data);
     }
-  }, [loadCoupleMeta]);
+  }, [loadCoupleMeta, loadEvents, loadJournals, loadGoals, loadMemories, loadLetters]);
 
   return {
     loadAll,
@@ -198,75 +288,208 @@ export function useCouple() {
     loadLetters,
     loadMoreLetters,
     loadEvents,
-    submitAnswer: async (qId: string, cId: string, response: string) => {
+    submitAnswer: async (qId: string, cId: string, response: string): Promise<Result<any>> => {
       const r = await coupleService.submitDailyAnswer(qId, cId, response);
       if (r.success) {
         store.getState().addDailyAnswer(r.data);
       }
       return r;
     },
-    addJournal: async (cId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null) => {
-      const r = await coupleService.createCoupleJournal(cId, body, title, tags, imageUrls, moodId);
-      if (r.success) {
-        store.getState().prependCoupleJournal(r.data);
-      }
-      return r;
+    addJournal: async (cId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null): Promise<Result<any>> => {
+      const entryId = uuid();
+      const now = new Date().toISOString();
+      const localEntry = {
+        id: entryId,
+        coupleId: cId,
+        userId: user?.id || '',
+        title: title || null,
+        body,
+        moodId: moodId || null,
+        tags,
+        imageUrls,
+        entryDate: now.split('T')[0],
+        isPinned: 0,
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending_insert' as const,
+      };
+
+      await coupleJournalRepo.saveJournal(localEntry);
+      await enqueueMutation('couple_journals', entryId, 'insert', localEntry);
+
+      const currentUser = useAuthStore.getState().user;
+      const storeEntry = {
+        ...localEntry,
+        isPinned: false,
+        comments: [],
+        reactions: [],
+        userNickname: currentUser?.nickname || 'You',
+        userAvatarUrl: currentUser?.avatarUrl || undefined,
+      };
+      store.getState().prependCoupleJournal(storeEntry as any);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: storeEntry as any };
     },
-    updateJournal: async (entryId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null) => {
-      const r = await coupleService.updateCoupleJournal(entryId, body, title, tags, imageUrls, moodId);
-      if (r.success) {
-        store.getState().updateCoupleJournalInList(r.data);
-      }
-      return r;
+    updateJournal: async (entryId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null): Promise<Result<any>> => {
+      const journal = await coupleJournalRepo.fetchJournalById(entryId);
+      if (!journal) return { success: false, error: 'Journal entry not found' };
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...journal,
+        body,
+        title: title || null,
+        tags,
+        imageUrls,
+        moodId: moodId || null,
+        updatedAt: now,
+        syncStatus: 'pending_update' as const,
+      };
+
+      await coupleJournalRepo.saveJournal(updated);
+      await enqueueMutation('couple_journals', entryId, 'update', updated);
+
+      const currentUser = useAuthStore.getState().user;
+      const storeEntry = {
+        ...updated,
+        isPinned: !!updated.isPinned,
+        userNickname: currentUser?.nickname || 'You',
+        userAvatarUrl: currentUser?.avatarUrl || undefined,
+      };
+      store.getState().updateCoupleJournalInList(storeEntry as any);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: storeEntry as any };
     },
-    deleteJournal: async (entryId: string) => {
-      const r = await coupleService.deleteCoupleJournal(entryId);
-      if (r.success) {
-        store.getState().removeCoupleJournalFromList(entryId);
-      }
-      return r;
+    deleteJournal: async (entryId: string): Promise<Result<void>> => {
+      const now = new Date().toISOString();
+      await coupleJournalRepo.softDeleteJournal(entryId, now);
+      await enqueueMutation('couple_journals', entryId, 'delete', { id: entryId });
+      store.getState().removeCoupleJournalFromList(entryId);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: undefined };
     },
-    addComment: async (entryId: string, body: string) => {
-      const r = await coupleService.createCoupleComment(entryId, body);
-      if (r.success) {
-        await loadJournals();
+    addComment: async (entryId: string, body: string): Promise<Result<any>> => {
+      const commentId = uuid();
+      const now = new Date().toISOString();
+      const localComment = {
+        id: commentId,
+        entryId,
+        userId: user?.id || '',
+        body,
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending_insert' as const,
+      };
+
+      await coupleCommentRepo.saveComment(localComment);
+      await enqueueMutation('couple_comments', commentId, 'insert', localComment);
+
+      const currentUser = useAuthStore.getState().user;
+      const commentObj = {
+        id: commentId,
+        entryId,
+        userId: localComment.userId,
+        body,
+        createdAt: now,
+        userNickname: currentUser?.nickname || 'You',
+        userAvatarUrl: currentUser?.avatarUrl || undefined,
+      };
+
+      // Find entry in store to append comment
+      const timeline = store.getState().coupleJournals;
+      const entry = timeline.find(t => t.id === entryId);
+      if (entry) {
+        const comments = [...(entry.comments || []), commentObj];
+        store.getState().updateCoupleJournalInList({ ...entry, comments });
       }
-      return r;
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: commentObj as any };
     },
-    toggleReaction: async (entryId: string, emoji: string) => {
+    toggleReaction: async (entryId: string, emoji: string): Promise<Result<any>> => {
       const r = await coupleService.toggleCoupleReaction(entryId, emoji);
       if (r.success) {
         await loadJournals();
       }
       return r;
     },
-    addGoal: async (cId: string, title: string, description?: string, emoji?: string) => {
-      const r = await coupleService.createCoupleGoal(cId, title, description, emoji);
-      if (r.success) {
-        store.getState().prependCoupleGoal(r.data);
-      }
-      return r;
+    addGoal: async (cId: string, title: string, description?: string, emoji?: string): Promise<Result<any>> => {
+      const goalId = uuid();
+      const now = new Date().toISOString();
+      const localGoal = {
+        id: goalId,
+        coupleId: cId,
+        title,
+        description: description ?? null,
+        category: 'relationship',
+        status: 'active' as const,
+        progress: 0,
+        targetDate: null,
+        completedAt: null,
+        emoji: emoji || '🌱',
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending_insert' as const,
+      };
+
+      await coupleGoalRepo.saveGoal(localGoal);
+      await enqueueMutation('couple_goals', goalId, 'insert', localGoal);
+      store.getState().prependCoupleGoal(localGoal as any);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: localGoal as any };
     },
-    updateGoalProgress: async (goalId: string, progress: number) => {
-      const r = await coupleService.updateCoupleGoalProgress(goalId, progress);
-      if (r.success) {
-        await loadGoals();
-      }
-      return r;
+    updateGoalProgress: async (goalId: string, progress: number): Promise<Result<any>> => {
+      const goal = await coupleGoalRepo.fetchGoalById(goalId);
+      if (!goal) return { success: false, error: 'Goal not found' };
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...goal,
+        progress,
+        status: progress >= 100 ? ('completed' as const) : (goal.status as any),
+        completedAt: progress >= 100 ? now : null,
+        updatedAt: now,
+        syncStatus: 'pending_update' as const,
+      };
+
+      await coupleGoalRepo.saveGoal(updated);
+      await enqueueMutation('couple_goals', goalId, 'update', updated);
+      await loadGoals();
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: updated as any };
     },
-    updateGoal: async (goalId: string, fields: any) => {
-      const r = await coupleService.updateCoupleGoal(goalId, fields);
-      if (r.success) {
-        store.getState().updateCoupleGoalInList(r.data);
-      }
-      return r;
+    updateGoal: async (goalId: string, fields: any): Promise<Result<any>> => {
+      const goal = await coupleGoalRepo.fetchGoalById(goalId);
+      if (!goal) return { success: false, error: 'Goal not found' };
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...goal,
+        ...fields,
+        updatedAt: now,
+        syncStatus: 'pending_update' as const,
+      };
+
+      await coupleGoalRepo.saveGoal(updated);
+      await enqueueMutation('couple_goals', goalId, 'update', updated);
+      await loadGoals();
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: updated as any };
     },
-    deleteGoal: async (goalId: string) => {
-      const r = await coupleService.deleteCoupleGoal(goalId);
-      if (r.success) {
-        store.getState().removeCoupleGoalFromList(goalId);
-      }
-      return r;
+    deleteGoal: async (goalId: string): Promise<Result<void>> => {
+      const now = new Date().toISOString();
+      await coupleGoalRepo.softDeleteGoal(goalId, now);
+      await enqueueMutation('couple_goals', goalId, 'delete', { id: goalId });
+      store.getState().removeCoupleGoalFromList(goalId);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: undefined };
     },
     addMemory: async (
       cId: string, 
@@ -278,12 +501,38 @@ export function useCouple() {
       location?: string,
       mood?: string,
       memoryTime?: string
-    ) => {
-      const r = await coupleService.createCoupleMemory(cId, title, description, imageUrls, memoryDate, tags, location, mood, memoryTime);
-      if (r.success) {
-        store.getState().prependCoupleMemory(r.data);
-      }
-      return r;
+    ): Promise<Result<any>> => {
+      const memoryId = uuid();
+      const now = new Date().toISOString();
+      const localMemory = {
+        id: memoryId,
+        coupleId: cId,
+        title,
+        description: description ?? null,
+        imageUrls,
+        memoryDate: memoryDate || now.split('T')[0],
+        tags,
+        lastEditedBy: user?.id || null,
+        location: location ?? null,
+        mood: mood ?? null,
+        memoryTime: memoryTime ?? null,
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending_insert' as const,
+      };
+
+      await coupleMemoryRepo.saveMemory(localMemory);
+      await enqueueMutation('couple_memories', memoryId, 'insert', localMemory);
+
+      const currentUser = useAuthStore.getState().user;
+      const storeMemory = {
+        ...localMemory,
+        lastEditedNickname: currentUser?.nickname || 'You',
+      };
+      store.getState().prependCoupleMemory(storeMemory as any);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: storeMemory as any };
     },
     updateMemory: async (
       memoryId: string, 
@@ -295,56 +544,142 @@ export function useCouple() {
       location?: string,
       mood?: string,
       memoryTime?: string
-    ) => {
-      const r = await coupleService.updateCoupleMemory(memoryId, title, description, imageUrls, memoryDate, tags, location, mood, memoryTime);
-      if (r.success) {
-        store.getState().updateCoupleMemoryInList(r.data);
-      }
-      return r;
+    ): Promise<Result<any>> => {
+      const memory = await coupleMemoryRepo.fetchMemoryById(memoryId);
+      if (!memory) return { success: false, error: 'Memory not found' };
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...memory,
+        title,
+        description: description ?? null,
+        imageUrls,
+        memoryDate: memoryDate || memory.memoryDate,
+        tags,
+        location: location ?? null,
+        mood: mood ?? null,
+        memoryTime: memoryTime ?? null,
+        lastEditedBy: user?.id || null,
+        updatedAt: now,
+        syncStatus: 'pending_update' as const,
+      };
+
+      await coupleMemoryRepo.saveMemory(updated);
+      await enqueueMutation('couple_memories', memoryId, 'update', updated);
+
+      const currentUser = useAuthStore.getState().user;
+      const storeMemory = {
+        ...updated,
+        lastEditedNickname: currentUser?.nickname || 'You',
+      };
+      store.getState().updateCoupleMemoryInList(storeMemory as any);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: storeMemory as any };
     },
-    deleteMemory: async (memoryId: string) => {
-      const r = await coupleService.deleteCoupleMemory(memoryId);
-      if (r.success) {
-        store.getState().removeCoupleMemoryFromList(memoryId);
-      }
-      return r;
+    deleteMemory: async (memoryId: string): Promise<Result<void>> => {
+      const now = new Date().toISOString();
+      await coupleMemoryRepo.softDeleteMemory(memoryId, now);
+      await enqueueMutation('couple_memories', memoryId, 'delete', { id: memoryId });
+      store.getState().removeCoupleMemoryFromList(memoryId);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: undefined };
     },
-    addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = [], isDraft: boolean = false, parentLetterId?: string) => {
-      const r = await coupleService.createCoupleLetter(cId, subject, body, deliverAt, imageUrls, isDraft, parentLetterId);
-      if (r.success) {
-        store.getState().prependCoupleLetter(r.data);
-      }
-      return r;
+    addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = [], isDraft: boolean = false, parentLetterId?: string): Promise<Result<any>> => {
+      const letterId = uuid();
+      const now = new Date().toISOString();
+      const localLetter = {
+        id: letterId,
+        coupleId: cId,
+        senderId: user?.id || '',
+        subject,
+        body,
+        deliverAt,
+        imageUrls,
+        isRead: 0,
+        isFavorite: 0,
+        isDraft: isDraft ? 1 : 0,
+        isArchived: 0,
+        parentLetterId: parentLetterId || null,
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending_insert' as const,
+      };
+
+      await coupleLetterRepo.saveLetter(localLetter);
+      await enqueueMutation('couple_letters', letterId, 'insert', localLetter);
+
+      const currentUser = useAuthStore.getState().user;
+      const storeLetter = {
+        ...localLetter,
+        isRead: false,
+        isFavorite: false,
+        isDraft: !!localLetter.isDraft,
+        isArchived: false,
+        isUnlocked: new Date(deliverAt).getTime() <= Date.now(),
+        senderNickname: currentUser?.nickname || 'You',
+      };
+      store.getState().prependCoupleLetter(storeLetter as any);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: storeLetter as any };
     },
-    updateLetter: async (letterId: string, fields: any) => {
-      const r = await coupleService.updateCoupleLetter(letterId, fields);
-      if (r.success) {
-        await loadLetters();
-      }
-      return r;
+    updateLetter: async (letterId: string, fields: any): Promise<Result<any>> => {
+      const letter = await coupleLetterRepo.fetchLetterById(letterId);
+      if (!letter) return { success: false, error: 'Letter not found' };
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...letter,
+        ...fields,
+        updatedAt: now,
+        syncStatus: 'pending_update' as const,
+      };
+
+      await coupleLetterRepo.saveLetter(updated);
+      await enqueueMutation('couple_letters', letterId, 'update', updated);
+      await loadLetters();
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: updated as any };
     },
-    toggleLetterReaction: async (letterId: string, emoji: string) => {
+    toggleLetterReaction: async (letterId: string, emoji: string): Promise<Result<any>> => {
       const r = await coupleService.toggleCoupleLetterReaction(letterId, emoji);
       if (r.success) {
         await loadLetters();
       }
       return r;
     },
-    toggleLetterArchive: async (letterId: string, currentVal: boolean) => {
-      const r = await coupleService.toggleCoupleLetterArchive(letterId, currentVal);
-      if (r.success) {
-        await loadLetters();
-      }
-      return r;
+    toggleLetterArchive: async (letterId: string, currentVal: boolean): Promise<Result<void>> => {
+      const letter = await coupleLetterRepo.fetchLetterById(letterId);
+      if (!letter) return { success: false, error: 'Letter not found' };
+
+      const now = new Date().toISOString();
+      const updated = {
+        ...letter,
+        isArchived: !currentVal,
+        updatedAt: now,
+        syncStatus: 'pending_update' as const,
+      };
+
+      await coupleLetterRepo.saveLetter(updated);
+      await enqueueMutation('couple_letters', letterId, 'update', updated);
+      await loadLetters();
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: undefined };
     },
-    deleteLetter: async (letterId: string) => {
-      const r = await coupleService.deleteCoupleLetter(letterId);
-      if (r.success) {
-        store.getState().removeCoupleLetterFromList(letterId);
-      }
-      return r;
+    deleteLetter: async (letterId: string): Promise<Result<void>> => {
+      const now = new Date().toISOString();
+      await coupleLetterRepo.softDeleteLetter(letterId, now);
+      await enqueueMutation('couple_letters', letterId, 'delete', { id: letterId });
+      store.getState().removeCoupleLetterFromList(letterId);
+
+      processSyncQueue().catch(err => console.error('[Sync] Queue processing error:', err));
+      return { success: true, data: undefined };
     },
-    addEvent: async (cId: string, title: string, description: string | undefined, eventDate: string, eventType: any) => {
+    addEvent: async (cId: string, title: string, description: string | undefined, eventDate: string, eventType: any): Promise<Result<any>> => {
       const r = await coupleService.createRelationshipEvent(cId, title, description, eventDate, eventType);
       if (r.success) {
         store.getState().prependRelationshipEvent(r.data);

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Animated } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { processSyncQueue } from '@shared/db/sync';
+import { processSyncQueue, updateStoreSyncState } from '@shared/db/sync';
 
 interface NetworkContextType {
   isConnected: boolean;
@@ -17,25 +17,56 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isConnected, setIsConnected] = useState(true);
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(100)).current;
+  const wasConnectedRef = useRef<boolean | null>(null);
 
   useEffect(() => {
+    // Hydrate store sync count on startup (both online and offline)
+    updateStoreSyncState().catch(err => console.error('[NetworkProvider] Failed initial sync state hydration:', err));
+
+    let syncTimeout: NodeJS.Timeout | null = null;
+    const triggerSyncDebounced = () => {
+      if (syncTimeout) clearTimeout(syncTimeout);
+      syncTimeout = setTimeout(() => {
+        processSyncQueue().catch(err => console.error('Failed to sync outbox queue:', err));
+      }, 1000); // 1-second debounce
+    };
+
     NetInfo.fetch().then(state => {
       const online = state.isConnected ?? true;
       setIsConnected(online);
+      wasConnectedRef.current = online;
       if (online) {
-        processSyncQueue().catch(err => console.error('Failed to sync outbox queue:', err));
+        triggerSyncDebounced();
       }
     });
 
     const unsubscribe = NetInfo.addEventListener(state => {
       const online = state.isConnected ?? true;
+      const wasOnline = wasConnectedRef.current;
       setIsConnected(online);
-      if (online) {
-        processSyncQueue().catch(err => console.error('Failed to sync outbox queue:', err));
+      wasConnectedRef.current = online;
+
+      // Trigger sync only on transition from offline to online
+      if (online && wasOnline === false) {
+        console.log('[NetworkProvider] Network transition detected: offline -> online. Triggering sync.');
+        triggerSyncDebounced();
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (syncTimeout) clearTimeout(syncTimeout);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const interval = setInterval(() => {
+      processSyncQueue().catch(err => console.error('Failed periodic sync:', err));
+    }, 30000); // every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [isConnected]);
 
   useEffect(() => {
     Animated.timing(slideAnim, {

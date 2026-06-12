@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   TouchableOpacityProps,
   View,
+  Animated,
 } from 'react-native';
 import { Colors, Radii, Sizing, FontSize, FontWeight, Space } from '@shared/constants';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useTextScale } from '@shared/hooks';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize    = 'sm' | 'md' | 'lg';
@@ -37,84 +38,79 @@ const KamiButton: React.FC<KamiButtonProps> = ({
   ...rest
 }) => {
   const { colors } = useTheme();
+  const { scaleSize } = useTextScale();
   const h  = HEIGHT[size];
-  const fs = FONT[size];
+  const fs = scaleSize(FONT[size]);
   const w  = fullWidth ? '100%' : undefined;
 
-  if (variant === 'primary') {
-    return (
-      <TouchableOpacity
-        activeOpacity={0.82}
-        disabled={disabled || loading}
-        style={[styles.base, { backgroundColor: colors.primary }, { height: h, width: w }, disabled && styles.primaryDisabled, style]}
-        accessibilityRole="button"
-        {...rest}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <View style={styles.row}>
-            {icon ? <Text style={[styles.primaryLabel, { fontSize: fs + 2 }]}>{icon}</Text> : null}
-            <Text style={[styles.primaryLabel, { fontSize: fs }]}>{label}</Text>
-            <Text style={styles.arrow}>›</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(1)).current;
 
-  if (variant === 'secondary') {
-    return (
-      <TouchableOpacity
-        activeOpacity={0.78}
-        disabled={disabled || loading}
-        style={[styles.base, { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: 'transparent' }, { height: h, width: w }, style]}
-        accessibilityRole="button"
-        {...rest}
-      >
-        {loading ? (
-          <ActivityIndicator color={colors.primary} size="small" />
-        ) : (
-          <View style={styles.row}>
-            {icon ? <Text style={[styles.secondaryLabel, { color: colors.primary }, { fontSize: fs + 2 }]}>{icon}</Text> : null}
-            <Text style={[styles.secondaryLabel, { color: colors.primary }, { fontSize: fs }]}>{label}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }
+  const handlePressIn = () => {
+    const targetScale = variant === 'danger' ? 0.95 : 0.97;
+    const targetOpacity = variant === 'primary' ? 0.85 : 1.0;
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: targetScale, duration: 100, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: targetOpacity, duration: 100, useNativeDriver: true })
+    ]).start();
+  };
 
-  if (variant === 'ghost') {
-    return (
-      <TouchableOpacity
-        activeOpacity={0.6}
-        disabled={disabled}
-        style={[{ height: h, justifyContent: 'center', alignItems: 'center' }, style]}
-        accessibilityRole="button"
-        {...rest}
-      >
-        <View style={styles.row}>
-          {icon ? <Text style={[styles.ghostLabel, { color: colors.primary }, { fontSize: fs + 2 }]}>{icon}</Text> : null}
-          <Text style={[styles.ghostLabel, { color: colors.primary }, { fontSize: fs }]}>{label}</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
+  const handlePressOut = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: 1.0, duration: 100, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1.0, duration: 100, useNativeDriver: true })
+    ]).start();
+  };
 
-  // danger
+  const renderContent = () => {
+    if (loading) {
+      return <ActivityIndicator color={variant === 'secondary' || variant === 'ghost' ? colors.primary : '#fff'} size="small" />;
+    }
+    
+    return (
+      <View style={styles.row}>
+        {icon ? (
+          <Text style={[
+            variant === 'primary' && styles.primaryLabel,
+            variant === 'secondary' && [styles.secondaryLabel, { color: colors.primary }],
+            variant === 'ghost' && [styles.ghostLabel, { color: colors.primary }],
+            variant === 'danger' && styles.primaryLabel,
+            { fontSize: fs + scaleSize(2) }
+          ]}>{icon}</Text>
+        ) : null}
+        <Text style={[
+          variant === 'primary' && styles.primaryLabel,
+          variant === 'secondary' && [styles.secondaryLabel, { color: colors.primary }],
+          variant === 'ghost' && [styles.ghostLabel, { color: colors.primary }],
+          variant === 'danger' && styles.primaryLabel,
+          { fontSize: fs }
+        ]}>{label}</Text>
+        {variant === 'primary' ? <Text style={[styles.arrow, { fontSize: scaleSize(FontSize.lg) }]}>›</Text> : null}
+      </View>
+    );
+  };
+
   return (
     <TouchableOpacity
-      activeOpacity={0.82}
+      activeOpacity={1}
       disabled={disabled || loading}
-      style={[styles.base, styles.danger, { height: h, width: w }, style]}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[
+        styles.base,
+        variant === 'primary' && [{ backgroundColor: colors.primary }, disabled && styles.primaryDisabled],
+        variant === 'secondary' && { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: 'transparent' },
+        variant === 'ghost' && { backgroundColor: 'transparent' },
+        variant === 'danger' && styles.danger,
+        { height: h, width: w },
+        style
+      ]}
       accessibilityRole="button"
       {...rest}
     >
-      {loading ? (
-        <ActivityIndicator color="#fff" size="small" />
-      ) : (
-        <Text style={[styles.primaryLabel, { fontSize: fs }]}>{label}</Text>
-      )}
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: opacityAnim, width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', flexDirection: 'row' }}>
+        {renderContent()}
+      </Animated.View>
     </TouchableOpacity>
   );
 };

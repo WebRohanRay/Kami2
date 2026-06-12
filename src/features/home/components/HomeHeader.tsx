@@ -156,7 +156,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
         <View style={styles.singlesStatCard}>
           <Text style={{ fontSize: 22 }}>🔥</Text>
           <View>
-            <KamiText style={styles.singlesStatNum} bold>{streak?.currentStreak ?? 0}</KamiText>
+            <KamiText style={[styles.singlesStatNum, { color: '#D97706' }]} bold>{streak?.currentStreak ?? 0}</KamiText>
             <KamiText variant="caption" color={Colors.textMuted}>Day Streak</KamiText>
           </View>
         </View>
@@ -391,8 +391,9 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   headerMetaText: {
-    fontSize: 9,
-    fontWeight: '600',
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    fontWeight: '500',
     letterSpacing: 0.1,
   },
   headerActionsRow: {
@@ -478,7 +479,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.03)',
   },
   singlesStatNum: {
-    fontSize: FontSize.lg + 2,
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: FontSize.xl,
+    fontWeight: '600',
     color: Colors.textPrimary,
+    lineHeight: 32,
   },
 });

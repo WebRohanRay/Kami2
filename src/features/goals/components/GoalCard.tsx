@@ -6,11 +6,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Vibration,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { Colors, FontSize, Radii, Space, Shadows } from '@shared/constants';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useTextScale } from '@shared/hooks';
 import type { Goal } from '@features/home/types';
 import type { CoupleGoal } from '@features/couple/types';
 import { CATEGORIES, STATUS_LABELS, daysLeft } from './utils';
@@ -31,6 +32,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
   completed,
 }) => {
   const { colors } = useTheme();
+  const { scaleSize } = useTextScale();
   const sc = useRef(new Animated.Value(1)).current;
   const cat = CATEGORIES.find(c => c.id === goal.category);
   const imageUrl = 'imageUrl' in goal ? (goal as any).imageUrl : null;
@@ -162,14 +164,14 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         {!completed && (
           <View style={styles.controls}>
             <View style={{ flexDirection: 'row', gap: 4 }}>
-              <TouchableOpacity style={styles.ctrlBtnCompact} onPress={() => onProgress(goal, -10)} disabled={goal.progress === 0}>
-                <KamiText style={styles.ctrlTextCompact}>-10%</KamiText>
+              <TouchableOpacity style={styles.ctrlBtnCompact} onPress={() => { Vibration.vibrate(15); onProgress(goal, -10); }} disabled={goal.progress === 0}>
+                <KamiText style={[styles.ctrlTextCompact, { fontSize: scaleSize(9) }]}>-10%</KamiText>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.ctrlBtnCompact} onPress={() => onProgress(goal, -5)} disabled={goal.progress === 0}>
-                <KamiText style={styles.ctrlTextCompact}>-5%</KamiText>
+              <TouchableOpacity style={styles.ctrlBtnCompact} onPress={() => { Vibration.vibrate(15); onProgress(goal, -5); }} disabled={goal.progress === 0}>
+                <KamiText style={[styles.ctrlTextCompact, { fontSize: scaleSize(9) }]}>-5%</KamiText>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.ctrlBtnCompact} onPress={() => onProgress(goal, -2)} disabled={goal.progress === 0}>
-                <KamiText style={styles.ctrlTextCompact}>-2%</KamiText>
+              <TouchableOpacity style={styles.ctrlBtnCompact} onPress={() => { Vibration.vibrate(15); onProgress(goal, -2); }} disabled={goal.progress === 0}>
+                <KamiText style={[styles.ctrlTextCompact, { fontSize: scaleSize(9) }]}>-2%</KamiText>
               </TouchableOpacity>
             </View>
             <View style={{ flex: 1, alignItems: 'center' }}>
@@ -179,14 +181,14 @@ export const GoalCard: React.FC<GoalCardProps> = ({
               }
             </View>
             <View style={{ flexDirection: 'row', gap: 4 }}>
-              <TouchableOpacity style={[styles.ctrlBtnCompact, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '33' }]} onPress={() => onProgress(goal, 2)} disabled={goal.progress === 100}>
-                <KamiText style={[styles.ctrlTextCompact, { color: colors.primary }]}>+2%</KamiText>
+              <TouchableOpacity style={[styles.ctrlBtnCompact, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '33' }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 2); }} disabled={goal.progress === 100}>
+                <KamiText style={[styles.ctrlTextCompact, { color: colors.primary, fontSize: scaleSize(9) }]}>+2%</KamiText>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.ctrlBtnCompact, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '33' }]} onPress={() => onProgress(goal, 5)} disabled={goal.progress === 100}>
-                <KamiText style={[styles.ctrlTextCompact, { color: colors.primary }]}>+5%</KamiText>
+              <TouchableOpacity style={[styles.ctrlBtnCompact, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '33' }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 5); }} disabled={goal.progress === 100}>
+                <KamiText style={[styles.ctrlTextCompact, { color: colors.primary, fontSize: scaleSize(9) }]}>+5%</KamiText>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.ctrlBtnCompact, { backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={() => onProgress(goal, 10)} disabled={goal.progress === 100}>
-                <KamiText style={[styles.ctrlTextCompact, { color: '#fff' }]}>+10%</KamiText>
+              <TouchableOpacity style={[styles.ctrlBtnCompact, { backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 10); }} disabled={goal.progress === 100}>
+                <KamiText style={[styles.ctrlTextCompact, { color: '#fff', fontSize: scaleSize(9) }]}>+10%</KamiText>
               </TouchableOpacity>
             </View>
           </View>

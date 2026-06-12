@@ -85,13 +85,13 @@ const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
         await letterRepo.saveLetter(updatedFields);
       }
 
-      // Re-enqueue mutation to push local changes to server
-      await enqueueMutation(entityType, entityId, 'update', updatedFields);
-
-      // Clear the previously failed conflict outbox item
+      // Clear the previously failed conflict outbox item first
       await db.delete(schema.outboxMutations).where(
         eq(schema.outboxMutations.entityId, entityId)
       );
+
+      // Re-enqueue mutation to push local changes to server
+      await enqueueMutation(entityType, entityId, 'update', updatedFields);
 
       // Re-trigger sync queue
       processSyncQueue().catch(e => console.error('Failed to run sync queue:', e));

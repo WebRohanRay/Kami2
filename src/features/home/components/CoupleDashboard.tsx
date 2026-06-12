@@ -121,6 +121,16 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
   const { colors } = useTheme();
   const name = user?.nickname ? user.nickname.split(' ')[0] : 'You';
 
+  const goalProgressAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(goalProgressAnim, {
+      toValue: goalProgress || 0,
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
+  }, [goalProgress]);
+
   return (
     <View style={styles.container}>
       {/* ── 1. RELATIONSHIP STATUS & TIMER CARD ───── */}
@@ -141,18 +151,18 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
             <View style={styles.elegantMainRow}>
               {durationObj.years > 0 && (
                 <View style={styles.elegantMainUnit}>
-                  <KamiText style={[styles.elegantMainVal, { color: colors.primary }]} bold>{durationObj.years}</KamiText>
+                  <KamiText style={[styles.elegantMainVal, { color: colors.accent }]} bold>{durationObj.years}</KamiText>
                   <KamiText style={styles.elegantMainLbl}>years</KamiText>
                 </View>
               )}
               {durationObj.months > 0 && (
                 <View style={styles.elegantMainUnit}>
-                  <KamiText style={[styles.elegantMainVal, { color: colors.primary }]} bold>{durationObj.months}</KamiText>
+                  <KamiText style={[styles.elegantMainVal, { color: colors.accent }]} bold>{durationObj.months}</KamiText>
                   <KamiText style={styles.elegantMainLbl}>months</KamiText>
                 </View>
               )}
               <View style={styles.elegantMainUnit}>
-                <KamiText style={[styles.elegantMainVal, { color: colors.primary }]} bold>{durationObj.days}</KamiText>
+                <KamiText style={[styles.elegantMainVal, { color: colors.accent }]} bold>{durationObj.days}</KamiText>
                 <KamiText style={styles.elegantMainLbl}>days</KamiText>
               </View>
             </View>
@@ -645,7 +655,18 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
               <View style={styles.goalWidgetProgressRow}>
                 <KamiText style={styles.progressPercentText} bold>{goalProgress}% Complete</KamiText>
                 <View style={styles.progressBarTrack}>
-                  <View style={[styles.progressBarFill, { width: `${goalProgress}%`, backgroundColor: colors.primary }]} />
+                  <Animated.View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        width: goalProgressAnim.interpolate({
+                          inputRange: [0, 100],
+                          outputRange: ['0%', '100%'],
+                        }),
+                        backgroundColor: colors.primary,
+                      },
+                    ]}
+                  />
                 </View>
               </View>
             </>
@@ -828,19 +849,19 @@ const styles = StyleSheet.create({
     marginBottom: Space[1],
   },
   elegantMainUnit: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 3,
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
   },
   elegantMainVal: {
-    fontSize: 20,
-    fontWeight: FontWeight.bold,
-    fontFamily: FontFamily.display,
+    fontSize: 36,
+    fontWeight: '600',
+    fontFamily: 'PlusJakartaSans-SemiBold',
   },
   elegantMainLbl: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    fontWeight: FontWeight.semibold,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
   elegantDivider: {
     width: '60%',
@@ -1157,8 +1178,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   timelineItemTime: {
-    fontSize: 9,
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: FontSize.xs,
     color: Colors.textMuted,
+    fontWeight: '400',
   },
   timelineItemDesc: {
     fontSize: FontSize.xs,

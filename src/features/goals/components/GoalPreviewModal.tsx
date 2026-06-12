@@ -11,11 +11,12 @@ import {
   TouchableOpacity,
   View,
   StatusBar as RNStatusBar,
+  Vibration,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { Colors, FontSize, Radii, Space, Shadows } from '@shared/constants';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useTextScale } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
 import type { Goal } from '@features/home/types';
 import type { CoupleGoal } from '@features/couple/types';
@@ -39,6 +40,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
   onProgress,
 }) => {
   const { colors } = useTheme();
+  const { scaleSize } = useTextScale();
   const user = useAuthStore(s => s.user);
 
   if (!goal) return null;
@@ -84,8 +86,9 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[gp.root, { backgroundColor: colors.pageBg }]}>
-        <View style={gp.header}>
-          <KamiText variant="title">Preview Goal</KamiText>
+        {/* Modern Borderless Header */}
+        <View style={[gp.header, { borderBottomColor: 'rgba(28,25,23,0.06)' }]}>
+          <KamiText variant="title" bold>Preview Goal</KamiText>
           <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
             <TouchableOpacity
               onPress={handleOptionsPress}
@@ -93,71 +96,80 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
               accessibilityRole="button"
               accessibilityLabel="Options"
             >
-              <Text style={{ fontSize: 18, color: colors.primary, fontWeight: 'bold' }}>☰</Text>
+              <Text style={{ fontSize: 16, color: colors.primary, fontWeight: 'bold' }}>•••</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={gp.closeBtn} accessibilityRole="button" accessibilityLabel="Close Preview">
-              <KamiText variant="label" color={Colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
+            <TouchableOpacity onPress={onClose} style={[gp.closeBtn, { backgroundColor: 'rgba(28,25,23,0.06)' }]} accessibilityRole="button" accessibilityLabel="Close Preview">
+              <KamiText variant="caption" color={Colors.textPrimary} bold>Close</KamiText>
             </TouchableOpacity>
           </View>
         </View>
 
         <ScrollView contentContainerStyle={gp.scroll} showsVerticalScrollIndicator={false}>
-          {/* Cover Photo */}
-          {imageUrl && (
+          {/* Immersive Cover Photo */}
+          {imageUrl ? (
             <View style={gp.coverWrap}>
               <Image source={{ uri: imageUrl }} style={gp.cover} />
-              <View style={gp.coverOverlay} />
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.4)']}
+                style={StyleSheet.absoluteFillObject}
+              />
+            </View>
+          ) : (
+            <View style={[gp.coverPlaceholder, { backgroundColor: colors.creamDeep }]}>
+              <Text style={{ fontSize: 44, opacity: 0.85 }}>🎯</Text>
             </View>
           )}
 
-          {/* Goal title & emoji */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[2] }}>
-            <Text style={{ fontSize: 36 }}>{goal.emoji}</Text>
-            <KamiText variant="subtitle" bold style={[gp.title, { flex: 1 }]}>
-              {goal.title}
-            </KamiText>
-          </View>
-
-          {/* Description */}
-          {goal.description && (
-            <View style={gp.descBox}>
-              <KamiText variant="body" color={Colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 22 }}>
-                "{goal.description}"
+          {/* Premium Goal Card details */}
+          <View style={gp.cardDetails}>
+            <View style={gp.titleRow}>
+              <Text style={gp.emojiBadge}>{goal.emoji}</Text>
+              <KamiText variant="title" bold style={gp.title}>
+                {goal.title}
               </KamiText>
             </View>
-          )}
 
-          {/* Metadata chips */}
-          <View style={gp.metaRow}>
-            {cat && (
-              <View style={[gp.badge, { backgroundColor: colors.primary + '11' }]}>
-                <KamiText variant="caption" color={colors.primary} bold>{cat.emoji} {cat.label}</KamiText>
-              </View>
-            )}
-            {goal.targetDate && (
-              <View style={[gp.badge, { backgroundColor: '#F1F5F9' }]}>
-                <KamiText variant="caption" color={Colors.textSecondary} bold>
-                  🗓 Due: {new Date(goal.targetDate).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    timeZone: user?.timezone ?? 'UTC',
-                  })}
+            {/* Description quote styling */}
+            {goal.description && (
+              <View style={[gp.descBox, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primary + '1a' }]}>
+                <KamiText variant="body" color={Colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 22 }}>
+                  "{goal.description}"
                 </KamiText>
               </View>
             )}
+
+            {/* Metadata tags */}
+            <View style={gp.metaRow}>
+              {cat && (
+                <View style={[gp.badge, { backgroundColor: colors.primary + '15' }]}>
+                  <KamiText variant="caption" color={colors.primary} bold>{cat.emoji} {cat.label}</KamiText>
+                </View>
+              )}
+              {goal.targetDate && (
+                <View style={[gp.badge, { backgroundColor: 'rgba(28,25,23,0.05)' }]}>
+                  <KamiText variant="caption" color={Colors.textSecondary} bold>
+                    🗓 Due {new Date(goal.targetDate).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      timeZone: user?.timezone ?? 'UTC',
+                    })}
+                  </KamiText>
+                </View>
+              )}
+            </View>
           </View>
 
-          {/* Progress Section */}
-          <View style={gp.progressSection}>
+          {/* Botanical Vine Progress Section */}
+          <View style={[gp.progressCard, { backgroundColor: '#FFFFFF', borderColor: colors.creamMid }]}>
             <View style={gp.progressHeader}>
               <View style={gp.stageIndicator}>
-                <Text style={{ fontSize: 16 }}>{getStageEmoji()}</Text>
+                <Text style={{ fontSize: 18 }}>{getStageEmoji()}</Text>
                 <KamiText variant="label" bold color={completed ? Colors.success : colors.primary}>
                   {getStageName()}
                 </KamiText>
               </View>
-              <KamiText variant="label" bold color={completed ? Colors.success : colors.primary}>
+              <KamiText variant="title" bold color={completed ? Colors.success : colors.primary}>
                 {goal.progress}%
               </KamiText>
             </View>
@@ -197,34 +209,28 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
             </View>
           </View>
 
-          {/* Stepper controls if active */}
+          {/* Premium Stepper controls */}
           {!completed && (
             <View style={gp.stepperContainer}>
-              <KamiText variant="overline" style={{ marginBottom: Space[2] }}>Adjust Progress</KamiText>
+              <KamiText variant="overline" style={{ marginBottom: Space[3], color: Colors.textSecondary }}>Adjust Progress</KamiText>
               <View style={gp.stepperRow}>
-                {/* Decrements */}
+                {/* Decrement group */}
                 <View style={gp.stepperGroup}>
-                  <TouchableOpacity style={gp.stepperBtn} onPress={() => onProgress(goal, -10)} disabled={goal.progress === 0}>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>-10%</KamiText>
+                  <TouchableOpacity style={gp.stepperBtn} onPress={() => { Vibration.vibrate(15); onProgress(goal, -10); }} disabled={goal.progress === 0}>
+                    <KamiText variant="caption" color={Colors.textSecondary} bold>-10</KamiText>
                   </TouchableOpacity>
-                  <TouchableOpacity style={gp.stepperBtn} onPress={() => onProgress(goal, -5)} disabled={goal.progress === 0}>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>-5%</KamiText>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={gp.stepperBtn} onPress={() => onProgress(goal, -2)} disabled={goal.progress === 0}>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>-2%</KamiText>
+                  <TouchableOpacity style={gp.stepperBtn} onPress={() => { Vibration.vibrate(15); onProgress(goal, -5); }} disabled={goal.progress === 0}>
+                    <KamiText variant="caption" color={Colors.textSecondary} bold>-5</KamiText>
                   </TouchableOpacity>
                 </View>
 
-                {/* Increments */}
+                {/* Increment group */}
                 <View style={gp.stepperGroup}>
-                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '33' }]} onPress={() => onProgress(goal, 2)} disabled={goal.progress === 100}>
-                    <KamiText variant="caption" color={colors.primary} bold>+2%</KamiText>
+                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '22' }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 5); }} disabled={goal.progress === 100}>
+                    <KamiText variant="caption" color={colors.primary} bold>+5</KamiText>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '33' }]} onPress={() => onProgress(goal, 5)} disabled={goal.progress === 100}>
-                    <KamiText variant="caption" color={colors.primary} bold>+5%</KamiText>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={() => onProgress(goal, 10)} disabled={goal.progress === 100}>
-                    <KamiText variant="caption" color="#fff" bold>+10%</KamiText>
+                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 10); }} disabled={goal.progress === 100}>
+                    <KamiText variant="caption" color="#fff" bold>+10</KamiText>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -232,10 +238,13 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
           )}
 
           {completed && (
-            <View style={gp.completedBadge}>
-              <Text style={{ fontSize: 18 }}>🌸</Text>
-              <KamiText variant="body" color={Colors.success} bold>Bloomed & Completed Goal</KamiText>
-            </View>
+            <LinearGradient
+              colors={['#ECFDF5', '#D1FAE5']}
+              style={[gp.completedBadge, { borderColor: '#A7F3D0' }]}
+            >
+              <Text style={{ fontSize: 20 }}>🌸</Text>
+              <KamiText variant="body" color={Colors.success} bold>Bloomed & Completed Goal!</KamiText>
+            </LinearGradient>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -245,29 +254,39 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
 
 const gp = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
-  menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
-  closeBtn: { padding: Space[2] },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 20 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1 },
+  menuBtn: { paddingVertical: Space[2], paddingHorizontal: Space[3], borderRadius: Radii.md, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { paddingVertical: Space[2], paddingHorizontal: Space[4], borderRadius: Radii.full, minWidth: 60, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: Space[5], gap: Space[5] },
-  title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
-  descBox: { padding: Space[4], backgroundColor: Colors.cardBg, borderRadius: Radii.card, borderWidth: 1, borderColor: Colors.border + '22' },
+  
+  coverWrap: { width: '100%', height: 200, borderRadius: Radii.card, overflow: 'hidden', position: 'relative', ...Shadows.md },
+  cover: { width: '100%', height: '100%', resizeMode: 'cover' },
+  coverPlaceholder: { width: '100%', height: 120, borderRadius: Radii.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(28,25,23,0.06)' },
+  
+  cardDetails: { gap: Space[3] },
+  titleRow: { flexDirection: 'row', gap: Space[3], alignItems: 'center' },
+  emojiBadge: { fontSize: 38, width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFFFFF', textAlign: 'center', lineHeight: 50, ...Shadows.sm, borderWidth: 1, borderColor: 'rgba(28,25,23,0.06)' },
+  title: { fontSize: 20, lineHeight: 28, color: Colors.textPrimary, flex: 1 },
+  
+  descBox: { padding: Space[4], borderRadius: Radii.card, borderWidth: 1, borderStyle: 'dashed' },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2] },
-  badge: { paddingVertical: 4, paddingHorizontal: Space[3], borderRadius: Radii.full },
-  progressSection: { marginVertical: Space[2] },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[2] },
+  badge: { paddingVertical: Space[1], paddingHorizontal: Space[3], borderRadius: Radii.full, flexDirection: 'row', alignItems: 'center' },
+  
+  progressCard: { padding: Space[4], borderRadius: Radii.card, borderWidth: 1.5, ...Shadows.sm },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
   stageIndicator: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  vineTrackContainer: { height: 8, borderRadius: 4, backgroundColor: '#E2E8F0', position: 'relative', marginVertical: Space[4] },
-  vineBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#E2E8F0', borderRadius: 4 },
-  vineFill: { height: '100%', borderRadius: 4 },
-  vineNotch: { position: 'absolute', top: -8, width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center', transform: [{ translateX: -12 }], ...Shadows.sm },
+  
+  vineTrackContainer: { height: 10, borderRadius: 5, backgroundColor: '#E2E8F0', position: 'relative', marginVertical: Space[4] },
+  vineBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#E2E8F0', borderRadius: 5 },
+  vineFill: { height: '100%', borderRadius: 5 },
+  vineNotch: { position: 'absolute', top: -9, width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center', transform: [{ translateX: -14 }], ...Shadows.sm },
   vineNotchActive: { backgroundColor: '#F0FDF4', borderWidth: 2, ...Shadows.md },
-  vineNotchEmoji: { fontSize: 12 },
-  stepperContainer: { marginTop: Space[2] },
-  stepperRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Space[3] },
-  stepperGroup: { flexDirection: 'row', gap: 6, flex: 1, justifyContent: 'flex-start' },
-  stepperBtn: { flex: 1, height: 40, borderRadius: Radii.md, borderWidth: 1, borderColor: '#FFE3E3', backgroundColor: '#FFF5F5', alignItems: 'center', justifyContent: 'center' },
-  completedBadge: { flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: '#d1fae5', borderRadius: Radii.card, paddingHorizontal: Space[4], paddingVertical: Space[3], alignSelf: 'flex-start', borderWidth: 1.5, borderColor: '#6ee7b7' },
-  coverWrap: { width: '100%', height: 160, borderRadius: Radii.card, overflow: 'hidden', position: 'relative', marginBottom: Space[2] },
-  cover: { width: '100%', height: '100%' },
-  coverOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)' },
+  vineNotchEmoji: { fontSize: 13 },
+  
+  stepperContainer: { gap: Space[2] },
+  stepperRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Space[4] },
+  stepperGroup: { flexDirection: 'row', gap: Space[2], flex: 1 },
+  stepperBtn: { flex: 1, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: 'rgba(28,25,23,0.08)', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', ...Shadows.sm },
+  
+  completedBadge: { flexDirection: 'row', alignItems: 'center', gap: Space[3], borderRadius: Radii.card, paddingHorizontal: Space[4], paddingVertical: Space[4], borderWidth: 1.5, ...Shadows.md },
 });

@@ -12,7 +12,7 @@ function statusFor(user: AuthUser, online: boolean = true): AuthStatus {
   return online ? 'authenticated_online' : 'authenticated_offline';
 }
 
-async function hydrateUser(
+export async function hydrateUser(
   supabaseUser: Awaited<ReturnType<typeof authService.getSession>>['data']['session'] extends null
     ? never
     : NonNullable<Awaited<ReturnType<typeof authService.getSession>>['data']['session']>['user'],

@@ -1,9 +1,10 @@
 import React from 'react';
-import { Text as RNText, TextProps, StyleSheet, Platform } from 'react-native';
-import { Colors, FontFamily, FontSize, FontWeight, LineHeight } from '@shared/constants';
+import { Text as RNText, TextProps, StyleSheet } from 'react-native';
+import { Colors, FontSize, FontWeight } from '@shared/constants';
+import { useTextScale } from '@shared/hooks';
 
 type Variant =
-  | 'display'    // large screen titles (Georgia / Playfair)
+  | 'display'    // large screen titles (Lora-Regular/SemiBold)
   | 'title'      // section headings
   | 'subtitle'   // sub-headings
   | 'body'       // default body
@@ -19,13 +20,13 @@ interface KamiTextProps extends TextProps {
 }
 
 const variantStyles: Record<Variant, object> = {
-  display:  { fontSize: FontSize['2xl'], fontFamily: Platform.OS === 'ios' ? FontFamily.display : 'serif', fontWeight: FontWeight.bold,     lineHeight: FontSize['2xl']  * LineHeight.tight  },
-  title:    { fontSize: FontSize.xl,    fontFamily: Platform.OS === 'ios' ? FontFamily.display : 'serif', fontWeight: FontWeight.bold,     lineHeight: FontSize.xl     * LineHeight.snug   },
-  subtitle: { fontSize: FontSize.md,    fontFamily: FontFamily.body,                                       fontWeight: FontWeight.semibold, lineHeight: FontSize.md     * LineHeight.snug   },
-  body:     { fontSize: FontSize.base,  fontFamily: FontFamily.body,                                       fontWeight: FontWeight.regular,  lineHeight: FontSize.base   * LineHeight.normal },
-  caption:  { fontSize: FontSize.sm,    fontFamily: FontFamily.body,                                       fontWeight: FontWeight.regular,  lineHeight: FontSize.sm     * LineHeight.normal },
-  label:    { fontSize: FontSize.base,  fontFamily: FontFamily.body,                                       fontWeight: FontWeight.semibold, lineHeight: FontSize.base   * LineHeight.snug   },
-  overline: { fontSize: FontSize.xs,    fontFamily: FontFamily.body,                                       fontWeight: FontWeight.bold,     letterSpacing: 1.2, textTransform: 'uppercase' },
+  display:  { fontSize: FontSize.md,    lineHeight: 24, letterSpacing: -0.5 },
+  title:    { fontSize: FontSize.base,  lineHeight: 22, letterSpacing: 0.3  },
+  subtitle: { fontSize: FontSize.sm,    lineHeight: 18                      },
+  body:     { fontSize: FontSize.base,  lineHeight: 26                      },
+  caption:  { fontSize: FontSize.xs,    lineHeight: 17                      },
+  label:    { fontSize: FontSize.base,  lineHeight: 22                      },
+  overline: { fontSize: FontSize.xs,    lineHeight: 17, letterSpacing: 1.5, textTransform: 'uppercase' },
 };
 
 const defaultColors: Record<Variant, string> = {
@@ -38,6 +39,37 @@ const defaultColors: Record<Variant, string> = {
   overline: Colors.textMuted,
 };
 
+const getFontAndWeight = (variant: Variant, bold?: boolean, customFontWeight?: string) => {
+  const isSerif = variant === 'display' || variant === 'title';
+  
+  let weight: '400' | '500' | '600' = '400';
+  if (customFontWeight === '500' || customFontWeight === 'medium') {
+    weight = '500';
+  } else if (bold || customFontWeight === '600' || customFontWeight === 'semibold' || customFontWeight === '700' || customFontWeight === 'bold' || customFontWeight === '800' || customFontWeight === 'extrabold') {
+    weight = '600';
+  } else {
+    // Default weights for variants
+    if (variant === 'subtitle' || variant === 'label' || variant === 'overline') {
+      weight = '500';
+    } else if (variant === 'display' || variant === 'title') {
+      weight = '600';
+    }
+  }
+
+  let fontFamily = 'PlusJakartaSans-Regular';
+  if (isSerif) {
+    if (weight === '600') fontFamily = 'Lora-SemiBold';
+    else if (weight === '500') fontFamily = 'Lora-Medium';
+    else fontFamily = 'Lora-Regular';
+  } else {
+    if (weight === '600') fontFamily = 'PlusJakartaSans-SemiBold';
+    else if (weight === '500') fontFamily = 'PlusJakartaSans-Medium';
+    else fontFamily = 'PlusJakartaSans-Regular';
+  }
+
+  return { fontFamily, fontWeight: weight };
+};
+
 const KamiText: React.FC<KamiTextProps> = ({
   variant = 'body',
   color,
@@ -46,18 +78,34 @@ const KamiText: React.FC<KamiTextProps> = ({
   style,
   children,
   ...rest
-}) => (
-  <RNText
-    style={[
-      variantStyles[variant],
-      { color: color ?? defaultColors[variant], textAlign: align },
-      bold ? { fontWeight: FontWeight.bold } : null,
-      style,
-    ]}
-    {...rest}
-  >
-    {children}
-  </RNText>
-);
+}) => {
+  const { multiplier } = useTextScale();
+  const flatStyle = StyleSheet.flatten(style) || {};
+  const customFontWeight = flatStyle.fontWeight ? String(flatStyle.fontWeight) : undefined;
+  
+  const fontProps = getFontAndWeight(variant, bold, customFontWeight);
+
+  const baseVariantStyle = variantStyles[variant] as { fontSize: number; lineHeight?: number };
+  const customFontSize = flatStyle.fontSize ?? baseVariantStyle.fontSize;
+  const customLineHeight = flatStyle.lineHeight ?? baseVariantStyle.lineHeight;
+
+  const scaledFontSize = Math.round(customFontSize * multiplier);
+  const scaledLineHeight = customLineHeight ? Math.round(customLineHeight * multiplier) : undefined;
+
+  return (
+    <RNText
+      style={[
+        variantStyles[variant],
+        { color: color ?? defaultColors[variant], textAlign: align },
+        fontProps,
+        style,
+        { fontSize: scaledFontSize, lineHeight: scaledLineHeight },
+      ]}
+      {...rest}
+    >
+      {children}
+    </RNText>
+  );
+};
 
 export default KamiText;

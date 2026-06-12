@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +34,46 @@ interface PersonalDashboardProps {
   friendlyDaysUntil: (iso: string) => string;
   getTimeAgo: (date: Date | string) => string;
 }
+
+const PersonalGoalItem = ({ g, colors, navigation }: { g: any; colors: any; navigation: any }) => {
+  const progressAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: g.progress,
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
+  }, [g.progress]);
+
+  return (
+    <Tap onPress={() => navigation.navigate('Goals')} style={styles.singlesGoalItem}>
+      <View style={styles.singlesGoalEmojiCircle}>
+        <Text style={{ fontSize: 18 }}>{g.emoji}</Text>
+      </View>
+      <View style={{ flex: 1, gap: 6 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <KamiText variant="label" numberOfLines={1} bold color={Colors.textPrimary}>{g.title}</KamiText>
+          <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
+        </View>
+        <View style={styles.singlesProgressBar}>
+          <Animated.View
+            style={[
+              styles.singlesProgressFill,
+              {
+                width: progressAnim.interpolate({
+                  inputRange: [0, 100],
+                  outputRange: ['0%', '100%'],
+                }),
+                backgroundColor: colors.primary,
+              },
+            ]}
+          />
+        </View>
+      </View>
+    </Tap>
+  );
+};
 
 export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   navigation,
@@ -200,20 +241,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
         ) : (
           <View style={{ gap: Space[3] }}>
             {activeGoals.slice(0, 3).map(g => (
-              <Tap key={g.id} onPress={() => navigation.navigate('Goals')} style={styles.singlesGoalItem}>
-                <View style={styles.singlesGoalEmojiCircle}>
-                  <Text style={{ fontSize: 18 }}>{g.emoji}</Text>
-                </View>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <KamiText variant="label" numberOfLines={1} bold color={Colors.textPrimary}>{g.title}</KamiText>
-                    <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
-                  </View>
-                  <View style={styles.singlesProgressBar}>
-                    <View style={[styles.singlesProgressFill, { width: `${g.progress}%`, backgroundColor: colors.primary }]} />
-                  </View>
-                </View>
-              </Tap>
+              <PersonalGoalItem key={g.id} g={g} colors={colors} navigation={navigation} />
             ))}
           </View>
         )}
@@ -447,10 +475,10 @@ const styles = StyleSheet.create({
   },
   notebookPromptText: {
     fontFamily: FontFamily.display,
-    fontSize: FontSize.base,
-    fontStyle: 'italic',
-    lineHeight: 24,
+    fontSize: FontSize.md,
+    lineHeight: 31,
     color: '#5C4033',
+    textAlign: 'center',
   },
   singlesEmptyInner: {
     alignItems: 'center',

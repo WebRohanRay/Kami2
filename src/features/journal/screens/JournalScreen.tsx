@@ -21,7 +21,7 @@ import { useCoupleStore, PartnerActionType } from '@features/couple/store/couple
 import { useCouple }      from '@features/couple/hooks/useCouple';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import ConflictResolverModal from '@shared/ui/organisms/ConflictResolverModal';
-import { getPendingSyncCount } from '@shared/db/sync';
+// getPendingSyncCount import removed
 
 import { EntryCard } from '../components/EntryCard';
 import { WriteModal, JOURNAL_TAGS } from '../components/WriteModal';
@@ -101,21 +101,34 @@ export function JournalScreen({ navigation }: Props) {
   const [selectedCommentsEntry, setSelectedCommentsEntry] = useState<any>(null);
   const [commentsVisible, setCommentsVisible] = useState(false);
 
-  // Sync state
-  const [pendingCount, setPendingCount] = useState(0);
+  // Sync state from Zustand
+  const { pendingSyncCount, isSyncing } = useHomeStore(
+    useShallow((s) => ({
+      pendingSyncCount: s.pendingSyncCount,
+      isSyncing: s.isSyncing,
+    }))
+  );
   const [conflictEntityId, setConflictEntityId] = useState<string | null>(null);
   const [conflictModalVisible, setConflictModalVisible] = useState(false);
 
-  const updatePendingCount = async () => {
-    const count = await getPendingSyncCount();
-    setPendingCount(count);
-  };
+  // Local UI status: 'idle' | 'syncing' | 'saved'
+  const [uiSyncStatus, setUiSyncStatus] = useState<'idle' | 'syncing' | 'saved'>('idle');
 
   useEffect(() => {
-    updatePendingCount();
-    const interval = setInterval(updatePendingCount, 4000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isSyncing) {
+      setUiSyncStatus('syncing');
+    } else if (pendingSyncCount === 0 && uiSyncStatus === 'syncing') {
+      setUiSyncStatus('saved');
+      const timer = setTimeout(() => {
+        setUiSyncStatus('idle');
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setUiSyncStatus('idle');
+    }
+  }, [isSyncing, pendingSyncCount]);
+
+  const updatePendingCount = () => {};
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
   const [appState, setAppState] = useState(AppState.currentState);
@@ -459,7 +472,7 @@ export function JournalScreen({ navigation }: Props) {
             </View>
             <View style={{ flex: 1, gap: 4 }}>
               <KamiText variant="overline" color={colors.primary} bold>Daily Reflection</KamiText>
-              <KamiText variant="body" style={{ fontStyle: 'italic', fontWeight: '500', lineHeight: 22 }} numberOfLines={3}>"{todayPrompt.content}"</KamiText>
+              <KamiText style={{ fontFamily: 'Lora-Regular', fontSize: FontSize.md, lineHeight: 24, color: Colors.textPrimary }} numberOfLines={3}>"{todayPrompt.content}"</KamiText>
               <KamiText variant="caption" color={promptResponse ? Colors.success : colors.primary} bold>
                 {promptResponse ? '✓ Answered — Tap to edit' : 'Tap to reflect ›'}
               </KamiText>
@@ -522,25 +535,35 @@ export function JournalScreen({ navigation }: Props) {
 
       {/* Header */}
       <View style={[s.header, { backgroundColor: colors.pageBg }]}>
-        <View style={{ flex: 1 }}>
-          <KamiText variant="overline">Your thoughts</KamiText>
-          <KamiText variant="title">Journal</KamiText>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <View>
+            <KamiText variant="overline">Your thoughts</KamiText>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <KamiText variant="title">Journal</KamiText>
+              {uiSyncStatus === 'syncing' && (
+                <View style={[s.syncStatusBadge, { backgroundColor: '#fef3c7' }]}>
+                  <ActivityIndicator size="small" color="#d97706" style={{ marginRight: 4, transform: [{ scale: 0.8 }] }} />
+                  <KamiText variant="caption" color="#d97706" bold>Syncing...</KamiText>
+                </View>
+              )}
+              {uiSyncStatus === 'saved' && (
+                <View style={[s.syncStatusBadge, { backgroundColor: '#ecfdf5' }]}>
+                  <KamiText variant="caption" color="#059669" bold>✓ Saved</KamiText>
+                </View>
+              )}
+              {uiSyncStatus === 'idle' && pendingSyncCount > 0 && (
+                <View style={[s.syncStatusBadge, { backgroundColor: '#f3f4f6' }]}>
+                  <KamiText variant="caption" color="#6b7280" bold>☁ {pendingSyncCount} offline</KamiText>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
         <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setEditing(null); setWriteVisible(true); }} accessibilityRole="button">
           <Text style={[s.writeBtnPlus, { color: colors.primary }]}>+</Text>
           <KamiText variant="label" color={colors.primary} bold>New entry</KamiText>
         </TouchableOpacity>
       </View>
-
-      {/* Global Sync Banner */}
-      {pendingCount > 0 && (
-        <View style={[s.globalSyncBanner, { backgroundColor: '#fffbeb', borderBottomColor: '#fef3c7' }]}>
-          <ActivityIndicator size="small" color="#d97706" style={{ marginRight: Space[2] }} />
-          <KamiText variant="caption" color="#b45309" bold style={{ flex: 1 }}>
-            Syncing {pendingCount} {pendingCount === 1 ? 'change' : 'changes'} to the cloud...
-          </KamiText>
-        </View>
-      )}
 
       {/* View Mode Toggle Switch */}
       <View style={s.viewToggleRow}>
@@ -887,6 +910,14 @@ const s = StyleSheet.create({
     paddingHorizontal: Space[5],
     paddingVertical: Space[3],
     borderBottomWidth: 1.5,
+  },
+  syncStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.sm,
+    marginLeft: Space[2],
   },
   viewToggleRow: { flexDirection: 'row', marginHorizontal: Space[5], marginVertical: Space[3], gap: Space[2] },
   toggleBtn: { flex: 1, height: 38, borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border + '55', backgroundColor: Colors.cardBg, alignItems: 'center', justifyContent: 'center' },

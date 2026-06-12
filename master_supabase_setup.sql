@@ -54,7 +54,7 @@ BEGIN
   IF NEW.deliver_at <= NOW() THEN
     NEW.delivered_at := NOW();
   ELSE
-    NEW.delivered_at := NEW.deliver_at;
+    NEW.delivered_at := NULL;
   END IF;
   RETURN NEW;
 END;
@@ -65,12 +65,8 @@ RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.is_read = TRUE AND (OLD.is_read = FALSE OR OLD.is_read IS NULL) THEN
     NEW.read_at := NOW();
-    IF NEW.delivered_at IS NULL THEN
-      IF NEW.deliver_at <= NOW() THEN
-        NEW.delivered_at := NOW();
-      ELSE
-        NEW.delivered_at := NEW.deliver_at;
-      END IF;
+    IF NEW.delivered_at IS NULL AND NEW.deliver_at <= NOW() THEN
+      NEW.delivered_at := NOW();
     END IF;
   END IF;
   RETURN NEW;
@@ -111,7 +107,10 @@ BEGIN
     NEW.raw_user_meta_data->>'full_name',
     NEW.raw_user_meta_data->>'avatar_url'
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    avatar_url = COALESCE(profiles.avatar_url, EXCLUDED.avatar_url),
+    nickname = COALESCE(profiles.nickname, EXCLUDED.nickname);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
@@ -615,11 +614,12 @@ DECLARE
   v_sender_id UUID;
   v_receiver_id UUID;
   v_status TEXT;
+  v_expires_at TIMESTAMPTZ;
   v_couple_id UUID;
 BEGIN
   -- 1. Fetch and lock invitation row
-  SELECT sender_id, receiver_id, status 
-  INTO v_sender_id, v_receiver_id, v_status
+  SELECT sender_id, receiver_id, status, expires_at 
+  INTO v_sender_id, v_receiver_id, v_status, v_expires_at
   FROM public.couple_invitations
   WHERE id = p_invitation_id
   FOR UPDATE;
@@ -631,6 +631,11 @@ BEGIN
 
   IF v_status != 'pending' THEN
     RAISE EXCEPTION 'Invitation is not pending.';
+  END IF;
+
+  IF v_expires_at < NOW() THEN
+    UPDATE public.couple_invitations SET status = 'expired' WHERE id = p_invitation_id;
+    RAISE EXCEPTION 'Invitation has expired.';
   END IF;
 
   -- Verify current user is receiver
@@ -657,6 +662,11 @@ BEGIN
   SET status = 'accepted' 
   WHERE id = p_invitation_id;
 
+  -- 6. Switch both users profile active spaces to 'couple'
+  UPDATE public.profiles 
+  SET active_space = 'couple' 
+  WHERE id IN (v_sender_id, v_receiver_id);
+
   RETURN v_couple_id;
 EXCEPTION
   WHEN unique_violation THEN
@@ -666,6 +676,37 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION public.accept_couple_invitation(UUID, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.accept_couple_invitation(UUID, TEXT) TO authenticated;
+
+-- Secure Leave Couple relationship cleanup handler
+CREATE OR REPLACE FUNCTION public.leave_couple()
+RETURNS VOID AS $$
+DECLARE
+  v_couple_id UUID;
+BEGIN
+  SELECT couple_id INTO v_couple_id 
+  FROM couple_members WHERE user_id = auth.uid();
+  
+  IF NOT FOUND THEN RAISE EXCEPTION 'You are not in a couple.'; END IF;
+
+  -- Remove self from couple
+  DELETE FROM couple_members WHERE user_id = auth.uid();
+
+  -- Reset active_space for self
+  UPDATE profiles SET active_space = 'personal' WHERE id = auth.uid();
+
+  -- Reset partner's active_space too
+  UPDATE profiles SET active_space = 'personal'
+  WHERE id IN (
+    SELECT user_id FROM couple_members WHERE couple_id = v_couple_id
+  );
+
+  -- Mark couple as pending deletion (7 day grace period)
+  UPDATE couples SET pending_deletion = TRUE WHERE id = v_couple_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.leave_couple() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.leave_couple() TO authenticated;
 
 -- Tamper-proof streaks logic
 CREATE OR REPLACE FUNCTION public.update_streak_on_checkin()
@@ -764,11 +805,14 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 REVOKE ALL ON FUNCTION public.check_email_exists(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.check_email_exists(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_email_exists(TEXT) TO authenticated;
 
 
 -- ─── 5. ROW LEVEL SECURITY (RLS) POLICIES ───────────────────
 -- Profiles
+-- Note: There is intentionally no DELETE policy on public.profiles.
+-- Profile deletions must go through the public.delete_user_account() RPC,
+-- which handles deleting the auth user and associated storage files securely.
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "profiles_select" ON public.profiles FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "profiles_insert" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
@@ -813,14 +857,14 @@ REVOKE SELECT (body, image_urls) ON public.future_letters FROM authenticated;
 ALTER TABLE public.couples ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "couples_select" ON public.couples FOR SELECT USING (public.is_couple_member(id) OR creator_id = auth.uid());
 CREATE POLICY "couples_update" ON public.couples FOR UPDATE USING (public.is_couple_member(id));
-CREATE POLICY "couples_insert" ON public.couples FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "couples_insert" ON public.couples FOR INSERT WITH CHECK (auth.role() = 'service_role');
 CREATE POLICY "couples_delete" ON public.couples FOR DELETE USING (public.is_couple_member(id));
 
 -- Couple Members
 ALTER TABLE public.couple_members ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "couple_members_select" ON public.couple_members FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "couple_members_insert" ON public.couple_members FOR INSERT WITH CHECK (user_id = auth.uid() OR EXISTS (SELECT 1 FROM public.couples WHERE couples.id = couple_id AND couples.creator_id = auth.uid()));
-CREATE POLICY "couple_members_delete" ON public.couple_members FOR DELETE USING (user_id = auth.uid());
+CREATE POLICY "couple_members_select" ON public.couple_members FOR SELECT USING (user_id = auth.uid() OR public.is_couple_member(couple_id));
+CREATE POLICY "couple_members_insert" ON public.couple_members FOR INSERT WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "couple_members_delete" ON public.couple_members FOR DELETE USING (auth.role() = 'service_role');
 
 -- Couple Invitations
 ALTER TABLE public.couple_invitations ENABLE ROW LEVEL SECURITY;
@@ -917,24 +961,12 @@ ON CONFLICT (id) DO UPDATE SET
 -- Storage security policies
 DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
 CREATE POLICY "Users can upload own avatar" ON storage.objects FOR INSERT WITH CHECK (
-  bucket_id = 'avatars' AND (
-    auth.uid()::text = (storage.foldername(name))[1] OR 
-    (
-      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
-      public.is_couple_member(((storage.foldername(name))[1])::uuid)
-    )
-  )
+  bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]
 );
 
 DROP POLICY IF EXISTS "Users can update own avatar" ON storage.objects;
 CREATE POLICY "Users can update own avatar" ON storage.objects FOR UPDATE USING (
-  bucket_id = 'avatars' AND (
-    auth.uid()::text = (storage.foldername(name))[1] OR 
-    (
-      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
-      public.is_couple_member(((storage.foldername(name))[1])::uuid)
-    )
-  )
+  bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]
 );
 
 DROP POLICY IF EXISTS "Users can read own avatar" ON storage.objects;
@@ -943,23 +975,14 @@ CREATE POLICY "Users can read own avatar" ON storage.objects FOR SELECT USING (
     auth.uid()::text = (storage.foldername(name))[1] OR 
     (
       (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
-      (
-        public.is_partner_of(((storage.foldername(name))[1])::uuid) OR
-        public.is_couple_member(((storage.foldername(name))[1])::uuid)
-      )
+      public.is_partner_of(((storage.foldername(name))[1])::uuid)
     )
   )
 );
 
 DROP POLICY IF EXISTS "Users can delete own avatar" ON storage.objects;
 CREATE POLICY "Users can delete own avatar" ON storage.objects FOR DELETE USING (
-  bucket_id = 'avatars' AND (
-    auth.uid()::text = (storage.foldername(name))[1] OR 
-    (
-      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
-      public.is_couple_member(((storage.foldername(name))[1])::uuid)
-    )
-  )
+  bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]
 );
 
 -- Journal storage policies
@@ -1055,6 +1078,7 @@ CREATE INDEX IF NOT EXISTS idx_mood_logs_user_date ON mood_logs(user_id, logged_
 
 -- Unique performance indexes for couple feature lookups
 CREATE INDEX IF NOT EXISTS idx_couple_members_user ON couple_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_couple_members_couple ON couple_members(couple_id);
 CREATE INDEX IF NOT EXISTS idx_couple_letters_couple_deliver ON couple_letters(couple_id, deliver_at ASC);
 CREATE INDEX IF NOT EXISTS idx_couple_journals_couple_date ON couple_journals(couple_id, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_couple_memories_couple_date ON couple_memories(couple_id, memory_date DESC);
@@ -1186,6 +1210,17 @@ INSERT INTO public.couple_daily_questions (content, active_date) VALUES
   ('What is a goal or dream you hope we can accomplish together next year?', CURRENT_DATE + 5),
   ('Which movie, song, or hobby do you think represents us the best?', CURRENT_DATE + 6)
 ON CONFLICT DO NOTHING;
+
+-- ─── 10. CRON CLEANUP SCHEDULERS ─────────────────────────────
+-- Enable pg_cron extension
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+
+-- Schedule daily couple deletion cleanup at 2 AM
+SELECT cron.schedule(
+  'cleanup-pending-couple-deletions',
+  '0 2 * * *',
+  $$DELETE FROM public.couples WHERE pending_deletion = TRUE AND delete_at < NOW();$$
+);
 
 -- Grant explicit permissions on all created tables, sequences, and functions
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;

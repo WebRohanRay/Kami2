@@ -9,7 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import { Colors, Radii, Sizing, FontSize, Space } from '@shared/constants';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useTextScale } from '@shared/hooks';
 
 interface InputFieldProps extends TextInputProps {
   icon?: string;
@@ -29,6 +29,7 @@ const InputField: React.FC<InputFieldProps> = ({
   ...rest
 }) => {
   const { colors } = useTheme();
+  const { scaleSize } = useTextScale();
   const [visible,  setVisible]  = useState(false);
   const [focused,  setFocused]  = useState(false);
 
@@ -41,16 +42,16 @@ const InputField: React.FC<InputFieldProps> = ({
 
   return (
     <View style={styles.container}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? <Text style={[styles.label, { fontSize: scaleSize(FontSize.sm) }]}>{label}</Text> : null}
       <View style={[styles.wrapper, { borderColor }, style as any]}>
         {icon ? (
-          <Text style={styles.icon} accessibilityElementsHidden>
+          <Text style={[styles.icon, { fontSize: scaleSize(FontSize.md) }]} accessibilityElementsHidden>
             {icon}
           </Text>
         ) : null}
         <TextInput
           {...rest}
-          style={styles.input}
+          style={[styles.input, { fontSize: scaleSize(FontSize.base) }]}
           secureTextEntry={isPassword && !visible}
           placeholderTextColor="rgba(84,66,69,0.40)"
           autoCapitalize={rest.autoCapitalize ?? 'none'}
@@ -65,12 +66,12 @@ const InputField: React.FC<InputFieldProps> = ({
             accessibilityRole="button"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.eyeIcon}>{visible ? '🙈' : '👁'}</Text>
+            <Text style={[styles.eyeIcon, { fontSize: scaleSize(FontSize.base) }]}>{visible ? '🙈' : '👁'}</Text>
           </TouchableOpacity>
         )}
       </View>
       {(error || hint) ? (
-        <Text style={[styles.helper, hasError && { color: Colors.error }]}>
+        <Text style={[styles.helper, hasError && { color: Colors.error }, { fontSize: scaleSize(FontSize.xs) }]}>
           {error ?? hint}
         </Text>
       ) : null}

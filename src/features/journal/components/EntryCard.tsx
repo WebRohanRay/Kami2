@@ -83,7 +83,7 @@ export const EntryCard: React.FC<EntryCardProps> = ({
           />
         )}
 
-        <KamiText variant="body" color={Colors.textSecondary} numberOfLines={4} style={styles.entryBody}>
+        <KamiText variant="body" numberOfLines={4} style={styles.entryBody}>
           {entry.body}
         </KamiText>
 
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   },
   entryHeader: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
   entryActions: { flexDirection: 'row', gap: Space[2] },
-  entryBody: { lineHeight: 22 },
+  entryBody: { lineHeight: 26, fontSize: 16, color: 'rgba(28, 25, 23, 0.85)' },
   cardBtn: {
     width: 28,
     height: 28,
