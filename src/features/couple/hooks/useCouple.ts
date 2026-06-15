@@ -9,9 +9,10 @@ import {
   coupleGoalRepo, 
   coupleCommentRepo 
 } from '@shared/db/repo';
-import { enqueueMutation, processSyncQueue } from '@shared/db/sync';
+import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 import { uuid } from '@shared/lib/uuid';
 import type { Result } from '@shared/types/result';
+import { resolveSignedUrls, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 
 export function useCouple() {
   const user = useAuthStore(s => s.user);
@@ -70,6 +71,10 @@ export function useCouple() {
           userAvatarUrl: c.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl,
         }));
 
+        const localPickerUris = entry.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
+        const remotePaths = entry.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
+        const resolvedRemote = await resolveSignedUrls('couple_journal_images', remotePaths);
+
         return {
           id: entry.id,
           coupleId: entry.coupleId,
@@ -77,7 +82,7 @@ export function useCouple() {
           title: entry.title,
           body: entry.body,
           moodId: entry.moodId,
-          imageUrls: entry.imageUrls,
+          imageUrls: [...localPickerUris, ...resolvedRemote],
           tags: entry.tags,
           entryDate: entry.entryDate,
           isPinned: !!entry.isPinned,
@@ -160,20 +165,26 @@ export function useCouple() {
       const currentUser = useAuthStore.getState().user;
       const partner = s.partner;
 
-      const mapped = local.map((m) => ({
-        id: m.id,
-        coupleId: m.coupleId,
-        title: m.title,
-        description: m.description,
-        imageUrls: m.imageUrls,
-        memoryDate: m.memoryDate,
-        tags: m.tags,
-        createdAt: m.createdAt,
-        location: m.location,
-        mood: m.mood,
-        memoryTime: m.memoryTime,
-        lastEditedBy: m.lastEditedBy,
-        lastEditedNickname: m.lastEditedBy === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+      const mapped = await Promise.all(local.map(async (m) => {
+        const localPickerUris = m.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
+        const remotePaths = m.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
+        const resolvedRemote = await resolveSignedUrls('couple_memory_images', remotePaths);
+
+        return {
+          id: m.id,
+          coupleId: m.coupleId,
+          title: m.title,
+          description: m.description,
+          imageUrls: [...localPickerUris, ...resolvedRemote],
+          memoryDate: m.memoryDate,
+          tags: m.tags,
+          createdAt: m.createdAt,
+          location: m.location,
+          mood: m.mood,
+          memoryTime: m.memoryTime,
+          lastEditedBy: m.lastEditedBy,
+          lastEditedNickname: m.lastEditedBy === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+        };
       }));
 
       if (page === 1) {
@@ -205,23 +216,29 @@ export function useCouple() {
       const currentUser = useAuthStore.getState().user;
       const partner = s.partner;
 
-      const mapped = local.map((l) => ({
-        id: l.id,
-        coupleId: l.coupleId,
-        senderId: l.senderId,
-        subject: l.subject,
-        deliverAt: l.deliverAt,
-        isUnlocked: new Date(l.deliverAt).getTime() <= Date.now(),
-        createdAt: l.createdAt,
-        body: l.body,
-        imageUrls: l.imageUrls,
-        senderNickname: l.senderId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
-        isRead: !!l.isRead,
-        isFavorite: !!l.isFavorite,
-        isDraft: !!l.isDraft,
-        isArchived: !!l.isArchived,
-        parentLetterId: l.parentLetterId,
-        updatedAt: l.updatedAt,
+      const mapped = await Promise.all(local.map(async (l) => {
+        const localPickerUris = l.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
+        const remotePaths = l.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
+        const resolvedRemote = await resolveSignedUrls('couple_letter_images', remotePaths);
+
+        return {
+          id: l.id,
+          coupleId: l.coupleId,
+          senderId: l.senderId,
+          subject: l.subject,
+          deliverAt: l.deliverAt,
+          isUnlocked: new Date(l.deliverAt).getTime() <= Date.now(),
+          createdAt: l.createdAt,
+          body: l.body,
+          imageUrls: [...localPickerUris, ...resolvedRemote],
+          senderNickname: l.senderId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
+          isRead: !!l.isRead,
+          isFavorite: !!l.isFavorite,
+          isDraft: !!l.isDraft,
+          isArchived: !!l.isArchived,
+          parentLetterId: l.parentLetterId,
+          updatedAt: l.updatedAt,
+        };
       }));
 
       if (page === 1) {
@@ -298,6 +315,23 @@ export function useCouple() {
     addJournal: async (cId: string, body: string, title?: string, tags: string[] = [], imageUrls: string[] = [], moodId?: string | null): Promise<Result<any>> => {
       const entryId = uuid();
       const now = new Date().toISOString();
+
+      const localUris: string[] = [];
+      if (imageUrls && imageUrls.length > 0) {
+        for (let i = 0; i < imageUrls.length; i++) {
+          const pickerUri = imageUrls[i];
+          if (pickerUri.startsWith('file://') || pickerUri.startsWith('content://')) {
+            const bucket = 'couple_journal_images';
+            const timestamp = Date.now();
+            const remotePath = `${cId}/${entryId}/${timestamp}_${i}.jpg`;
+            const cachedUri = await enqueueUpload('couple_journals', entryId, pickerUri, remotePath, bucket);
+            localUris.push(cachedUri);
+          } else {
+            localUris.push(getRelativePathFromSignedUrl(pickerUri, 'couple_journal_images'));
+          }
+        }
+      }
+
       const localEntry = {
         id: entryId,
         coupleId: cId,
@@ -306,7 +340,7 @@ export function useCouple() {
         body,
         moodId: moodId || null,
         tags,
-        imageUrls,
+        imageUrls: localUris,
         entryDate: now.split('T')[0],
         isPinned: 0,
         createdAt: now,
@@ -336,12 +370,31 @@ export function useCouple() {
       if (!journal) return { success: false, error: 'Journal entry not found' };
 
       const now = new Date().toISOString();
+
+      const localUris: string[] = [];
+      if (imageUrls) {
+        for (let i = 0; i < imageUrls.length; i++) {
+          const url = imageUrls[i];
+          if (url.startsWith('file://') || url.startsWith('content://')) {
+            const bucket = 'couple_journal_images';
+            const timestamp = Date.now();
+            const remotePath = `${journal.coupleId}/${entryId}/${timestamp}_${i}.jpg`;
+            const cachedUri = await enqueueUpload('couple_journals', entryId, url, remotePath, bucket);
+            localUris.push(cachedUri);
+          } else {
+            localUris.push(getRelativePathFromSignedUrl(url, 'couple_journal_images'));
+          }
+        }
+      } else {
+        localUris.push(...journal.imageUrls);
+      }
+
       const updated = {
         ...journal,
         body,
         title: title || null,
         tags,
-        imageUrls,
+        imageUrls: localUris,
         moodId: moodId || null,
         updatedAt: now,
         syncStatus: 'pending_update' as const,
@@ -504,12 +557,29 @@ export function useCouple() {
     ): Promise<Result<any>> => {
       const memoryId = uuid();
       const now = new Date().toISOString();
+
+      const localUris: string[] = [];
+      if (imageUrls && imageUrls.length > 0) {
+        for (let i = 0; i < imageUrls.length; i++) {
+          const pickerUri = imageUrls[i];
+          if (pickerUri.startsWith('file://') || pickerUri.startsWith('content://')) {
+            const bucket = 'couple_memory_images';
+            const timestamp = Date.now();
+            const remotePath = `${cId}/${memoryId}/${timestamp}_${i}.jpg`;
+            const cachedUri = await enqueueUpload('couple_memories', memoryId, pickerUri, remotePath, bucket);
+            localUris.push(cachedUri);
+          } else {
+            localUris.push(getRelativePathFromSignedUrl(pickerUri, 'couple_memory_images'));
+          }
+        }
+      }
+
       const localMemory = {
         id: memoryId,
         coupleId: cId,
         title,
         description: description ?? null,
-        imageUrls,
+        imageUrls: localUris,
         memoryDate: memoryDate || now.split('T')[0],
         tags,
         lastEditedBy: user?.id || null,
@@ -549,11 +619,30 @@ export function useCouple() {
       if (!memory) return { success: false, error: 'Memory not found' };
 
       const now = new Date().toISOString();
+
+      const localUris: string[] = [];
+      if (imageUrls) {
+        for (let i = 0; i < imageUrls.length; i++) {
+          const url = imageUrls[i];
+          if (url.startsWith('file://') || url.startsWith('content://')) {
+            const bucket = 'couple_memory_images';
+            const timestamp = Date.now();
+            const remotePath = `${memory.coupleId}/${memoryId}/${timestamp}_${i}.jpg`;
+            const cachedUri = await enqueueUpload('couple_memories', memoryId, url, remotePath, bucket);
+            localUris.push(cachedUri);
+          } else {
+            localUris.push(getRelativePathFromSignedUrl(url, 'couple_memory_images'));
+          }
+        }
+      } else {
+        localUris.push(...memory.imageUrls);
+      }
+
       const updated = {
         ...memory,
         title,
         description: description ?? null,
-        imageUrls,
+        imageUrls: localUris,
         memoryDate: memoryDate || memory.memoryDate,
         tags,
         location: location ?? null,
@@ -589,6 +678,23 @@ export function useCouple() {
     addLetter: async (cId: string, subject: string, body: string, deliverAt: string, imageUrls: string[] = [], isDraft: boolean = false, parentLetterId?: string): Promise<Result<any>> => {
       const letterId = uuid();
       const now = new Date().toISOString();
+
+      const localUris: string[] = [];
+      if (imageUrls && imageUrls.length > 0) {
+        for (let i = 0; i < imageUrls.length; i++) {
+          const pickerUri = imageUrls[i];
+          if (pickerUri.startsWith('file://') || pickerUri.startsWith('content://')) {
+            const bucket = 'couple_letter_images';
+            const timestamp = Date.now();
+            const remotePath = `${cId}/${letterId}/${timestamp}_${i}.jpg`;
+            const cachedUri = await enqueueUpload('couple_letters', letterId, pickerUri, remotePath, bucket);
+            localUris.push(cachedUri);
+          } else {
+            localUris.push(getRelativePathFromSignedUrl(pickerUri, 'couple_letter_images'));
+          }
+        }
+      }
+
       const localLetter = {
         id: letterId,
         coupleId: cId,
@@ -596,7 +702,7 @@ export function useCouple() {
         subject,
         body,
         deliverAt,
-        imageUrls,
+        imageUrls: localUris,
         isRead: 0,
         isFavorite: 0,
         isDraft: isDraft ? 1 : 0,
@@ -630,9 +736,28 @@ export function useCouple() {
       if (!letter) return { success: false, error: 'Letter not found' };
 
       const now = new Date().toISOString();
+
+      let finalFields = { ...fields };
+      if (fields.imageUrls) {
+        const localUris: string[] = [];
+        for (let i = 0; i < fields.imageUrls.length; i++) {
+          const url = fields.imageUrls[i];
+          if (url.startsWith('file://') || url.startsWith('content://')) {
+            const bucket = 'couple_letter_images';
+            const timestamp = Date.now();
+            const remotePath = `${letter.coupleId}/${letterId}/${timestamp}_${i}.jpg`;
+            const cachedUri = await enqueueUpload('couple_letters', letterId, url, remotePath, bucket);
+            localUris.push(cachedUri);
+          } else {
+            localUris.push(getRelativePathFromSignedUrl(url, 'couple_letter_images'));
+          }
+        }
+        finalFields.imageUrls = localUris;
+      }
+
       const updated = {
         ...letter,
-        ...fields,
+        ...finalFields,
         updatedAt: now,
         syncStatus: 'pending_update' as const,
       };

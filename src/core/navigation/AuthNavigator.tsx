@@ -24,14 +24,14 @@ export const AuthNavigator: React.FC = () => {
         contentStyle: { backgroundColor: '#FFF8F8' },
       }}
     >
-      <Stack.Screen name="Login"            component={LoginScreen} />
-      <Stack.Screen name="SignUp"           component={SignUpScreen} />
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen
         name="EmailVerification"
         component={EmailVerificationScreen}
         initialParams={{ email: user?.email }}
       />
-      <Stack.Screen name="ForgotPassword"   component={ForgotPasswordScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </Stack.Navigator>
   );
 };

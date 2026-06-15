@@ -1,7 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 
-export const AnimatedStarPulse = () => {
+interface AnimatedStarPulseProps {
+  color?: string;
+}
+
+export const AnimatedStarPulse: React.FC<AnimatedStarPulseProps> = ({ color }) => {
   const pulse = useRef(new Animated.Value(0.3)).current;
   useEffect(() => {
     Animated.loop(
@@ -26,6 +30,7 @@ export const AnimatedStarPulse = () => {
         styles.starGlow,
         {
           opacity: pulse,
+          backgroundColor: color || 'rgba(234, 179, 8, 0.45)',
           transform: [{ scale: pulse.interpolate({ inputRange: [0.3, 1], outputRange: [0.8, 1.4] }) }],
         },
       ]}
@@ -39,7 +44,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(234, 179, 8, 0.45)',
     zIndex: 1,
   },
 });

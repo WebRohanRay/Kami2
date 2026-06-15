@@ -1,3 +1,3 @@
 export { HomeScreen } from './HomeScreen';
-export { TimelineScreen } from './TimelineScreen';
+export { default as TimelineScreen } from '../../couple/screens/TimelineScreen';
 

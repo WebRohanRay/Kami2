@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, Space, Radii, FontSize } from '@shared/constants';
+import { Space, Radii, FontSize } from '@shared/constants';
 
 interface CustomMoodModalProps {
   visible: boolean;
@@ -29,6 +29,7 @@ export const CustomMoodModal: React.FC<CustomMoodModalProps> = ({
   saving,
 }) => {
   const { colors } = useTheme();
+  const styles = getStyles(colors);
   const [customText, setCustomText] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState('✨');
 
@@ -36,19 +37,19 @@ export const CustomMoodModal: React.FC<CustomMoodModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
-      <SafeAreaView style={[mm.root, { backgroundColor: colors.pageBg }]}>
-        <View style={mm.handle} />
-        <View style={mm.top}>
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
+        <View style={styles.handle} />
+        <View style={styles.top}>
           <Text style={{ fontSize: 48, marginBottom: 8 }}>{selectedEmoji}</Text>
           <KamiText variant="title">Custom Status</KamiText>
-          <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginTop: 4 }}>
+          <KamiText variant="caption" color={colors.textMuted} align="center" style={{ marginTop: 4 }}>
             Set a custom status for your partner to see.
           </KamiText>
         </View>
 
         {/* Emoji Picker row */}
         <View style={{ marginBottom: Space[4] }}>
-          <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[2] }}>Select an emoji:</KamiText>
+          <KamiText variant="caption" color={colors.textMuted} style={{ marginBottom: Space[2] }}>Select an emoji:</KamiText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Space[2], paddingBottom: 4 }}>
             {EMOJIS.map(e => (
               <TouchableOpacity
@@ -56,7 +57,7 @@ export const CustomMoodModal: React.FC<CustomMoodModalProps> = ({
                 onPress={() => setSelectedEmoji(e)}
                 style={[
                   styles.moodRingChip,
-                  { borderColor: selectedEmoji === e ? colors.primary : Colors.border + '55' },
+                  { borderColor: selectedEmoji === e ? colors.primary : colors.border + '55' },
                   selectedEmoji === e && { backgroundColor: colors.primary + '11' }
                 ]}
               >
@@ -67,25 +68,25 @@ export const CustomMoodModal: React.FC<CustomMoodModalProps> = ({
         </View>
 
         <TextInput
-          style={[mm.input, { height: 80 }]}
+          style={[styles.input, { height: 80 }]}
           placeholder="What are you up to…"
-          placeholderTextColor={Colors.textMuted}
+          placeholderTextColor={colors.textMuted}
           value={customText}
           onChangeText={setCustomText}
           maxLength={40}
         />
-        <View style={mm.btns}>
+        <View style={styles.btns}>
           <TouchableOpacity
-            style={mm.skip}
+            style={styles.skip}
             onPress={() => {
               setCustomText('');
               onClose();
             }}
           >
-            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+            <KamiText variant="label" color={colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[mm.save, { backgroundColor: colors.primary }]}
+            style={[styles.save, { backgroundColor: colors.primary }]}
             disabled={saving}
             onPress={() => {
               Keyboard.dismiss();
@@ -104,27 +105,27 @@ export const CustomMoodModal: React.FC<CustomMoodModalProps> = ({
   );
 };
 
-const mm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg, paddingHorizontal: Space[5] },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg, paddingHorizontal: Space[5] },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     alignSelf: 'center',
     marginTop: Space[3],
     marginBottom: Space[4],
   },
   top: { alignItems: 'center', gap: Space[2], marginBottom: Space[5] },
   input: {
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     padding: Space[4],
     fontSize: FontSize.base,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     height: 140,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     textAlignVertical: 'top',
   },
   btns: { flexDirection: 'row', gap: Space[3], marginTop: Space[5] },
@@ -133,7 +134,7 @@ const mm = StyleSheet.create({
     height: 52,
     borderRadius: Radii.button,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -141,13 +142,9 @@ const mm = StyleSheet.create({
     flex: 2,
     height: 52,
     borderRadius: Radii.button,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
-
-const styles = StyleSheet.create({
   moodRingChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -156,6 +153,6 @@ const styles = StyleSheet.create({
     paddingVertical: Space[2] - 2,
     borderRadius: Radii.full,
     borderWidth: 1.5,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.inputBg,
   },
 });

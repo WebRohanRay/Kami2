@@ -13,7 +13,7 @@ import {
 import { useTheme } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, Space, Radii, FontSize, FontWeight, Shadows, Sizing, FontFamily } from '@shared/constants';
+import { Space, Radii, FontSize, FontWeight, Shadows, Sizing, FontFamily, Opacity } from '@shared/constants';
 
 interface HomeHeaderProps {
   user: any;
@@ -43,6 +43,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
   initial,
 }) => {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   if (user?.activeSpace === 'couple') {
     return (
@@ -55,6 +56,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
               alert={alert}
               onDismiss={removeHomeAlert}
               navigation={navigation}
+              colors={colors}
             />
           ))}
         </View>
@@ -135,12 +137,12 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
       <View style={styles.singlesHeaderRow}>
         <View style={{ flex: 1 }}>
           <KamiText style={[styles.kamiLogo, { color: colors.primary }]} bold>Kami</KamiText>
-          <KamiText variant="body" color={Colors.textSecondary} style={{ fontWeight: '500', marginTop: 2 }}>
+          <KamiText variant="body" color={colors.textSecondary} style={{ fontWeight: '500', marginTop: 2 }}>
             {greetingTime(user?.timezone)}, {name} 🌸
           </KamiText>
         </View>
         <TouchableOpacity
-          style={[styles.avatarWrap, { borderColor: colors.primary, backgroundColor: '#fff' }]}
+          style={[styles.avatarWrap, { borderColor: colors.primary, backgroundColor: colors.cardBg }]}
           onPress={() => navigation.navigate('Settings')}
         >
           {user?.avatarUrl ? (
@@ -157,14 +159,14 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
           <Text style={{ fontSize: 22 }}>🔥</Text>
           <View>
             <KamiText style={[styles.singlesStatNum, { color: '#D97706' }]} bold>{streak?.currentStreak ?? 0}</KamiText>
-            <KamiText variant="caption" color={Colors.textMuted}>Day Streak</KamiText>
+            <KamiText variant="caption" color={colors.textMuted}>Day Streak</KamiText>
           </View>
         </View>
         <View style={styles.singlesStatCard}>
           <Text style={{ fontSize: 22 }}>🌸</Text>
           <View>
-            <KamiText style={styles.singlesStatNum} bold>{streak?.totalCheckins ?? 0}</KamiText>
-            <KamiText variant="caption" color={Colors.textMuted}>Check-ins</KamiText>
+            <KamiText style={[styles.singlesStatNum, { color: colors.textPrimary }]} bold>{streak?.totalCheckins ?? 0}</KamiText>
+            <KamiText variant="caption" color={colors.textMuted}>Check-ins</KamiText>
           </View>
         </View>
       </View>
@@ -176,7 +178,9 @@ const AlertPopup: React.FC<{
   alert: { id: string; type: string; title: string; message: string; targetScreen: string };
   onDismiss: (id: string) => void;
   navigation: any;
-}> = ({ alert, onDismiss, navigation }) => {
+  colors: any;
+}> = ({ alert, onDismiss, navigation, colors }) => {
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const transX = useRef(new Animated.Value(300)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -246,14 +250,14 @@ const AlertPopup: React.FC<{
           <Text style={styles.alertMsg} numberOfLines={2}>{alert.message}</Text>
         </View>
         <TouchableOpacity onPress={dismiss} style={styles.alertClose}>
-          <Text style={{ color: Colors.textMuted, fontSize: 14 }}>✕</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 14 }}>✕</Text>
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   // 1. Floating Island Header Styles
   floatingHeaderContainer: {
     width: '100%',
@@ -269,12 +273,12 @@ const styles = StyleSheet.create({
   alertCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     paddingVertical: Space[3],
     paddingHorizontal: Space[4],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.25)', // primary light Rose
+    borderColor: colors.border + Opacity.muted,
     ...Shadows.md,
     gap: Space[3],
   },
@@ -285,12 +289,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
     fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   alertMsg: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.xs,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   alertClose: {
     padding: Space[1],
@@ -304,10 +308,10 @@ const styles = StyleSheet.create({
     marginBottom: Space[3],
     paddingVertical: Space[3],
     paddingHorizontal: Space[4],
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 24,
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+    borderColor: colors.border + Opacity.subtle,
     ...Shadows.md,
     elevation: 3,
   },
@@ -323,7 +327,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#fff',
+    borderColor: colors.cardBg,
     position: 'absolute',
     left: 0,
     zIndex: 1,
@@ -333,7 +337,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#fff',
+    borderColor: colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'absolute',
@@ -405,9 +409,9 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+    borderColor: colors.border + Opacity.subtle,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.sm,
@@ -421,7 +425,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#fff',
+    borderColor: colors.cardBg,
   },
 
   // Singles Header Styles
@@ -444,22 +448,19 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.display,
     fontSize: 34,
     fontWeight: 'bold',
-    color: Colors.primary,
   },
   avatarWrap: {
     width: Sizing.avatarSm,
     height: Sizing.avatarSm,
     borderRadius: Sizing.avatarSm / 2,
-    backgroundColor: Colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: Colors.primary,
     ...Shadows.sm,
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarLetter: { color: Colors.primary, fontSize: FontSize.md, fontWeight: FontWeight.extrabold },
+  avatarLetter: { fontSize: FontSize.md, fontWeight: FontWeight.extrabold },
   singlesStatsRow: {
     flexDirection: 'row',
     gap: Space[4],
@@ -469,20 +470,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space[3],
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 20,
     paddingVertical: Space[3],
     paddingHorizontal: Space[4],
     ...Shadows.sm,
     elevation: 2,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: colors.border + Opacity.ghost,
   },
   singlesStatNum: {
     fontFamily: 'PlusJakartaSans-SemiBold',
     fontSize: FontSize.xl,
     fontWeight: '600',
-    color: Colors.textPrimary,
     lineHeight: 32,
   },
 });

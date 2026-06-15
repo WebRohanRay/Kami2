@@ -265,3 +265,12 @@ export async function resolveSignedUrls(
     return paths.map(path => cached[path]).filter((url): url is string => !!url);
   }
 }
+
+/** Extract bucket-relative path from a full secure signed URL */
+export function getRelativePathFromSignedUrl(url: string, bucket: string): string {
+  if (!url || !url.includes(`${bucket}/`)) return url;
+  const parts = url.split(`${bucket}/`);
+  const pathWithQuery = parts[1];
+  return pathWithQuery.split('?')[0];
+}
+

@@ -26,7 +26,7 @@ import type {
   UpdateGoalInput,
   Result,
 } from '@features/home/types';
-import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
+import { resolveSignedUrls, deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import { useAuthStore } from '@features/auth';
 import { journalRepo, goalRepo, moodRepo, dailyPromptRepo, streakRepo, promptResponseRepo } from '@shared/db/repo';
 import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
@@ -144,13 +144,17 @@ export async function createJournalEntry(
     if (input.imageUrls && input.imageUrls.length > 0) {
       for (let i = 0; i < input.imageUrls.length; i++) {
         const pickerUri = input.imageUrls[i];
-        const bucket = 'journal_images';
-        const ownerId = user.id;
-        const timestamp = Date.now();
-        const remotePath = `${ownerId}/${entryId}/${timestamp}_${i}.jpg`;
-        
-        const cachedUri = await enqueueUpload('journal_entries', entryId, pickerUri, remotePath, bucket);
-        localUris.push(cachedUri);
+        if (pickerUri.startsWith('file://') || pickerUri.startsWith('content://')) {
+          const bucket = 'journal_images';
+          const ownerId = user.id;
+          const timestamp = Date.now();
+          const remotePath = `${ownerId}/${entryId}/${timestamp}_${i}.jpg`;
+          
+          const cachedUri = await enqueueUpload('journal_entries', entryId, pickerUri, remotePath, bucket);
+          localUris.push(cachedUri);
+        } else {
+          localUris.push(getRelativePathFromSignedUrl(pickerUri, 'journal_images'));
+        }
       }
     }
 
@@ -196,7 +200,7 @@ export async function updateJournalEntry(
     const now = new Date().toISOString();
     
     // Copy new picker files if any
-    const localUris = [...(input.imageUrls ?? entry.imageUrls)];
+    const localUris: string[] = [];
     if (input.imageUrls) {
       for (let i = 0; i < input.imageUrls.length; i++) {
         const url = input.imageUrls[i];
@@ -206,10 +210,13 @@ export async function updateJournalEntry(
           const timestamp = Date.now();
           const remotePath = `${ownerId}/${id}/${timestamp}_${i}.jpg`;
           const cachedUri = await enqueueUpload('journal_entries', id, url, remotePath, bucket);
-          const idx = localUris.indexOf(url);
-          if (idx !== -1) localUris[idx] = cachedUri;
+          localUris.push(cachedUri);
+        } else {
+          localUris.push(getRelativePathFromSignedUrl(url, 'journal_images'));
         }
       }
+    } else {
+      localUris.push(...entry.imageUrls);
     }
 
     const updatedEntry = {
@@ -312,6 +319,8 @@ export async function createGoal(input: CreateGoalInput): Promise<Result<Goal>> 
     if (input.imageUrl && (input.imageUrl.startsWith('file://') || input.imageUrl.startsWith('content://'))) {
       const remotePath = `${user.id}/${goalId}/${Date.now()}.jpg`;
       cachedUrl = await enqueueUpload('goals', goalId, input.imageUrl, remotePath, 'goal_images');
+    } else if (input.imageUrl) {
+      cachedUrl = getRelativePathFromSignedUrl(input.imageUrl, 'goal_images');
     }
 
     const localGoal = {
@@ -362,6 +371,8 @@ export async function updateGoal(
     if (input.imageUrl && (input.imageUrl.startsWith('file://') || input.imageUrl.startsWith('content://'))) {
       const remotePath = `${user.id}/${id}/${Date.now()}.jpg`;
       cachedUrl = await enqueueUpload('goals', id, input.imageUrl, remotePath, 'goal_images');
+    } else if (input.imageUrl) {
+      cachedUrl = getRelativePathFromSignedUrl(input.imageUrl, 'goal_images');
     }
 
     const updatedGoal = {

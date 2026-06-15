@@ -1,5 +1,5 @@
 import { supabase } from '@shared/lib/supabase';
-import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
+import { resolveSignedUrls, deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import type { Memory, CreateMemoryInput, UpdateMemoryInput, Result } from '@features/home/types';
 import { useAuthStore } from '@features/auth';
 import { memoryRepo } from '@shared/db/repo';
@@ -85,9 +85,13 @@ export async function createMemory(
     if (input.imageUrls && input.imageUrls.length > 0) {
       for (let i = 0; i < input.imageUrls.length; i++) {
         const pickerUri = input.imageUrls[i];
-        const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
-        const cachedUri = await enqueueUpload('memories', id, pickerUri, remotePath, 'memory_images');
-        localUris.push(cachedUri);
+        if (pickerUri.startsWith('file://') || pickerUri.startsWith('content://')) {
+          const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
+          const cachedUri = await enqueueUpload('memories', id, pickerUri, remotePath, 'memory_images');
+          localUris.push(cachedUri);
+        } else {
+          localUris.push(getRelativePathFromSignedUrl(pickerUri, 'memory_images'));
+        }
       }
     }
 
@@ -131,17 +135,20 @@ export async function updateMemory(
 
     const now = new Date().toISOString();
 
-    const localUris = [...(input.imageUrls ?? entry.imageUrls)];
+    const localUris: string[] = [];
     if (input.imageUrls) {
       for (let i = 0; i < input.imageUrls.length; i++) {
         const url = input.imageUrls[i];
         if (url.startsWith('file://') || url.startsWith('content://')) {
           const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
           const cachedUri = await enqueueUpload('memories', id, url, remotePath, 'memory_images');
-          const idx = localUris.indexOf(url);
-          if (idx !== -1) localUris[idx] = cachedUri;
+          localUris.push(cachedUri);
+        } else {
+          localUris.push(getRelativePathFromSignedUrl(url, 'memory_images'));
         }
       }
+    } else {
+      localUris.push(...entry.imageUrls);
     }
 
     const updatedMemory = {

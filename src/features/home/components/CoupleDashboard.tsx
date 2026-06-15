@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,16 @@ import {
   TextInput,
   Animated,
   Alert,
+  Vibration,
 } from 'react-native';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useStaggeredEntrance, useHeartbeatGlow } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
 import KamiButton from '@shared/ui/atoms/KamiButton';
-import { Colors, Space, Radii, FontSize, FontWeight, Shadows, FontFamily } from '@shared/constants';
+import { RollingDigit } from '@shared/ui/atoms/RollingDigit';
+import { FloatingHearts } from '@shared/ui/atoms/FloatingHearts';
+import { ShimmerText } from '@shared/ui/atoms/ShimmerText';
+import { Space, Radii, FontSize, FontWeight, Shadows, FontFamily, Opacity } from '@shared/constants';
 
 import { MOODS, DurationData } from '../hooks/useHomeDashboard';
 
@@ -119,7 +123,30 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
   initial,
 }) => {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const name = user?.nickname ? user.nickname.split(' ')[0] : 'You';
+  const entranceAnims = useStaggeredEntrance(9, { delay: 80, offsetY: 25 });
+  const { pulseStyle: heartPulse, glowStyle: heartGlow, glowRingStyle: heartGlowRing } = useHeartbeatGlow({ color: colors.primary, size: 44 });
+  const [loveTrigger, setLoveTrigger] = useState(0);
+
+  // Orbital rotation for mood ring connector heart
+  const orbitAnim = React.useRef(new Animated.Value(0)).current;
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.timing(orbitAnim, { toValue: 1, duration: 6000, useNativeDriver: true })
+    ).start();
+  }, []);
+  const orbitSpin = orbitAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  // Quick action bounce anims
+  const qaScales = React.useRef([new Animated.Value(1), new Animated.Value(1), new Animated.Value(1), new Animated.Value(1)]).current;
+  const qaPress = (idx: number) => {
+    Vibration.vibrate(10);
+    Animated.sequence([
+      Animated.spring(qaScales[idx], { toValue: 0.88, tension: 200, friction: 6, useNativeDriver: true }),
+      Animated.spring(qaScales[idx], { toValue: 1, tension: 120, friction: 8, useNativeDriver: true }),
+    ]).start();
+  };
 
   const goalProgressAnim = React.useRef(new Animated.Value(0)).current;
 
@@ -134,14 +161,18 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
   return (
     <View style={styles.container}>
       {/* ── 1. RELATIONSHIP STATUS & TIMER CARD ───── */}
+      <Animated.View style={entranceAnims[0].style}>
       <LinearGradient
         colors={[colors.primary + '18', colors.primary + '05']}
         style={styles.statusTimerCard}
       >
         <View style={styles.timerHeaderRow}>
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <Text style={{ fontSize: 24, marginRight: 4 }}>❤️</Text>
-          </Animated.View>
+          <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center', marginRight: 4 }}>
+            <Animated.View style={[heartGlowRing, heartGlow]} />
+            <Animated.View style={heartPulse}>
+              <Text style={{ fontSize: 24 }}>❤️</Text>
+            </Animated.View>
+          </View>
           <KamiText style={[styles.timerHeaderTitle, { color: colors.primary }]} bold>Our Love Clock</KamiText>
         </View>
 
@@ -170,33 +201,36 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
             {/* Delicate Divider Line */}
             <View style={[styles.elegantDivider, { backgroundColor: colors.primary + '22' }]} />
 
-            {/* Hours, Minutes, Seconds Live Ticker */}
+            {/* Hours, Minutes, Seconds Live Ticker (Rolling Digits) */}
             <View style={styles.elegantTickerRow}>
               <View style={styles.elegantTickerUnit}>
-                <KamiText style={[styles.elegantTickerVal, { color: colors.primaryDark }]} bold>
-                  {String(durationObj.hours).padStart(2, '0')}
-                </KamiText>
+                <View style={{ flexDirection: 'row' }}>
+                  <RollingDigit value={Math.floor(durationObj.hours / 10)} fontSize={12} color={colors.primaryDark} fontWeight="500" />
+                  <RollingDigit value={durationObj.hours % 10} fontSize={12} color={colors.primaryDark} fontWeight="500" />
+                </View>
                 <KamiText style={styles.elegantTickerLbl}>Hours</KamiText>
               </View>
               <KamiText style={[styles.elegantTickerColon, { color: colors.primary + '44' }]}>:</KamiText>
               <View style={styles.elegantTickerUnit}>
-                <KamiText style={[styles.elegantTickerVal, { color: colors.primaryDark }]} bold>
-                  {String(durationObj.minutes).padStart(2, '0')}
-                </KamiText>
+                <View style={{ flexDirection: 'row' }}>
+                  <RollingDigit value={Math.floor(durationObj.minutes / 10)} fontSize={12} color={colors.primaryDark} fontWeight="500" />
+                  <RollingDigit value={durationObj.minutes % 10} fontSize={12} color={colors.primaryDark} fontWeight="500" />
+                </View>
                 <KamiText style={styles.elegantTickerLbl}>Mins</KamiText>
               </View>
               <KamiText style={[styles.elegantTickerColon, { color: colors.primary + '44' }]}>:</KamiText>
               <View style={styles.elegantTickerUnit}>
-                <KamiText style={[styles.elegantTickerVal, { color: colors.primaryDark }]} bold>
-                  {String(durationObj.seconds).padStart(2, '0')}
-                </KamiText>
+                <View style={{ flexDirection: 'row' }}>
+                  <RollingDigit value={Math.floor(durationObj.seconds / 10)} fontSize={12} color={colors.primaryDark} fontWeight="500" />
+                  <RollingDigit value={durationObj.seconds % 10} fontSize={12} color={colors.primaryDark} fontWeight="500" />
+                </View>
                 <KamiText style={styles.elegantTickerLbl}>Secs</KamiText>
               </View>
             </View>
           </View>
         ) : (
           <View style={styles.timerDisplayBox}>
-            <KamiText style={styles.timerLabel} variant="caption" color={Colors.textMuted} align="center">TOGETHER FOR</KamiText>
+            <KamiText style={styles.timerLabel} variant="caption" color={colors.textMuted} align="center">TOGETHER FOR</KamiText>
             <KamiText style={[styles.timerText, { color: colors.primaryDark }]} bold align="center">
               {durationText || 'Connected'}
             </KamiText>
@@ -211,9 +245,11 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </View>
         ) : null}
       </LinearGradient>
+      </Animated.View>
 
       {/* ── 2. LIVE PRESENCE CARD ──────────────────── */}
       {isPartnerOnline && (
+        <Animated.View style={entranceAnims[1].style}>
         <View style={styles.livePresenceCard}>
           <View style={styles.livePresenceLeft}>
             <View style={styles.liveGreenDot} />
@@ -257,9 +293,11 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
             <KamiText variant="caption" color={colors.primary} bold>View →</KamiText>
           </TouchableOpacity>
         </View>
+        </Animated.View>
       )}
 
       {/* ── 3. TODAY'S MOMENT CARD (HERO) ─────────── */}
+      <Animated.View style={entranceAnims[2].style}>
       <ImageBackground
         source={{ uri: resolvedHeroBg || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?q=80&w=600&auto=format&fit=crop' }}
         style={styles.heroCardImage}
@@ -296,52 +334,57 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </View>
         </LinearGradient>
       </ImageBackground>
+      </Animated.View>
 
       {/* ── 4. QUICK ACTIONS SECTION ────────────────── */}
+      <Animated.View style={entranceAnims[3].style}>
       <View style={styles.quickActionsRow}>
         <TouchableOpacity
           style={styles.quickCardCol}
-          onPress={() => navigation.navigate('Future')}
+          onPress={() => { qaPress(0); navigation.navigate('Future'); }}
         >
-          <View style={[styles.quickIconBg, { backgroundColor: '#fdeae9' }]}>
+          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.primary + Opacity.subtle, transform: [{ scale: qaScales[0] }] }]}>
             <Text style={{ fontSize: 26, color: colors.primary }}>✍️</Text>
-          </View>
+          </Animated.View>
           <KamiText style={styles.quickCardLabel} bold>Write Letter</KamiText>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.quickCardCol}
-          onPress={() => navigation.navigate('Memories')}
+          onPress={() => { qaPress(1); navigation.navigate('Memories'); }}
         >
-          <View style={[styles.quickIconBg, { backgroundColor: '#fdf2e9' }]}>
-            <Text style={{ fontSize: 26, color: '#935a26' }}>📸</Text>
-          </View>
+          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.accent + Opacity.subtle, transform: [{ scale: qaScales[1] }] }]}>
+            <Text style={{ fontSize: 26, color: colors.primaryDark }}>📸</Text>
+          </Animated.View>
           <KamiText style={styles.quickCardLabel} bold>Add Memory</KamiText>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.quickCardCol}
-          onPress={() => navigation.navigate('Goals')}
+          onPress={() => { qaPress(2); navigation.navigate('Goals'); }}
         >
-          <View style={[styles.quickIconBg, { backgroundColor: '#eef7ed' }]}>
-            <Text style={{ fontSize: 26, color: '#2d5a27' }}>🎯</Text>
-          </View>
+          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.success + Opacity.subtle, transform: [{ scale: qaScales[2] }] }]}>
+            <Text style={{ fontSize: 26, color: colors.success }}>🎯</Text>
+          </Animated.View>
           <KamiText style={styles.quickCardLabel} bold>New Goal</KamiText>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.quickCardCol}
-          onPress={handleSendLove}
+          style={[styles.quickCardCol, { position: 'relative' }]}
+          onPress={() => { qaPress(3); setLoveTrigger(t => t + 1); handleSendLove(); }}
           disabled={loveSending}
         >
-          <View style={[styles.quickIconBg, { backgroundColor: '#f4effa' }]}>
-            <Text style={{ fontSize: 26, color: '#5c2d91' }}>❤️</Text>
-          </View>
+          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.accent + Opacity.light, transform: [{ scale: qaScales[3] }] }]}>
+            <Text style={{ fontSize: 26, color: colors.accent }}>❤️</Text>
+          </Animated.View>
           <KamiText style={styles.quickCardLabel} bold>Send Love</KamiText>
+          <FloatingHearts trigger={loveTrigger} count={6} spread={80} />
         </TouchableOpacity>
       </View>
+      </Animated.View>
 
       {/* ── 5. COUPLE MOOD RING WIDGET ───────────── */}
+      <Animated.View style={entranceAnims[4].style}>
       <View style={styles.moodRingCard}>
         <View style={styles.widgetTopRow}>
           <KamiText style={styles.widgetHeader} bold>Couple Mood Ring</KamiText>
@@ -358,7 +401,7 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                 <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold' }}>{initial(name)}</Text>
               </View>
             )}
-            <KamiText variant="caption" color={Colors.textMuted} bold style={{ marginTop: 4 }}>You</KamiText>
+            <KamiText variant="caption" color={colors.textMuted} bold style={{ marginTop: 4 }}>You</KamiText>
             <View style={[styles.moodRingStatusPill, { backgroundColor: colors.primary + '11' }]}>
               <Text style={{ fontSize: 16 }}>{user?.currentMoodEmoji || '❓'}</Text>
               <KamiText variant="caption" color={colors.primary} bold style={{ fontSize: 10 }}>
@@ -368,9 +411,9 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </View>
 
           {/* Center Connect Line */}
-          <View style={styles.moodRingCenterLine}>
+          <Animated.View style={[styles.moodRingCenterLine, { transform: [{ rotate: orbitSpin }] }]}>
             <Text style={{ fontSize: 16, color: colors.primary }}>💖</Text>
-          </View>
+          </Animated.View>
 
           {/* Right: Partner */}
           <View style={styles.moodRingUserCol}>
@@ -381,10 +424,10 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                 <Text style={{ fontSize: 12, color: colors.primary, fontWeight: 'bold' }}>{initial(partnerName)}</Text>
               </View>
             )}
-            <KamiText variant="caption" color={Colors.textMuted} bold style={{ marginTop: 4 }}>{partnerName}</KamiText>
-            <View style={[styles.moodRingStatusPill, { backgroundColor: '#F1F5F9' }]}>
+            <KamiText variant="caption" color={colors.textMuted} bold style={{ marginTop: 4 }}>{partnerName}</KamiText>
+            <View style={[styles.moodRingStatusPill, { backgroundColor: colors.surfaceMuted }]}>
               <Text style={{ fontSize: 16 }}>{partner?.currentMoodEmoji || '❓'}</Text>
-              <KamiText variant="caption" color={Colors.textSecondary} bold style={{ fontSize: 10 }}>
+              <KamiText variant="caption" color={colors.textSecondary} bold style={{ fontSize: 10 }}>
                 {partner?.currentMoodEmoji ? partner.currentMoodLabel : 'No mood set'}
               </KamiText>
             </View>
@@ -393,7 +436,7 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
 
         {/* Quick Share Mood Chips */}
         <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(0, 0, 0, 0.05)', paddingTop: Space[3], marginTop: Space[2] }}>
-          <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[2] }}>How are you feeling right now?</KamiText>
+          <KamiText variant="caption" color={colors.textMuted} style={{ marginBottom: Space[2] }}>How are you feeling right now?</KamiText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodRingChipsRow}>
             <TouchableOpacity
               onPress={() => setCustomMoodModalVisible(true)}
@@ -418,12 +461,12 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                   }}
                   style={[
                     styles.moodRingChip,
-                    { borderColor: isCurrent ? colors.primary : Colors.border + '55' },
+                    { borderColor: isCurrent ? colors.primary : colors.border + '55' },
                     isCurrent && { backgroundColor: colors.primary + '11' }
                   ]}
                 >
                   <Text style={{ fontSize: 16 }}>{m.emoji}</Text>
-                  <KamiText variant="caption" color={isCurrent ? colors.primary : Colors.textSecondary} bold={isCurrent}>
+                  <KamiText variant="caption" color={isCurrent ? colors.primary : colors.textSecondary} bold={isCurrent}>
                     {m.label}
                   </KamiText>
                 </TouchableOpacity>
@@ -432,8 +475,10 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </ScrollView>
         </View>
       </View>
+      </Animated.View>
 
       {/* ── 6. OUR JOURNEY TIMELINE ─────────────────── */}
+      <Animated.View style={entranceAnims[5].style}>
       <View style={styles.journeySection}>
         <View style={styles.journeyHeader}>
           <KamiText variant="subtitle" bold style={styles.journeyTitle}>Couple Timeline ✨</KamiText>
@@ -456,7 +501,7 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                       <Text style={{ fontSize: 18 }}>{item.icon}</Text>
                     </View>
                     {index < shownTimelineEvents.length - 1 && (
-                      <View style={[styles.timelineConnectorLine, { backgroundColor: Colors.border + '55' }]} />
+                      <View style={[styles.timelineConnectorLine, { backgroundColor: colors.border + '55' }]} />
                     )}
                   </View>
                   <View style={styles.timelineRightContent}>
@@ -474,14 +519,20 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </ScrollView>
         ) : (
           <View style={styles.emptyJourneyBox}>
-            <KamiText variant="caption" color={Colors.textMuted} align="center">
-              Your timeline is empty. Write a letter, log a journal entry, or share a memory to see it here! ✨
+            <Text style={{ fontSize: 32, marginBottom: Space[2] }}>✨</Text>
+            <KamiText variant="caption" color={colors.textMuted} align="center">
+              Your timeline is empty. Write a letter, log a journal entry, or share a memory to see it here!
             </KamiText>
+            <ShimmerText shimmerColor={colors.primary}>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Start your journey ›</KamiText>
+            </ShimmerText>
           </View>
         )}
       </View>
+      </Animated.View>
 
       {/* ── 7. MEMORY FLASHBACK CARD ────────────────── */}
+      <Animated.View style={entranceAnims[6].style}>
       {flashbackMemory && (
         <ImageBackground
           source={{ uri: flashbackImage }}
@@ -510,8 +561,10 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </LinearGradient>
         </ImageBackground>
       )}
+      </Animated.View>
 
       {/* ── 8 & 9. WIDGETS ROW SPLIT ────────────────── */}
+      <Animated.View style={entranceAnims[7].style}>
       <View style={styles.widgetsSplitRow}>
         {/* Swipeable Letters Carousel Widget */}
         <View style={[styles.tornPaperWidget, { padding: 0 }]}>
@@ -557,11 +610,11 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                     >
                       <View style={styles.toLabelRow}>
                         <Text style={{ fontSize: 10 }}>{isUnlocked ? '❤️' : '🔒'}</Text>
-                        <KamiText style={[styles.toLabelText, { color: isMe ? colors.primary : Colors.textMuted }]} bold>
+                        <KamiText style={[styles.toLabelText, { color: isMe ? colors.primary : colors.textMuted }]} bold>
                           {senderLabel}
                         </KamiText>
                       </View>
-                      <KamiText style={[styles.letterExcerptText, !isUnlocked && { fontStyle: 'italic', color: Colors.textMuted }]}>
+                      <KamiText style={[styles.letterExcerptText, !isUnlocked && { fontStyle: 'italic', color: colors.textMuted }]}>
                         {excerpt}
                       </KamiText>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
@@ -583,18 +636,21 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
               </ScrollView>
             </View>
           ) : (
-            <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: Space[4], paddingBottom: Space[4] }}>
-              <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
+            <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: Space[4], paddingBottom: Space[4], alignItems: 'center' }}>
+              <Text style={{ fontSize: 28, marginBottom: Space[2] }}>✉️</Text>
+              <KamiText style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic', lineHeight: 16, textAlign: 'center' }}>
                 No letters opened yet. Write a time capsule to surprise your partner!
               </KamiText>
-              <TouchableOpacity
-                style={[styles.widgetFooterCta, { marginTop: Space[2] }]}
-                onPress={() => navigation.navigate('Future')}
-              >
-                <KamiText style={[styles.widgetCtaText, { color: colors.primary }]} bold>
-                  Write Letter →
-                </KamiText>
-              </TouchableOpacity>
+              <ShimmerText shimmerColor={colors.primary}>
+                <TouchableOpacity
+                  style={[styles.widgetFooterCta, { marginTop: Space[2] }]}
+                  onPress={() => navigation.navigate('Future')}
+                >
+                  <KamiText style={[styles.widgetCtaText, { color: colors.primary }]} bold>
+                    Write Letter →
+                  </KamiText>
+                </TouchableOpacity>
+              </ShimmerText>
             </View>
           )}
 
@@ -605,7 +661,7 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                   key={i}
                   style={[
                     styles.carouselDot,
-                    { backgroundColor: i === activeLetterSlide ? colors.primary : Colors.border }
+                    { backgroundColor: i === activeLetterSlide ? colors.primary : colors.border }
                   ]}
                 />
               ))}
@@ -671,8 +727,9 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
               </View>
             </>
           ) : (
-            <View style={{ flex: 1, justifyContent: 'center', paddingVertical: Space[2] }}>
-              <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
+            <View style={{ flex: 1, justifyContent: 'center', paddingVertical: Space[2], alignItems: 'center' }}>
+              <Text style={{ fontSize: 24, marginBottom: Space[1] }}>🌱</Text>
+              <KamiText style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic', lineHeight: 16, textAlign: 'center' }}>
                 No active shared goals. Create one to track milestones together!
               </KamiText>
             </View>
@@ -688,8 +745,10 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+      </Animated.View>
 
       {/* Today's Daily Question (Redesigned, premium, elegant) */}
+      <Animated.View style={entranceAnims[8].style}>
       {todayQuestion && (
         <View style={styles.dailyQuestionCard}>
           {/* Header */}
@@ -722,10 +781,10 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                       <KamiText style={{ fontSize: 9, color: colors.primary }} bold>Y</KamiText>
                     </View>
                   )}
-                  <KamiText variant="caption" color={Colors.textMuted} bold>You</KamiText>
+                  <KamiText variant="caption" color={colors.textMuted} bold>You</KamiText>
                 </View>
                 <View style={[styles.bubbleMine, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primaryLight + '44', alignSelf: 'flex-start' }]}>
-                  <KamiText variant="body" style={{ color: Colors.textPrimary, fontSize: 13, lineHeight: 18 }}>{myAnswer.response}</KamiText>
+                  <KamiText variant="body" style={{ color: colors.textPrimary, fontSize: 13, lineHeight: 18 }}>{myAnswer.response}</KamiText>
                 </View>
               </View>
 
@@ -739,20 +798,20 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
                       <KamiText style={{ fontSize: 9, color: colors.primary }} bold>{partnerName[0]}</KamiText>
                     </View>
                   )}
-                  <KamiText variant="caption" color={Colors.textMuted} bold>{partnerName}</KamiText>
+                  <KamiText variant="caption" color={colors.textMuted} bold>{partnerName}</KamiText>
                 </View>
-                <View style={[styles.bubblePartner, { backgroundColor: '#F8FAFC', borderColor: Colors.border + '44', alignSelf: 'flex-start' }]}>
-                  <KamiText variant="body" style={{ color: Colors.textPrimary, fontSize: 13, lineHeight: 18 }}>{partnerAnswer.response}</KamiText>
+                <View style={[styles.bubblePartner, { backgroundColor: colors.inputBg, borderColor: colors.border + Opacity.strong, alignSelf: 'flex-start' }]}>
+                  <KamiText variant="body" style={{ color: colors.textPrimary, fontSize: 13, lineHeight: 18 }}>{partnerAnswer.response}</KamiText>
                 </View>
               </View>
             </View>
           ) : myAnswer ? (
             <View style={styles.waitingContainer}>
-              <View style={[styles.statusBadge, { backgroundColor: Colors.success + '15' }]}>
-                <Text style={{ fontSize: 12, color: Colors.success }}>✓</Text>
-                <KamiText variant="caption" color={Colors.success} bold>Answered</KamiText>
+              <View style={[styles.statusBadge, { backgroundColor: colors.success + '15' }]}>
+                <Text style={{ fontSize: 12, color: colors.success }}>✓</Text>
+                <KamiText variant="caption" color={colors.success} bold>Answered</KamiText>
               </View>
-              <KamiText variant="caption" color={Colors.textMuted} style={{ marginTop: 6, textAlign: 'center' }}>
+              <KamiText variant="caption" color={colors.textMuted} style={{ marginTop: 6, textAlign: 'center' }}>
                 Waiting for {partnerName} to answer to reveal responses...
               </KamiText>
             </View>
@@ -761,7 +820,7 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
               <TextInput
                 style={[styles.answerInput, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11' }]}
                 placeholder="Type your response to reveal partner's answer..."
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={answerInput}
                 onChangeText={setAnswerInput}
                 multiline
@@ -779,11 +838,12 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
           )}
         </View>
       )}
+      </Animated.View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     gap: Space[5],
   },
@@ -793,7 +853,7 @@ const styles = StyleSheet.create({
     marginHorizontal: Space[8],
     marginBottom: Space[3],
     borderWidth: 1,
-    borderColor: 'rgba(201, 104, 130, 0.10)',
+    borderColor: colors.border + Opacity.ghost,
     backgroundColor: 'transparent',
   },
   timerHeaderRow: {
@@ -809,12 +869,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   timerDisplayBox: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 16,
     paddingVertical: Space[3],
     paddingHorizontal: Space[2],
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    borderColor: colors.border + Opacity.ghost,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -860,7 +920,7 @@ const styles = StyleSheet.create({
   },
   elegantMainLbl: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   elegantDivider: {
@@ -891,7 +951,7 @@ const styles = StyleSheet.create({
   },
   elegantTickerLbl: {
     fontSize: 8,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 0,
@@ -900,12 +960,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.full,
     paddingVertical: Space[2],
     paddingHorizontal: Space[4],
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: colors.border + Opacity.ghost,
     ...Shadows.sm,
     elevation: 2,
     marginHorizontal: Space[5],
@@ -925,11 +985,11 @@ const styles = StyleSheet.create({
   },
   presenceTitle: {
     fontSize: FontSize.sm,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   presenceSub: {
     fontSize: 9,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     marginTop: 1,
   },
   presenceViewBtn: {
@@ -1047,14 +1107,14 @@ const styles = StyleSheet.create({
   },
   quickCardLabel: {
     fontSize: 10,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   moodRingCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 24,
     padding: Space[5],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+    borderColor: colors.border + Opacity.subtle,
     ...Shadows.md,
     elevation: 3,
     marginHorizontal: Space[5],
@@ -1070,7 +1130,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   moodRingAvatarsRow: {
     flexDirection: 'row',
@@ -1119,7 +1179,7 @@ const styles = StyleSheet.create({
     paddingVertical: Space[2] - 2,
     borderRadius: Radii.full,
     borderWidth: 1.5,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.inputBg,
   },
   journeySection: {
     marginBottom: Space[5],
@@ -1154,7 +1214,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     ...Shadows.sm,
   },
   timelineConnectorLine: {
@@ -1174,27 +1234,27 @@ const styles = StyleSheet.create({
   },
   timelineItemTitle: {
     fontSize: FontSize.sm,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     flex: 1,
   },
   timelineItemTime: {
     fontFamily: 'PlusJakartaSans-Regular',
     fontSize: FontSize.xs,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontWeight: '400',
   },
   timelineItemDesc: {
     fontSize: FontSize.xs,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
     lineHeight: 16,
   },
   emptyJourneyBox: {
     padding: Space[5],
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.15)',
+    borderColor: colors.border + Opacity.medium,
     borderStyle: 'dashed',
     marginHorizontal: Space[5],
     alignItems: 'center',
@@ -1260,11 +1320,11 @@ const styles = StyleSheet.create({
   },
   tornPaperWidget: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 20,
     padding: Space[4],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.15)',
+    borderColor: colors.border + Opacity.medium,
     borderStyle: 'dashed',
     ...Shadows.sm,
     elevation: 2,
@@ -1286,12 +1346,12 @@ const styles = StyleSheet.create({
   letterExcerptText: {
     fontSize: 12,
     fontStyle: 'italic',
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 17,
   },
   letterWrittenText: {
     fontSize: 8,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   widgetFooterCta: {
@@ -1316,11 +1376,11 @@ const styles = StyleSheet.create({
   },
   goalWidgetCard: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 20,
     padding: Space[4],
     borderWidth: 1,
-    borderColor: Colors.border + '55',
+    borderColor: colors.border + Opacity.strong,
     ...Shadows.sm,
     elevation: 2,
     justifyContent: 'space-between',
@@ -1329,12 +1389,12 @@ const styles = StyleSheet.create({
   goalWidgetTitle: {
     fontSize: 14,
     fontFamily: FontFamily.display,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginTop: 4,
   },
   goalWidgetDaysLeft: {
     fontSize: 10,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   goalWidgetMiddle: {
     flexDirection: 'row',
@@ -1351,14 +1411,14 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#fff',
-    backgroundColor: '#eee',
+    borderColor: colors.cardBg,
+    backgroundColor: colors.creamDeep,
   },
   widgetGoalImage: {
     width: 34,
     height: 34,
     borderRadius: 8,
-    backgroundColor: '#eee',
+    backgroundColor: colors.creamDeep,
   },
   widgetGoalImagePlaceholder: {
     width: 34,
@@ -1373,7 +1433,7 @@ const styles = StyleSheet.create({
   },
   progressPercentText: {
     fontSize: 9,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   progressBarTrack: {
     height: 6,
@@ -1386,11 +1446,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   dailyQuestionCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 24,
     padding: Space[5],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+    borderColor: colors.border + Opacity.subtle,
     ...Shadows.md,
     marginHorizontal: Space[5],
     marginBottom: Space[5],
@@ -1440,7 +1500,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignSelf: 'flex-end',
     maxWidth: '85%',
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -1477,7 +1537,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: Radii.input,
     padding: Space[4],
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     textAlignVertical: 'top',
     fontSize: FontSize.base,
   },

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors, Radii, FontSize, Space } from '@shared/constants';
-import { useTextScale } from '@shared/hooks';
+import { useTextScale, useTheme } from '@shared/hooks';
 
 export interface Mood {
   id:    string;
@@ -31,10 +31,10 @@ const MoodSelector: React.FC<MoodSelectorProps> = ({
   onSelect,
 }) => {
   const { scaleSize } = useTextScale();
-  const [local, setLocal] = useState<string | undefined>(selected);
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   const pick = (id: string) => {
-    setLocal(id);
     onSelect?.(id);
   };
 
@@ -45,7 +45,7 @@ const MoodSelector: React.FC<MoodSelectorProps> = ({
       contentContainerStyle={styles.row}
     >
       {moods.map(m => {
-        const active = local === m.id;
+        const active = selected === m.id;
         return (
           <TouchableOpacity
             key={m.id}
@@ -67,7 +67,7 @@ const MoodSelector: React.FC<MoodSelectorProps> = ({
 
 export default MoodSelector;
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   row: { gap: Space[2], paddingVertical: Space[1] },
   chip: {
     alignItems: 'center',
@@ -76,23 +76,23 @@ const styles = StyleSheet.create({
     paddingVertical: Space[2],
     borderRadius: Radii.full,
     borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.creamDeep,
+    borderColor: colors.border,
+    backgroundColor: colors.creamDeep,
     gap: Space[1],
     flexDirection: 'row',
   },
   chipActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '18',
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '18',
   },
   emoji: { fontSize: FontSize.base },
   label: {
     fontSize: FontSize.sm,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontWeight: '500',
   },
   labelActive: {
-    color: Colors.primary,
+    color: colors.primary,
     fontWeight: '700',
   },
 });

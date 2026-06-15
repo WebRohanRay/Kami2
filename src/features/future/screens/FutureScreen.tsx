@@ -24,8 +24,10 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { FlashList } from '@shopify/flash-list';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
+import { FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
+import { useHomeStore } from '@features/home/store';
+import { useShallow } from 'zustand/react/shallow';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import type { Letter } from '@features/home/types';
 import type { CoupleLetter } from '@features/couple/types';
@@ -34,7 +36,6 @@ import { useCouple } from '@features/couple/hooks/useCouple';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import * as coupleService from '@infrastructure/couple/coupleService';
 import * as futureService from '@infrastructure/home/futureService';
-import { uploadImages } from '@shared/lib/storage';
 import { useTheme } from '@shared/hooks';
 
 import {
@@ -42,7 +43,6 @@ import {
   ReadModal,
   LetterCard,
   checkUnlocked,
-  getRelativePathFromSignedUrl,
 } from '../components';
 
 type Props = MainTabScreenProps<'Future'>;
@@ -56,7 +56,33 @@ export function FutureScreen({ navigation }: Props) {
   const coupleActions = useCouple();
   const couple = coupleStore.couple;
 
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
+
+  // Sync state from Zustand
+  const { pendingSyncCount, isSyncing } = useHomeStore(
+    useShallow((s) => ({
+      pendingSyncCount: s.pendingSyncCount,
+      isSyncing: s.isSyncing,
+    }))
+  );
+
+  // Local UI status: 'idle' | 'syncing' | 'saved'
+  const [uiSyncStatus, setUiSyncStatus] = useState<'idle' | 'syncing' | 'saved'>('idle');
+
+  useEffect(() => {
+    if (isSyncing) {
+      setUiSyncStatus('syncing');
+    } else if (pendingSyncCount === 0 && uiSyncStatus === 'syncing') {
+      setUiSyncStatus('saved');
+      const timer = setTimeout(() => {
+        setUiSyncStatus('idle');
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setUiSyncStatus('idle');
+    }
+  }, [isSyncing, pendingSyncCount]);
 
   const [letters, setLetters] = useState<Letter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,27 +186,6 @@ export function FutureScreen({ navigation }: Props) {
       const targetId = updateId || uuid();
       const finalSubject = subject.trim() || (activeSpace === 'couple' ? 'Love Letter' : 'To my future self');
 
-      const remoteUrls = localUris.filter(u => u.startsWith('http'));
-      const localOnly = localUris.filter(u => !u.startsWith('http'));
-
-      let relativePaths: string[] = [];
-      if (localOnly.length > 0) {
-        const bucket = activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images';
-        const ownerId = activeSpace === 'couple' && couple?.id ? couple.id : user.id;
-
-        const uploadRes = await uploadImages(bucket, ownerId, targetId, localOnly);
-        if (!uploadRes.success) {
-          Alert.alert('Kami', uploadRes.error);
-          setSaving(false);
-          return;
-        }
-        relativePaths = uploadRes.paths;
-      }
-
-      const bucket = activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images';
-      const remoteRelativePaths = remoteUrls.map(u => getRelativePathFromSignedUrl(u, bucket));
-      const finalImageUrls = [...remoteRelativePaths, ...relativePaths];
-
       if (activeSpace === 'couple') {
         if (!couple?.id) {
           Alert.alert('Kami', 'No couple space connected.');
@@ -193,7 +198,7 @@ export function FutureScreen({ navigation }: Props) {
             body,
             deliverAt,
             isDraft,
-            imageUrls: finalImageUrls
+            imageUrls: localUris
           });
           if (!r.success) { Alert.alert('Kami', r.error); }
           else {
@@ -202,7 +207,7 @@ export function FutureScreen({ navigation }: Props) {
             setReplyTo(null);
           }
         } else {
-          const r = await coupleActions.addLetter(couple.id, finalSubject, body, deliverAt, finalImageUrls, isDraft, replyTo?.id);
+          const r = await coupleActions.addLetter(couple.id, finalSubject, body, deliverAt, localUris, isDraft, replyTo?.id);
           if (!r.success) { Alert.alert('Kami', r.error); }
           else {
             setWriteOpen(false);
@@ -216,7 +221,7 @@ export function FutureScreen({ navigation }: Props) {
             body,
             deliverAt,
             isDraft,
-            imageUrls: finalImageUrls
+            imageUrls: localUris
           });
           if (!r.success) { Alert.alert('Kami', r.error); }
           else {
@@ -232,7 +237,7 @@ export function FutureScreen({ navigation }: Props) {
             subject: finalSubject,
             body,
             deliverAt,
-            imageUrls: finalImageUrls,
+            imageUrls: localUris,
             isDraft
           });
           if (!r.success) { Alert.alert('Kami', r.error); }
@@ -435,17 +440,17 @@ export function FutureScreen({ navigation }: Props) {
   const renderEmpty = () => {
     const isLoading = (loading && activeSpace === 'personal') || (coupleStore.lettersLoading === 'loading' && activeSpace === 'couple');
     if (isLoading) {
-      return <View style={s.center}><ActivityIndicator color={colors.primary} /></View>;
+      return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
     }
     if (sortedLetters.length > 0) return null;
     return (
-      <TouchableOpacity style={s.emptyState} onPress={() => { setReplyTo(null); setWriteOpen(true); }} activeOpacity={0.85}>
+      <TouchableOpacity style={styles.emptyState} onPress={() => { setReplyTo(null); setWriteOpen(true); }} activeOpacity={0.85}>
         <Text style={{ fontSize: 56, marginBottom: Space[3] }}>💌</Text>
         <KamiText variant="subtitle" align="center">Your Box is empty</KamiText>
-        <KamiText variant="body" color={Colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
+        <KamiText variant="body" color={colors.textMuted} align="center" style={{ marginTop: Space[2] }}>
           No letters found under this filter. Tap below to seal a new letter today.
         </KamiText>
-        <View style={[s.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
+        <View style={[styles.emptyBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]}>
           <KamiText variant="label" color={colors.primary} bold>Write a letter ›</KamiText>
         </View>
       </TouchableOpacity>
@@ -480,35 +485,53 @@ export function FutureScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* Header */}
-      <View style={[s.header, { backgroundColor: colors.pageBg }]}>
+      <View style={[styles.header, { backgroundColor: colors.pageBg }]}>
         <View style={{ flex: 1 }}>
           <KamiText variant="overline">{activeSpace === 'couple' ? 'Sealed capsules' : 'Letters to yourself'}</KamiText>
-          <KamiText variant="title">{activeSpace === 'couple' ? 'Love Letters' : 'Future'}</KamiText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+            <KamiText variant="title">{activeSpace === 'couple' ? 'Love Letters' : 'Future'}</KamiText>
+            {uiSyncStatus === 'syncing' && (
+              <View style={[styles.syncStatusBadge, { backgroundColor: '#fef3c7' }]}>
+                <ActivityIndicator size="small" color="#d97706" style={{ marginRight: 4, transform: [{ scale: 0.8 }] }} />
+                <KamiText variant="caption" color="#d97706" bold>Syncing...</KamiText>
+              </View>
+            )}
+            {uiSyncStatus === 'saved' && (
+              <View style={[styles.syncStatusBadge, { backgroundColor: '#ecfdf5' }]}>
+                <KamiText variant="caption" color="#059669" bold>✓ Saved</KamiText>
+              </View>
+            )}
+            {uiSyncStatus === 'idle' && pendingSyncCount > 0 && (
+              <View style={[styles.syncStatusBadge, { backgroundColor: '#f3f4f6' }]}>
+                <KamiText variant="caption" color="#6b7280" bold>☁ {pendingSyncCount} offline</KamiText>
+              </View>
+            )}
+          </View>
         </View>
-        <TouchableOpacity style={[s.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setReplyTo(null); setWriteOpen(true); }}>
-          <Text style={[s.writePlus, { color: colors.primary }]}>+</Text>
+        <TouchableOpacity style={[styles.writeBtn, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '44' }]} onPress={() => { setReplyTo(null); setWriteOpen(true); }}>
+          <Text style={[styles.writePlus, { color: colors.primary }]}>+</Text>
           <KamiText variant="label" color={colors.primary} bold>Write</KamiText>
         </TouchableOpacity>
       </View>
 
       {/* Segmented filter */}
       <View style={{ height: 48, marginBottom: Space[2] }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           {(['inbox', 'scheduled', 'drafts', 'favorites', 'archive'] as const).map(tab => (
             <TouchableOpacity
               key={tab}
               style={[
-                s.filterTab,
-                { backgroundColor: colors.creamDeep, borderColor: Colors.border + '44' },
-                filterTab === tab && [s.filterTabActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
+                styles.filterTab,
+                { backgroundColor: colors.creamDeep, borderColor: colors.border + '44' },
+                filterTab === tab && [styles.filterTabActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
               ]}
               onPress={() => setFilterTab(tab)}
             >
-              <KamiText variant="caption" color={filterTab === tab ? '#fff' : Colors.textMuted} bold={filterTab === tab} style={{ textTransform: 'capitalize' }}>
+              <KamiText variant="caption" color={filterTab === tab ? '#fff' : colors.textMuted} bold={filterTab === tab} style={{ textTransform: 'capitalize' }}>
                 {tab}
               </KamiText>
             </TouchableOpacity>
@@ -519,7 +542,7 @@ export function FutureScreen({ navigation }: Props) {
       <FlashList
         data={listData}
         renderItem={({ item }: { item: any }) => (
-          <View style={s.threadContainer}>
+          <View style={styles.threadContainer}>
             {/* Root Letter bubble */}
             <LetterCard
               letter={item.rootLetter}
@@ -534,8 +557,8 @@ export function FutureScreen({ navigation }: Props) {
 
             {/* Render nested replies with vertical line */}
             {item.replies.length > 0 && (
-              <View style={s.repliesSection}>
-                <View style={[s.treeLine, { borderColor: colors.primary + '33' }]} />
+              <View style={styles.repliesSection}>
+                <View style={[styles.treeLine, { borderColor: colors.primary + '33' }]} />
                 <View style={{ flex: 1, gap: Space[3] }}>
                   {item.replies.map((reply: any) => (
                     <LetterCard
@@ -557,7 +580,7 @@ export function FutureScreen({ navigation }: Props) {
           </View>
         )}
         keyExtractor={(item: any) => item.id}
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={styles.scroll}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
         refreshControl={
@@ -595,20 +618,28 @@ export function FutureScreen({ navigation }: Props) {
   );
 }
 
-const s = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? 40 : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '33', backgroundColor: Colors.pageBg },
-  writeBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: Colors.primary + '44' },
-  writePlus:{ fontSize: FontSize.lg, color: Colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
+const getStyles = (colors: any) => StyleSheet.create({
+  root:   { flex: 1, backgroundColor: colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? 40 : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '33', backgroundColor: colors.pageBg },
+  writeBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: colors.primary + '44' },
+  writePlus:{ fontSize: FontSize.lg, color: colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
 
   filterScroll: { flexDirection: 'row', paddingHorizontal: Space[5], gap: Space[2], alignItems: 'center' },
-  filterTab: { height: 36, paddingHorizontal: Space[4], borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border + '55', backgroundColor: Colors.cardBg, alignItems: 'center', justifyContent: 'center' },
+  filterTab: { height: 36, paddingHorizontal: Space[4], borderRadius: Radii.full, borderWidth: 1.5, borderColor: colors.border + '55', backgroundColor: colors.cardBg, alignItems: 'center', justifyContent: 'center' },
   filterTabActive: { borderWidth: 1.5 },
 
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[2], gap: Space[4] },
   center: { paddingVertical: Space[10], alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
-  emptyBtn:   { marginTop: Space[4], backgroundColor: Colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: Colors.primary + '44' },
+  emptyBtn:   { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
+  syncStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.sm,
+    marginLeft: Space[2],
+  },
 
   threadContainer: {
     gap: Space[2]
@@ -620,6 +651,7 @@ const s = StyleSheet.create({
   treeLine: {
     width: 2,
     borderLeftWidth: 1.5,
+    borderColor: colors.border + '88',
     borderStyle: 'dashed',
     marginRight: Space[3],
     marginTop: -Space[3],

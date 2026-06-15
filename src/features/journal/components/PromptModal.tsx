@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, FontWeight, Radii, Space, FontFamily } from '@shared/constants';
+import { FontSize, FontWeight, Radii, Space, FontFamily } from '@shared/constants';
 
 interface PromptModalProps {
   visible: boolean;
@@ -35,6 +35,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
   const { colors } = useTheme();
   const [response, setResponse] = useState(existing ?? '');
   const [focused, setFocused] = useState(false);
+  const pm = getStyles(colors);
 
   useEffect(() => {
     if (visible) setResponse(existing ?? '');
@@ -45,7 +46,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
       <SafeAreaView style={[pm.root, { backgroundColor: colors.pageBg }]}>
         <View style={pm.toolbar}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
-            <KamiText variant="label" color={Colors.textMuted}>Close</KamiText>
+            <KamiText variant="label" color={colors.textMuted}>Close</KamiText>
           </TouchableOpacity>
           <KamiText variant="overline">Today's Reflection</KamiText>
           <TouchableOpacity
@@ -61,7 +62,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
             {saving ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <KamiText variant="label" color={response.trim() ? colors.primary : Colors.textMuted} bold>Save</KamiText>
+              <KamiText variant="label" color={response.trim() ? colors.primary : colors.textMuted} bold>Save</KamiText>
             )}
           </TouchableOpacity>
         </View>
@@ -71,9 +72,9 @@ export const PromptModal: React.FC<PromptModalProps> = ({
             <KamiText style={{ fontFamily: 'Lora-Regular', fontSize: FontSize.md, lineHeight: 31, textAlign: 'center' }}>{prompt}</KamiText>
           </View>
           <TextInput
-            style={[pm.input, { borderColor: focused ? colors.primary : Colors.border }]}
+            style={[pm.input, { borderColor: focused ? colors.primary : colors.border }]}
             placeholder="Write your thoughts…"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={response}
             onChangeText={setResponse}
             multiline
@@ -83,18 +84,18 @@ export const PromptModal: React.FC<PromptModalProps> = ({
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
           />
-          <KamiText variant="caption" color={Colors.textMuted} align="right">{response.length} / 2000</KamiText>
+          <KamiText variant="caption" color={colors.textMuted} align="right">{response.length} / 2000</KamiText>
         </ScrollView>
       </SafeAreaView>
     </Modal>
   );
 };
 
-const pm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
-  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
+  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingVertical: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '44' },
   content: { padding: Space[5], gap: Space[4] },
   promptBox: { borderRadius: Radii.card, padding: Space[5], borderLeftWidth: 3, borderWidth: 1 },
   quoteMark: { fontSize: 40, lineHeight: 40, fontFamily: FontFamily.display },
-  input: { backgroundColor: Colors.cardBg, borderRadius: Radii.card, padding: Space[4], fontSize: FontSize.base, color: Colors.textPrimary, minHeight: 220, borderWidth: 1.5, lineHeight: 24 },
+  input: { backgroundColor: colors.cardBg, borderRadius: Radii.card, padding: Space[4], fontSize: FontSize.base, color: colors.textPrimary, minHeight: 220, borderWidth: 1.5, lineHeight: 24 },
 });

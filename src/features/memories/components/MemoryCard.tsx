@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { KamiImage } from '@shared/ui/atoms/KamiImage';
-import { Colors, Radii, Space, Shadows } from '@shared/constants';
+import { Radii, Space, Shadows } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
+import { useTheme } from '@shared/hooks';
 import type { Memory } from '@features/home/types';
 import { getRotationAngle } from './utils';
 
@@ -21,6 +22,8 @@ interface MemoryCardProps {
 }
 
 export const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onPressCard, onDelete }) => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const sc = useRef(new Animated.Value(1)).current;
   const user = useAuthStore(s => s.user);
 
@@ -41,15 +44,15 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onPressCard, onD
             <View style={styles.cardTop}>
               <KamiText variant="label" numberOfLines={1} style={{ flex: 1 }}>{memory.title}</KamiText>
               <TouchableOpacity onPress={onDelete} hitSlop={8} style={styles.delBtn}>
-                <Text style={{ fontSize: 12, color: Colors.textMuted }}>✕</Text>
+                <Text style={{ fontSize: 12, color: colors.textMuted }}>✕</Text>
               </TouchableOpacity>
             </View>
             {memory.body ? (
-              <KamiText variant="body" color={Colors.textSecondary} numberOfLines={3} style={{ lineHeight: 20 }}>
+              <KamiText variant="body" color={colors.textSecondary} numberOfLines={3} style={{ lineHeight: 20 }}>
                 {memory.body}
               </KamiText>
             ) : null}
-            <KamiText variant="caption" color={Colors.textMuted}>
+            <KamiText variant="caption" color={colors.textMuted}>
               {new Date(memory.memoryDate).toLocaleDateString(undefined, {
                 weekday: 'short',
                 month: 'short',
@@ -82,15 +85,15 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onPressCard, onD
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   card: {
     flexDirection: 'column',
     gap: Space[3],
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     padding: Space[4],
     borderWidth: 1,
-    borderColor: Colors.border + '44',
+    borderColor: colors.border + '44',
     ...Shadows.sm,
   },
   cardLeft: { alignItems: 'center', width: 44 },
@@ -99,11 +102,11 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border + '33',
+    borderColor: colors.border + '33',
   },
   imageScroll: { marginHorizontal: -Space[4], paddingHorizontal: Space[4], marginTop: Space[1] },
   imageRow: { flexDirection: 'row', gap: Space[2] },

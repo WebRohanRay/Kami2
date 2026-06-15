@@ -10,6 +10,9 @@ import type { AuthUser, Result } from '@features/auth/types';
 import { signedUrlCache } from '@shared/lib/storage/signedUrlCache';
 import { profileRepo } from '@shared/db/repo';
 import { enqueueMutation, processSyncQueue } from '@shared/db/sync';
+import { db } from '@shared/db/client';
+import * as schema from '@shared/db/schema';
+import { eq, and, sql } from 'drizzle-orm';
 
 type ProfileRow = {
   id: string;
@@ -154,26 +157,43 @@ export async function fetchOrCreateProfile(user: User): Promise<Result<AuthUser>
         .maybeSingle()
         .then(({ data }) => {
           if (data && data.id === user.id) {
-            profileRepo.upsertProfile({
-              id: data.id,
-              email: data.email,
-              nickname: data.nickname,
-              avatarUrl: data.avatar_url,
-              theme: data.theme,
-              textSize: data.text_size,
-              dailyReminderEnabled: data.daily_reminder_enabled,
-              weeklyDigestEnabled: data.weekly_digest_enabled,
-              streakAlertsEnabled: data.streak_alerts_enabled,
-              pushToken: data.push_token,
-              kamiId: data.kami_id,
-              activeSpace: data.active_space,
-              currentMoodLabel: data.current_mood_label,
-              currentMoodEmoji: data.current_mood_emoji,
-              lastSeenAt: data.last_seen_at,
-              heroBgUrl: data.hero_bg_url,
-              createdAt: data.created_at,
-              updatedAt: data.updated_at,
-            }).catch(e => console.error('Failed to sync server profile to local DB:', e));
+            // Check if there are pending updates in the local outbox
+            db.select()
+              .from(schema.outboxMutations)
+              .where(
+                and(
+                  eq(schema.outboxMutations.entityType, 'profiles'),
+                  eq(schema.outboxMutations.entityId, user.id),
+                  sql`${schema.outboxMutations.status} IN ('pending', 'failed', 'syncing')`
+                )
+              )
+              .then((pendingMutations) => {
+                if (pendingMutations.length > 0) {
+                  console.log('[profileRepository] Skipping server profile upsert because of pending local changes.');
+                  return;
+                }
+                profileRepo.upsertProfile({
+                  id: data.id,
+                  email: data.email,
+                  nickname: data.nickname,
+                  avatarUrl: data.avatar_url,
+                  theme: data.theme,
+                  textSize: data.text_size,
+                  dailyReminderEnabled: data.daily_reminder_enabled,
+                  weeklyDigestEnabled: data.weekly_digest_enabled,
+                  streakAlertsEnabled: data.streak_alerts_enabled,
+                  pushToken: data.push_token,
+                  kamiId: data.kami_id,
+                  activeSpace: data.active_space,
+                  currentMoodLabel: data.current_mood_label,
+                  currentMoodEmoji: data.current_mood_emoji,
+                  lastSeenAt: data.last_seen_at,
+                  heroBgUrl: data.hero_bg_url,
+                  createdAt: data.created_at,
+                  updatedAt: data.updated_at,
+                }).catch(e => console.error('Failed to sync server profile to local DB:', e));
+              })
+              .catch(e => console.error('Failed to query outboxMutations for profiles:', e));
           }
         });
 

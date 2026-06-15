@@ -30,11 +30,11 @@ const AuthShell: React.FC<AuthShellProps> = ({
   heroUri,
   heroHeightRatio,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <HeroSection imageUri={heroUri} heightRatio={heroHeightRatio} />
 
       <KeyboardAvoidingView

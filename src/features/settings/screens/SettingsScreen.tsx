@@ -34,11 +34,13 @@ import KamiButton from '@shared/ui/atoms/KamiButton';
 import InputField from '@shared/ui/atoms/InputField';
 import KamiText from '@shared/ui/atoms/KamiText';
 import {
-  Colors, FontSize, FontWeight, Radii, Shadows, Space, FontFamily, applyTheme
+  FontSize, FontWeight, Radii, Shadows, Space, FontFamily, applyTheme
 } from '@shared/constants';
 import { useAuthActions } from '@features/auth';
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { useAuthStore } from '@features/auth';
+import { useHomeStore } from '@features/home/store';
+import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '@shared/hooks';
 import { pickAvatarImage, uploadAvatar, uploadHeroBg, uploadCoupleHeroBg, pickImages } from '@shared/lib/storage';
 import type { MainTabScreenProps } from '@core/navigation/types';
@@ -65,8 +67,36 @@ import {
 type Props = MainTabScreenProps<'Settings'>;
 
 export function SettingsScreen({ navigation }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark, gradientBg } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const user = useAuthStore((s) => s.user);
+  const setGradientBg = useAuthStore((s) => s.setGradientBg);
+
+  // Sync state from Zustand
+  const { pendingSyncCount, isSyncing } = useHomeStore(
+    useShallow((s) => ({
+      pendingSyncCount: s.pendingSyncCount,
+      isSyncing: s.isSyncing,
+    }))
+  );
+
+  // Local UI status: 'idle' | 'syncing' | 'saved'
+  const [uiSyncStatus, setUiSyncStatus] = useState<'idle' | 'syncing' | 'saved'>('idle');
+
+  useEffect(() => {
+    if (isSyncing) {
+      setUiSyncStatus('syncing');
+    } else if (pendingSyncCount === 0 && uiSyncStatus === 'syncing') {
+      setUiSyncStatus('saved');
+      const timer = setTimeout(() => {
+        setUiSyncStatus('idle');
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setUiSyncStatus('idle');
+    }
+  }, [isSyncing, pendingSyncCount]);
+
   const { isConnected } = useNetworkStatus();
   const { signOut, deleteAccount, updateProfile, exportData, refreshUser } = useAuthActions();
 
@@ -557,7 +587,7 @@ export function SettingsScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* ── Top Bar ── */}
       <View style={[styles.topBar, { backgroundColor: colors.pageBg }]}>
@@ -569,9 +599,27 @@ export function SettingsScreen({ navigation }: Props) {
         >
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
-        <View style={styles.topBarTitle}>
+        <View style={[styles.topBarTitle, { flex: 1 }]}>
           <KamiText variant="overline">Your space</KamiText>
-          <KamiText variant="title">Settings</KamiText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+            <KamiText variant="title">Settings</KamiText>
+            {uiSyncStatus === 'syncing' && (
+              <View style={[styles.syncStatusBadge, { backgroundColor: '#fef3c7' }]}>
+                <ActivityIndicator size="small" color="#d97706" style={{ marginRight: 4, transform: [{ scale: 0.8 }] }} />
+                <KamiText variant="caption" color="#d97706" bold>Syncing...</KamiText>
+              </View>
+            )}
+            {uiSyncStatus === 'saved' && (
+              <View style={[styles.syncStatusBadge, { backgroundColor: '#ecfdf5' }]}>
+                <KamiText variant="caption" color="#059669" bold>✓ Saved</KamiText>
+              </View>
+            )}
+            {uiSyncStatus === 'idle' && pendingSyncCount > 0 && (
+              <View style={[styles.syncStatusBadge, { backgroundColor: '#f3f4f6' }]}>
+                <KamiText variant="caption" color="#6b7280" bold>☁ {pendingSyncCount} offline</KamiText>
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
@@ -614,7 +662,7 @@ export function SettingsScreen({ navigation }: Props) {
             <KamiText variant="subtitle">
               {user?.nickname ?? user?.email?.split('@')[0] ?? 'Kami User'}
             </KamiText>
-            <KamiText variant="caption" color={Colors.textMuted}>
+            <KamiText variant="caption" color={colors.textMuted}>
               {user?.email ?? ''}
             </KamiText>
           </View>
@@ -661,7 +709,7 @@ export function SettingsScreen({ navigation }: Props) {
             <>
               {/* Short ID Card */}
               <View style={[styles.kamiIdCard, { backgroundColor: colors.creamDeep }]}>
-                <KamiText variant="caption" color={Colors.textMuted}>My Couple ID (share with partner):</KamiText>
+                <KamiText variant="caption" color={colors.textMuted}>My Couple ID (share with partner):</KamiText>
                 <View style={styles.kamiIdRow}>
                   <KamiText variant="subtitle" bold style={{ color: colors.primary }}>
                     {user?.kamiId ?? 'KAMI-XXXXXX'}
@@ -703,17 +751,17 @@ export function SettingsScreen({ navigation }: Props) {
                 <View style={styles.invitesSection}>
                   <KamiText variant="overline" color={colors.primary} style={{ marginBottom: Space[2] }}>Received Invitations</KamiText>
                   {receivedInvitations.map(inv => (
-                    <View key={inv.id} style={[styles.inviteCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}>
+                    <View key={inv.id} style={[styles.inviteCard, { borderColor: colors.primary + '33', backgroundColor: colors.cardBg }]}>
                       <View style={{ flex: 1 }}>
                         <KamiText variant="label" bold>{inv.senderNickname}</KamiText>
-                        <KamiText variant="caption" color={Colors.textMuted}>{inv.senderEmail}</KamiText>
+                        <KamiText variant="caption" color={colors.textMuted}>{inv.senderEmail}</KamiText>
                       </View>
                       <View style={{ flexDirection: 'row', gap: Space[2] }}>
-                        <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: Colors.success + '15' }]} onPress={() => handleAcceptInvite(inv)}>
-                          <KamiText variant="caption" color={Colors.success} bold>Accept</KamiText>
+                        <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: colors.success + '15' }]} onPress={() => handleAcceptInvite(inv)}>
+                          <KamiText variant="caption" color={colors.success} bold>Accept</KamiText>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]} onPress={() => handleDeclineInvite(inv)}>
-                          <KamiText variant="caption" color={Colors.error} bold>Decline</KamiText>
+                        <TouchableOpacity style={[styles.inviteActionBtn, { backgroundColor: colors.error + '15' }]} onPress={() => handleDeclineInvite(inv)}>
+                          <KamiText variant="caption" color={colors.error} bold>Decline</KamiText>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -726,16 +774,16 @@ export function SettingsScreen({ navigation }: Props) {
                 <View style={styles.invitesSection}>
                   <KamiText variant="overline" color={colors.primary} style={{ marginBottom: Space[2] }}>Sent Invitations</KamiText>
                   {sentInvitations.map(inv => (
-                    <View key={inv.id} style={[styles.inviteCard, { borderColor: colors.primary + '33', backgroundColor: Colors.cardBg }]}>
+                    <View key={inv.id} style={[styles.inviteCard, { borderColor: colors.primary + '33', backgroundColor: colors.cardBg }]}>
                       <View style={{ flex: 1 }}>
                         <KamiText variant="label" bold>{inv.receiverNickname || 'Partner'}</KamiText>
-                        <KamiText variant="caption" color={Colors.textMuted}>{inv.receiverEmail}</KamiText>
+                        <KamiText variant="caption" color={colors.textMuted}>{inv.receiverEmail}</KamiText>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Space[1], gap: Space[1] }}>
                           <KamiText
                             variant="caption"
                             color={
-                              inv.status === 'declined' ? Colors.error :
-                              inv.status === 'accepted' ? Colors.success :
+                              inv.status === 'declined' ? colors.error :
+                              inv.status === 'accepted' ? colors.success :
                               colors.primary
                             }
                             bold
@@ -750,17 +798,17 @@ export function SettingsScreen({ navigation }: Props) {
                       <View style={{ flexDirection: 'row', gap: Space[2] }}>
                         {inv.status === 'pending' ? (
                           <TouchableOpacity
-                            style={[styles.inviteActionBtn, { backgroundColor: Colors.error + '15' }]}
+                            style={[styles.inviteActionBtn, { backgroundColor: colors.error + '15' }]}
                             onPress={() => handleCancelSentInvite(inv)}
                           >
-                            <KamiText variant="caption" color={Colors.error} bold>Cancel</KamiText>
+                            <KamiText variant="caption" color={colors.error} bold>Cancel</KamiText>
                           </TouchableOpacity>
                         ) : (
                           <TouchableOpacity
-                            style={[styles.inviteActionBtn, { backgroundColor: Colors.textMuted + '15' }]}
+                            style={[styles.inviteActionBtn, { backgroundColor: colors.textMuted + '15' }]}
                             onPress={() => handleDismissSentInvite(inv)}
                           >
-                            <KamiText variant="caption" color={Colors.textMuted} bold>Dismiss</KamiText>
+                            <KamiText variant="caption" color={colors.textMuted} bold>Dismiss</KamiText>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -837,6 +885,20 @@ export function SettingsScreen({ navigation }: Props) {
             onPress={() => setActiveSelector('theme')}
           />
           <SettingRow
+            icon="🌈"
+            label="Romantic Gradients"
+            value="Enable gradient page backgrounds"
+            showChevron={false}
+            rightEl={
+              <Switch
+                value={gradientBg}
+                onValueChange={(val) => setGradientBg(val)}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
+                thumbColor={colors.primary}
+              />
+            }
+          />
+          <SettingRow
             icon="🔤"
             label="Text Size"
             value={sizeLabel}
@@ -869,7 +931,7 @@ export function SettingsScreen({ navigation }: Props) {
               <Switch
                 value={user?.dailyReminder ?? true}
                 onValueChange={(val) => handleTogglePref('dailyReminder', val)}
-                trackColor={{ false: Colors.border, true: colors.primaryLight }}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
                 thumbColor={colors.primary}
               />
             }
@@ -883,7 +945,7 @@ export function SettingsScreen({ navigation }: Props) {
               <Switch
                 value={user?.weeklyDigest ?? true}
                 onValueChange={(val) => handleTogglePref('weeklyDigest', val)}
-                trackColor={{ false: Colors.border, true: colors.primaryLight }}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
                 thumbColor={colors.primary}
               />
             }
@@ -897,7 +959,7 @@ export function SettingsScreen({ navigation }: Props) {
               <Switch
                 value={user?.streakAlerts ?? true}
                 onValueChange={(val) => handleTogglePref('streakAlerts', val)}
-                trackColor={{ false: Colors.border, true: colors.primaryLight }}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
                 thumbColor={colors.primary}
               />
             }
@@ -948,10 +1010,10 @@ export function SettingsScreen({ navigation }: Props) {
             onPress={signingOut ? undefined : handleSignOut}
           />
           {couple && couple.pendingDeletion ? (
-            <View style={[styles.deleteAlertCard, { borderColor: Colors.warning, backgroundColor: Colors.warning + '11' }]}>
+            <View style={[styles.deleteAlertCard, { borderColor: colors.warning, backgroundColor: colors.warning + '11' }]}>
               <View style={{ flex: 1, gap: 2 }}>
-                <KamiText variant="label" color={Colors.warning} bold>Deletion scheduled</KamiText>
-                <KamiText variant="caption" color={Colors.textSecondary}>
+                <KamiText variant="label" color={colors.warning} bold>Deletion scheduled</KamiText>
+                <KamiText variant="caption" color={colors.textSecondary}>
                   {getDaysRemaining(couple.deleteAt)} days remaining.
                 </KamiText>
               </View>
@@ -977,7 +1039,7 @@ export function SettingsScreen({ navigation }: Props) {
 
         <View style={styles.footer}>
           <Text style={styles.footerHeart}>🌸</Text>
-          <KamiText variant="caption" align="center" color={Colors.textMuted}>
+          <KamiText variant="caption" align="center" color={colors.textMuted}>
             Made with love for your wellbeing
           </KamiText>
         </View>
@@ -1031,8 +1093,8 @@ export function SettingsScreen({ navigation }: Props) {
 
 const AVATAR_SIZE = 72;
 
-const styles = StyleSheet.create({
-  root:    { flex: 1, backgroundColor: Colors.pageBg },
+const getStyles = (colors: any) => StyleSheet.create({
+  root:    { flex: 1, backgroundColor: colors.pageBg },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1041,20 +1103,20 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[2],
     paddingBottom: Space[3],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '44',
-    backgroundColor: Colors.pageBg,
+    borderBottomColor: colors.border + '44',
+    backgroundColor: colors.pageBg,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
-  backArrow:   { color: Colors.textSecondary, fontSize: FontSize.xl, marginTop: -2 },
+  backArrow:   { color: colors.textSecondary, fontSize: FontSize.xl, marginTop: -2 },
   topBarTitle: { gap: 0 },
   scroll: {
     paddingHorizontal: Space[5],
@@ -1068,26 +1130,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space[4],
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     padding: Space[4],
     borderWidth: 1,
-    borderColor: Colors.border + '55',
+    borderColor: colors.border + '55',
     ...Shadows.card,
   },
   avatarWrap: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
     borderWidth: 2,
-    borderColor: Colors.primaryLight,
+    borderColor: colors.primaryLight,
   },
   avatar:        { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 },
-  avatarInitial: { color: Colors.primary, fontSize: FontSize.xl, fontWeight: FontWeight.extrabold, fontFamily: FontFamily.display },
+  avatarInitial: { color: colors.primary, fontSize: FontSize.xl, fontWeight: FontWeight.extrabold, fontFamily: FontFamily.display },
   avatarBadge: {
     position: 'absolute',
     bottom: -2,
@@ -1095,35 +1157,35 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   profileInfo: { flex: 1, gap: 2 },
   editChip: {
     paddingHorizontal: Space[3],
     paddingVertical: Space[1] + 2,
     borderRadius: Radii.full,
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   editChipText: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.primary,
+    color: colors.primary,
   },
 
   // Nickname editor
   editCard: {
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     padding: Space[5],
     gap: Space[4],
     borderWidth: 1,
-    borderColor: Colors.primaryLight,
+    borderColor: colors.primaryLight,
     ...Shadows.md,
   },
 
@@ -1188,6 +1250,14 @@ const styles = StyleSheet.create({
     paddingVertical: Space[2],
     paddingHorizontal: Space[3],
     borderRadius: Radii.sm,
+  },
+  syncStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radii.sm,
+    marginLeft: Space[2],
   },
 });
 

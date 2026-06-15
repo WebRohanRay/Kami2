@@ -29,6 +29,7 @@ import SocialLoginRow from '@shared/ui/molecules/SocialLoginRow';
 import {
   Colors, Space, Radii, Shadows, FontSize, FontWeight,
 } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { signUpSchema } from '@shared/lib/validation/schemas';
@@ -90,6 +91,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
   const { isConnected } = useNetworkStatus();
   const { signUp, loginWithGoogle } = useAuthActions();
+  const { isDark } = useTheme();
 
   const has8   = password.length >= 8;
   const hasUp  = /[A-Z]/.test(password);
@@ -144,7 +146,7 @@ const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <TouchableOpacity
         style={styles.backBtn}

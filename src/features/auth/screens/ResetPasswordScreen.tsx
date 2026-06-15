@@ -26,7 +26,8 @@ import { StatusBar } from 'expo-status-bar';
 import KamiText   from '@shared/ui/atoms/KamiText';
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import InputField from '@shared/ui/atoms/InputField';
-import { Colors, Space, Radii } from '@shared/constants';
+import { Space, Radii } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { resetPasswordSchema } from '@shared/lib/validation/schemas';
 
@@ -44,6 +45,8 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
 
   const { isConnected } = useNetworkStatus();
   const { resetPassword } = useAuthActions();
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
 
   // ── Password rules ────────────────────────────────────────────────────────
   const has8   = password.length >= 8;
@@ -83,7 +86,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   if (success) {
     return (
       <SafeAreaView style={styles.root}>
-        <StatusBar style="dark" />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <View style={styles.successContainer}>
           <Text style={styles.successEmoji}>✅</Text>
 
@@ -94,7 +97,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
           <KamiText
             variant="body"
             align="center"
-            color={Colors.textMuted}
+            color={colors.textMuted}
             style={styles.successSubtitle}
           >
             Your password has been changed successfully.{'\n'}
@@ -114,7 +117,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
   // ── Default state ─────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -136,7 +139,7 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
             <KamiText
               variant="body"
               align="center"
-              color={Colors.textMuted}
+              color={colors.textMuted}
               style={styles.subtitle}
             >
               Choose a strong password for your Kami space.
@@ -196,64 +199,69 @@ const ResetPasswordScreen: React.FC<Props> = ({ navigation }) => {
 };
 
 // ─── Check Item ───────────────────────────────────────────────────────────────
-const CheckItem: React.FC<{ label: string; met: boolean }> = ({ label, met }) => (
-  <View style={styles.checkRow}>
-    <Text style={[styles.checkIcon, met && styles.checkIconMet]}>
-      {met ? '✓' : '○'}
-    </Text>
-    <KamiText variant="caption" color={met ? Colors.success : Colors.textMuted}>
-      {label}
-    </KamiText>
-  </View>
-);
+const CheckItem: React.FC<{ label: string; met: boolean }> = ({ label, met }) => {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
+  return (
+    <View style={styles.checkRow}>
+      <Text style={[styles.checkIcon, met && styles.checkIconMet]}>
+        {met ? '✓' : '○'}
+      </Text>
+      <KamiText variant="caption" color={met ? colors.success : colors.textMuted}>
+        {label}
+      </KamiText>
+    </View>
+  );
+};
 
 export default ResetPasswordScreen;
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
-  kav:  { flex: 1 },
+const getStyles = (colors: any) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.pageBg },
+    kav:  { flex: 1 },
 
-  content: {
-    paddingHorizontal: Space[5],
-    paddingBottom: Space[10],
-    flexGrow: 1,
-  },
+    content: {
+      paddingHorizontal: Space[5],
+      paddingBottom: Space[10],
+      flexGrow: 1,
+    },
 
-  // ── Header ────────────────────────────────────────────────────────────────
-  header: {
-    alignItems: 'center',
-    gap: Space[2],
-    marginTop: Space[10],
-    marginBottom: Space[8],
-  },
-  headerEmoji: { fontSize: 48, marginBottom: Space[2] },
-  subtitle:    { marginTop: Space[1] },
+    // ── Header ────────────────────────────────────────────────────────────────
+    header: {
+      alignItems: 'center',
+      gap: Space[2],
+      marginTop: Space[10],
+      marginBottom: Space[8],
+    },
+    headerEmoji: { fontSize: 48, marginBottom: Space[2] },
+    subtitle:    { marginTop: Space[1] },
 
-  // ── Form ──────────────────────────────────────────────────────────────────
-  form: { gap: Space[4] },
+    // ── Form ──────────────────────────────────────────────────────────────────
+    form: { gap: Space[4] },
 
-  checklist: {
-    backgroundColor: Colors.creamDeep,
-    borderRadius: Radii.md,
-    padding: Space[3],
-    gap: Space[2],
-    borderWidth: 1,
-    borderColor: Colors.border + '44',
-    marginTop: -Space[2],
-  },
-  checkRow:     { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  checkIcon:    { fontSize: 12, color: Colors.textMuted, width: 16 },
-  checkIconMet: { color: Colors.success },
+    checklist: {
+      backgroundColor: colors.cardBg,
+      borderRadius: Radii.md,
+      padding: Space[3],
+      gap: Space[2],
+      borderWidth: 1,
+      borderColor: colors.border + '44',
+      marginTop: -Space[2],
+    },
+    checkRow:     { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
+    checkIcon:    { fontSize: 12, color: colors.textMuted, width: 16 },
+    checkIconMet: { color: colors.success },
 
-  // ── Success state ─────────────────────────────────────────────────────────
-  successContainer: {
-    flex: 1,
-    paddingHorizontal: Space[5],
-    paddingTop: Space[20],
-    alignItems: 'center',
-    gap: Space[4],
-  },
-  successEmoji:    { fontSize: 56 },
-  successSubtitle: { marginTop: Space[1], lineHeight: 24 },
-  successBtn:      { width: '100%', marginTop: Space[4] },
-});
+    // ── Success state ─────────────────────────────────────────────────────────
+    successContainer: {
+      flex: 1,
+      paddingHorizontal: Space[5],
+      paddingTop: Space[20],
+      alignItems: 'center',
+      gap: Space[4],
+    },
+    successEmoji:    { fontSize: 56 },
+    successSubtitle: { marginTop: Space[1], lineHeight: 24 },
+    successBtn:      { width: '100%', marginTop: Space[4] },
+  });

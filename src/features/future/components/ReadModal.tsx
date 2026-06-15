@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -15,7 +16,8 @@ import {
   Vibration,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, Space, Radii, FontSize, FontFamily, Shadows } from '@shared/constants';
+import { ParticleEmitter } from '@shared/ui/atoms/ParticleEmitter';
+import { Space, Radii, FontSize, FontFamily, Shadows, Opacity } from '@shared/constants';
 import { useTheme, useTextScale } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
 import { ImageZoomModal } from '@shared/ui';
@@ -48,9 +50,26 @@ export const ReadModal: React.FC<ReadModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [countdownText, setCountdownText] = useState('');
   const [zoomImageUri, setZoomImageUri] = useState<string | null>(null);
+  const [sealBreakTrigger, setSealBreakTrigger] = useState(0);
   const { colors } = useTheme();
+  const rm = React.useMemo(() => getStyles(colors), [colors]);
   const { scaleSize } = useTextScale();
   const user = useAuthStore(s => s.user);
+
+  // Paper unfold animation
+  const paperScale = useRef(new Animated.Value(0.85)).current;
+  const paperOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (content) {
+      paperScale.setValue(0.85);
+      paperOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(paperScale, { toValue: 1, tension: 50, friction: 8, useNativeDriver: true }),
+        Animated.timing(paperOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [content]);
 
   const isUnlocked = letter ? checkUnlocked(letter) : false;
 
@@ -77,6 +96,7 @@ export const ReadModal: React.FC<ReadModalProps> = ({
         if (hasUnlocked) {
           clearInterval(interval);
           Vibration.vibrate([0, 50, 100, 30]); // tactile wax seal crack vibration
+          setSealBreakTrigger(t => t + 1);
           setLoading(true);
           const fetchPromise = activeSpace === 'couple'
             ? coupleService.fetchCoupleLetterDetails(letter.id)
@@ -106,19 +126,19 @@ export const ReadModal: React.FC<ReadModalProps> = ({
         <View style={[rm.toolbar, { borderBottomColor: 'rgba(28,25,23,0.06)' }]}>
           <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
             <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} style={rm.favToggleBtn} hitSlop={8}>
-              <KamiText variant="caption" color={letter.isFavorite ? colors.primary : Colors.textMuted} bold={!!letter.isFavorite}>
+              <KamiText variant="caption" color={letter.isFavorite ? colors.primary : colors.textMuted} bold={!!letter.isFavorite}>
                 {letter.isFavorite ? '★ Favorited' : '☆ Favorite'}
               </KamiText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onToggleArchive?.(letter)} style={rm.favToggleBtn} hitSlop={8}>
-              <KamiText variant="caption" color={letter.isArchived ? colors.primary : Colors.textMuted} bold={!!letter.isArchived}>
+              <KamiText variant="caption" color={letter.isArchived ? colors.primary : colors.textMuted} bold={!!letter.isArchived}>
                 {letter.isArchived ? '📦 Archived' : '📥 Archive'}
               </KamiText>
             </TouchableOpacity>
           </View>
           <KamiText variant="overline">Letter Preview</KamiText>
           <TouchableOpacity onPress={onClose} hitSlop={8} style={rm.closeWrap}>
-            <KamiText variant="caption" color={Colors.textPrimary} bold>Close</KamiText>
+            <KamiText variant="caption" color={colors.textPrimary} bold>Close</KamiText>
           </TouchableOpacity>
         </View>
 
@@ -130,6 +150,14 @@ export const ReadModal: React.FC<ReadModalProps> = ({
                 <View style={rm.lockedWaxSeal}>
                   <Text style={{ fontSize: 48 }}>🔒</Text>
                 </View>
+                {/* Seal crack sparkle particles */}
+                <ParticleEmitter
+                  trigger={sealBreakTrigger}
+                  particles={['✨', '💫', '⭐', '🔓']}
+                  count={12}
+                  direction="radial"
+                  distance={100}
+                />
                 <KamiText variant="title" bold style={{ marginTop: Space[4], color: '#4A3B32', fontFamily: FontFamily.display }}>
                   {letter.subject}
                 </KamiText>
@@ -137,7 +165,7 @@ export const ReadModal: React.FC<ReadModalProps> = ({
                   {'senderNickname' in letter ? `From: ${letter.senderNickname}` : 'For yourself'}
                 </KamiText>
 
-                <View style={[rm.lockedCountdownBox, { backgroundColor: '#FFFFFF', borderColor: colors.primary + '22' }]}>
+                <View style={[rm.lockedCountdownBox, { backgroundColor: colors.cardBg, borderColor: colors.primary + Opacity.muted }]}>
                   <KamiText variant="overline" color={colors.primary} bold style={{ letterSpacing: 1.5 }}>TIME CAPSULE LOCKED</KamiText>
                   <KamiText variant="title" bold color={colors.primary} style={rm.lockedCountdownTick}>
                     {countdownText || 'Calculating...'}
@@ -146,10 +174,10 @@ export const ReadModal: React.FC<ReadModalProps> = ({
 
                 {/* Metadata Details list */}
                 <View style={rm.metadataBox}>
-                  <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                  <KamiText variant="caption" color={colors.textMuted} style={rm.metaLine}>
                     Created: {formatTimestamp(letter.createdAt, user?.timezone)}
                   </KamiText>
-                  <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                  <KamiText variant="caption" color={colors.textMuted} style={rm.metaLine}>
                     Scheduled Unlock: {formatTimestamp(letter.deliverAt, user?.timezone)}
                   </KamiText>
                 </View>
@@ -164,15 +192,16 @@ export const ReadModal: React.FC<ReadModalProps> = ({
             ) : (
               content && (
                 <ScrollView contentContainerStyle={rm.content} showsVerticalScrollIndicator={false}>
-                  {/* Physical Paper Scroll card design */}
-                  <View style={[rm.paperScroll, { backgroundColor: '#FAF8F5', borderColor: '#EAE6DF' }]}>
+                  {/* Physical Paper Scroll card design — with unfold animation */}
+                  <Animated.View style={{ transform: [{ scale: paperScale }], opacity: paperOpacity }}>
+                  <View style={[rm.paperScroll, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                     <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
                       <Text style={rm.envelopeEmoji}>{letter.isFavorite ? '🎀' : '📄'}</Text>
                       <KamiText variant="overline" align="center" style={{ marginTop: Space[2], letterSpacing: 1 }}>
                         Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
                       </KamiText>
                       {activeSpace === 'couple' && 'senderId' in letter && (
-                        <KamiText variant="caption" align="center" color={Colors.textMuted} style={{ marginTop: Space[1] }}>
+                        <KamiText variant="caption" align="center" color={colors.textMuted} style={{ marginTop: Space[1] }}>
                           {(letter as CoupleLetter).senderId === user?.id
                             ? 'From: You'
                             : `From: ${(letter as CoupleLetter).senderNickname || 'Partner'}`}
@@ -186,11 +215,12 @@ export const ReadModal: React.FC<ReadModalProps> = ({
                       {content.body}
                     </KamiText>
                   </View>
+                  </Animated.View>
 
                   {/* Polaroid Snaps for Attached Photos */}
                   {content.imageUrls.length > 0 && (
                     <View style={rm.photoSection}>
-                      <KamiText variant="overline" style={{ marginBottom: Space[3], color: Colors.textSecondary }}>Attached Memories</KamiText>
+                      <KamiText variant="overline" style={{ marginBottom: Space[3], color: colors.textSecondary }}>Attached Memories</KamiText>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={rm.photoScroll}>
                         <View style={rm.photoRow}>
                           {content.imageUrls.map((url, i) => (
@@ -213,16 +243,16 @@ export const ReadModal: React.FC<ReadModalProps> = ({
 
                   {/* Metadata display */}
                   <View style={rm.metadataBox}>
-                    <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                    <KamiText variant="caption" color={colors.textMuted} style={rm.metaLine}>
                       Created: {formatTimestamp(letter.createdAt, user?.timezone)}
                     </KamiText>
                     {new Date(letter.deliverAt).getFullYear() > 1970 && (
-                      <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                      <KamiText variant="caption" color={colors.textMuted} style={rm.metaLine}>
                         Scheduled Unlock: {formatTimestamp(letter.deliverAt, user?.timezone)}
                       </KamiText>
                     )}
                     {'deliveredAt' in letter && letter.deliveredAt && (
-                      <KamiText variant="caption" color={Colors.textMuted} style={rm.metaLine}>
+                      <KamiText variant="caption" color={colors.textMuted} style={rm.metaLine}>
                         Delivered: {formatTimestamp(letter.deliveredAt, user?.timezone)}
                       </KamiText>
                     )}
@@ -248,7 +278,7 @@ export const ReadModal: React.FC<ReadModalProps> = ({
                     >
                       <Text style={{ fontSize: 20 }}>{emoji}</Text>
                       {count > 0 && (
-                        <KamiText variant="caption" color={userReaction ? colors.primary : Colors.textMuted} bold={!!userReaction} style={{ fontSize: 10 }}>
+                        <KamiText variant="caption" color={userReaction ? colors.primary : colors.textMuted} bold={!!userReaction} style={{ fontSize: 10 }}>
                           {count}
                         </KamiText>
                       )}
@@ -265,8 +295,8 @@ export const ReadModal: React.FC<ReadModalProps> = ({
   );
 };
 
-const rm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
   toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1 },
   closeWrap: { paddingVertical: Space[2], paddingHorizontal: Space[3], backgroundColor: 'rgba(28,25,23,0.06)', borderRadius: Radii.full },
   content: { padding: Space[5], paddingBottom: Space[10] },
@@ -283,14 +313,14 @@ const rm = StyleSheet.create({
   photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5] },
   photoRow: { flexDirection: 'row', gap: Space[4], paddingVertical: Space[2] },
   
-  polaroidCard: { backgroundColor: '#FFFFFF', padding: Space[3], paddingBottom: Space[5], borderRadius: 8, borderWidth: 1, borderColor: 'rgba(28,25,23,0.08)', ...Shadows.md },
-  polaroidImage: { width: 130, height: 130, borderRadius: 4, backgroundColor: '#FAF7F2' },
+  polaroidCard: { backgroundColor: colors.cardBg, padding: Space[3], paddingBottom: Space[5], borderRadius: 8, borderWidth: 1, borderColor: colors.border + Opacity.ghost, ...Shadows.md },
+  polaroidImage: { width: 130, height: 130, borderRadius: 4, backgroundColor: colors.inputBg },
   polaroidText: { marginTop: Space[2], fontFamily: FontFamily.display, fontSize: 10, color: '#8A7B72', textAlign: 'center' },
   
   favToggleBtn: { paddingVertical: Space[1], paddingHorizontal: Space[2], borderRadius: Radii.full, backgroundColor: 'rgba(28,25,23,0.04)', marginRight: Space[1] },
   reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: Space[3], paddingHorizontal: Space[4], borderTopWidth: 1 },
   reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: 'transparent' },
-  reactionBtnActive: { borderColor: Colors.primary },
+  reactionBtnActive: { borderColor: colors.primary },
   
   lockedCenterContainer: { alignItems: 'center', paddingVertical: Space[5] },
   lockedWaxSeal: {

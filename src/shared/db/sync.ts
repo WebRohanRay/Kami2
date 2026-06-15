@@ -31,6 +31,11 @@ import { uuid } from '../lib/uuid';
 const MAX_RETRIES = 5;
 let hasAlertedConflictThisRun = false;
 
+function isValidUuid(id: string | null): boolean {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 export async function updateStoreSyncState(extra: Partial<{ isSyncing: boolean; syncError: string | null; pendingSyncCount: number; lastSyncedAt: string | null }> = {}) {
   try {
     const pendingCount = await getPendingSyncCount();
@@ -909,10 +914,17 @@ export async function pullFromServer(): Promise<void> {
 
     // Get the couple space ID
     let coupleId = useCoupleStore.getState().couple?.id || null;
-    if (!coupleId) {
-      const pRows = await db.select({ activeSpace: schema.profiles.activeSpace }).from(schema.profiles).where(eq(schema.profiles.id, currentUserId));
-      if (pRows.length > 0) {
-        coupleId = pRows[0].activeSpace;
+    if (!isValidUuid(coupleId)) {
+      coupleId = null;
+      // Try to find a coupleId from existing local couple records
+      const localJournal = await db.select({ coupleId: schema.coupleJournals.coupleId }).from(schema.coupleJournals).limit(1);
+      if (localJournal.length > 0 && isValidUuid(localJournal[0].coupleId)) {
+        coupleId = localJournal[0].coupleId;
+      } else {
+        const localGoal = await db.select({ coupleId: schema.coupleGoals.coupleId }).from(schema.coupleGoals).limit(1);
+        if (localGoal.length > 0 && isValidUuid(localGoal[0].coupleId)) {
+          coupleId = localGoal[0].coupleId;
+        }
       }
     }
 
@@ -1016,6 +1028,29 @@ export async function pullFromServer(): Promise<void> {
               } else if (table.name === 'couple_comments') {
                 const rows = await tx.select().from(schema.coupleComments).where(eq(schema.coupleComments.id, row.id));
                 localRecord = rows[0];
+              }
+
+              let hasPendingMutation = false;
+              if (table.name === 'profiles') {
+                const pending = await tx
+                  .select()
+                  .from(schema.outboxMutations)
+                  .where(
+                    and(
+                      eq(schema.outboxMutations.entityType, 'profiles'),
+                      eq(schema.outboxMutations.entityId, row.id),
+                      sql`${schema.outboxMutations.status} IN ('pending', 'failed', 'syncing')`
+                    )
+                  )
+                  .limit(1);
+                if (pending.length > 0) {
+                  hasPendingMutation = true;
+                }
+              }
+
+              if (hasPendingMutation) {
+                console.log(`[SyncEngine] Skipping pull upsert for ${table.name} ID ${row.id} due to pending outbox mutation.`);
+                continue;
               }
 
               if (localRecord && (localRecord.syncStatus === 'pending_update' || localRecord.syncStatus === 'pending_insert' || localRecord.syncStatus === 'conflict')) {
@@ -1432,6 +1467,30 @@ async function processFileUploads() {
           );
           await letterRepo.saveLetter({ ...entry, imageUrls: updatedUrls });
         }
+      } else if (row.entityType === 'couple_journals') {
+        const entry = await coupleJournalRepo.fetchJournalById(row.entityId);
+        if (entry) {
+          const updatedUrls = entry.imageUrls.map((u: string) =>
+            u === row.localUri ? row.remotePath : u
+          );
+          await coupleJournalRepo.saveJournal({ ...entry, imageUrls: updatedUrls });
+        }
+      } else if (row.entityType === 'couple_memories') {
+        const entry = await coupleMemoryRepo.fetchMemoryById(row.entityId);
+        if (entry) {
+          const updatedUrls = entry.imageUrls.map((u: string) =>
+            u === row.localUri ? row.remotePath : u
+          );
+          await coupleMemoryRepo.saveMemory({ ...entry, imageUrls: updatedUrls });
+        }
+      } else if (row.entityType === 'couple_letters') {
+        const entry = await coupleLetterRepo.fetchLetterById(row.entityId);
+        if (entry) {
+          const updatedUrls = entry.imageUrls.map((u: string) =>
+            u === row.localUri ? row.remotePath : u
+          );
+          await coupleLetterRepo.saveLetter({ ...entry, imageUrls: updatedUrls });
+        }
       }
 
       // Mark queue item complete
@@ -1587,10 +1646,17 @@ async function processOutboxMutations() {
 
       // Fetch active coupleId
       let activeCoupleId = useCoupleStore.getState().couple?.id || null;
-      if (!activeCoupleId && currentUserId) {
-        const pRows = await db.select({ activeSpace: schema.profiles.activeSpace }).from(schema.profiles).where(eq(schema.profiles.id, currentUserId));
-        if (pRows.length > 0) {
-          activeCoupleId = pRows[0].activeSpace;
+      if (!isValidUuid(activeCoupleId)) {
+        activeCoupleId = null;
+        // Try to find a coupleId from existing local couple records
+        const localJournal = await db.select({ coupleId: schema.coupleJournals.coupleId }).from(schema.coupleJournals).limit(1);
+        if (localJournal.length > 0 && isValidUuid(localJournal[0].coupleId)) {
+          activeCoupleId = localJournal[0].coupleId;
+        } else {
+          const localGoal = await db.select({ coupleId: schema.coupleGoals.coupleId }).from(schema.coupleGoals).limit(1);
+          if (localGoal.length > 0 && isValidUuid(localGoal[0].coupleId)) {
+            activeCoupleId = localGoal[0].coupleId;
+          }
         }
       }
 

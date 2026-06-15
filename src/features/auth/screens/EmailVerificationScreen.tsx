@@ -20,6 +20,7 @@ import * as authService from '@infrastructure/auth';
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { Colors, Radii, Space } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 import { useAuthActions } from '../hooks';
 import { useAuthStore } from '../store';
 import type { AuthScreenProps } from '@core/navigation/types';
@@ -54,6 +55,7 @@ const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
 
   // Get stable function refs — don't put the whole useAuthActions() object in deps
   const auth = useAuthActions();
+  const { isDark } = useTheme();
   const refreshUserRef = useRef(auth.refreshUser);
   const resendRef      = useRef(auth.resendVerificationEmail);
   const signOutRef     = useRef(auth.signOut);
@@ -222,7 +224,7 @@ const EmailVerificationScreen: React.FC<Props> = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

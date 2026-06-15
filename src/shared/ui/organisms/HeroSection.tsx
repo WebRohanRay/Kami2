@@ -3,6 +3,7 @@ import { Dimensions, Image, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FallingPetal from './FallingPetal';
 import { Colors } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 const { width: W, height: H } = Dimensions.get('window');
 const PETAL_COUNT = 14;
@@ -19,21 +20,27 @@ const DEFAULT_URI =
 const HeroSection: React.FC<HeroSectionProps> = ({
   imageUri         = DEFAULT_URI,
   heightRatio      = 0.45,
-  gradientEndColor = Colors.pageBg,
-}) => (
-  <View style={[styles.hero, { height: H * heightRatio }]}>
-    <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
-    <LinearGradient
-      colors={['transparent', `${gradientEndColor}55`, gradientEndColor]}
-      style={styles.gradient}
-    />
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {Array.from({ length: PETAL_COUNT }).map((_, i) => (
-        <FallingPetal key={i} delay={i * 800} />
-      ))}
+  gradientEndColor,
+}) => {
+  const { colors } = useTheme();
+  const resolvedEndColor = gradientEndColor ?? colors.pageBg;
+  const themeColors = { primaryLight: colors.primaryLight, creamMid: colors.creamMid };
+
+  return (
+    <View style={[styles.hero, { height: H * heightRatio }]}>
+      <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+      <LinearGradient
+        colors={['transparent', `${resolvedEndColor}55`, resolvedEndColor]}
+        style={styles.gradient}
+      />
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {Array.from({ length: PETAL_COUNT }).map((_, i) => (
+          <FallingPetal key={i} delay={i * 800} themeColors={themeColors} />
+        ))}
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 export default HeroSection;
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Image, View, Text, type ImageProps, type ImageSourcePropType } from 'react-native';
+import { Colors } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 export interface KamiImageProps extends Omit<ImageProps, 'source' | 'src'> {
   src: string | null | undefined;
@@ -15,6 +17,7 @@ export const KamiImage: React.FC<KamiImageProps> = ({
   style,
   ...props
 }) => {
+  const { colors } = useTheme();
   const [currentUri, setCurrentUri] = useState<string | null>(null);
   const [triedThumbnail, setTriedThumbnail] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
@@ -50,7 +53,7 @@ export const KamiImage: React.FC<KamiImageProps> = ({
       return <Image {...props} style={style} source={fallbackSrc} />;
     }
     return (
-      <View style={[style, { backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[style, { backgroundColor: colors.creamDeep, justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={{ fontSize: 20 }}>📷</Text>
       </View>
     );

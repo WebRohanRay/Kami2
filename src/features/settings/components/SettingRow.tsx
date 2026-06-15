@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Space } from '@shared/constants';
+import { FontSize, Space } from '@shared/constants';
 import { useTheme } from '@shared/hooks';
 
 interface SettingRowProps {
@@ -52,18 +52,18 @@ export const SettingRow: React.FC<SettingRowProps> = ({
         <View style={rowStyles.middle}>
           <KamiText
             variant="body"
-            color={danger ? Colors.error : Colors.textPrimary}
+            color={danger ? colors.error : colors.textPrimary}
             bold={danger}
           >
             {label}
           </KamiText>
           {value ? (
-            <KamiText variant="caption" color={Colors.textMuted}>{value}</KamiText>
+            <KamiText variant="caption" color={colors.textMuted}>{value}</KamiText>
           ) : null}
         </View>
         {rightEl ?? (
           showChevron && onPress ? (
-            <Text style={[rowStyles.chevron, danger && { color: Colors.error }]}>›</Text>
+            <Text style={[rowStyles.chevron, { color: colors.textMuted }, danger && { color: colors.error }]}>›</Text>
           ) : null
         )}
       </Animated.View>
@@ -83,11 +83,10 @@ const rowStyles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
   },
   icon: { fontSize: FontSize.md },
   middle: { flex: 1, gap: 1 },
-  chevron: { fontSize: FontSize.xl, color: Colors.textMuted, marginTop: -2 },
+  chevron: { fontSize: FontSize.xl, marginTop: -2 },
 });

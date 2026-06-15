@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '@shared/hooks';
-import { Colors, Radii, Space } from '@shared/constants';
+import { Radii, Space } from '@shared/constants';
 import type { MainTabScreenProps } from '@core/navigation/types';
 import KamiText from '@shared/ui/atoms/KamiText';
 
@@ -25,14 +25,15 @@ import { CustomMoodModal } from '../components/CustomMoodModal';
 type Props = MainTabScreenProps<'Home'>;
 
 export function HomeScreen({ navigation }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
   const dashboard = useHomeDashboard(navigation);
 
   if (dashboard.user?.activeSpace === 'couple') {
     if (!dashboard.couple) {
       return (
-        <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg, alignItems: 'center', justifyContent: 'center' }]}>
-          <StatusBar style="dark" />
+        <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg, alignItems: 'center', justifyContent: 'center' }]}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
           <View style={{ alignItems: 'center', padding: Space[6], gap: Space[4] }}>
             <Text style={{ fontSize: 48 }}>🌸</Text>
             <KamiText variant="subtitle" bold color={colors.primaryDark} align="center">
@@ -62,8 +63,8 @@ export function HomeScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.pageBg }]}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* ── 1. DASHBOARD HEADER ────────────────────── */}
       <HomeHeader
@@ -83,7 +84,7 @@ export function HomeScreen({ navigation }: Props) {
       {/* ── 2. SCROLLABLE DASHBOARD VIEW ───────────── */}
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={styles.scroll}
         refreshControl={
           <RefreshControl
             refreshing={dashboard.refreshing}
@@ -164,11 +165,9 @@ export function HomeScreen({ navigation }: Props) {
             getTimeAgo={dashboard.getTimeAgo}
           />
         )}
-
-        <View style={{ height: Space[10] }} />
       </ScrollView>
 
-      {/* ── 3. PORTALS / MODALS ────────────────────── */}
+      {/* Modals */}
       <MoodModal
         visible={dashboard.moodModal}
         mood={dashboard.pending}
@@ -176,6 +175,7 @@ export function HomeScreen({ navigation }: Props) {
         onSave={dashboard.handleMoodSave}
         saving={dashboard.moodSaving}
       />
+
       <CustomMoodModal
         visible={dashboard.customMoodModalVisible}
         onClose={() => dashboard.setCustomMoodModalVisible(false)}
@@ -186,8 +186,8 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[5] },
 });
 

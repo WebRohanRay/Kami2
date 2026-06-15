@@ -1,14 +1,31 @@
 export const THEMES = [
+  // Light Classics
   { id: 'blush', label: 'Blush Pink', emoji: '🌸' },
-  { id: 'indigo', label: 'Midnight Indigo', emoji: '🌙' },
-  { id: 'slate', label: 'Slate Gray', emoji: '⛰️' },
-  { id: 'sage', label: 'Sage Green', emoji: '🌿' },
-  { id: 'honey', label: 'Honey Gold', emoji: '🍯' },
-  { id: 'lavender', label: 'Lavender Mist', emoji: '🪻' },
+  { id: 'cherry_blossom', label: 'Cherry Blossom', emoji: '🌺' },
+  { id: 'petal', label: 'Soft Petal', emoji: '🩷' },
+  { id: 'rosewood', label: 'Rosewood', emoji: '🌹' },
+  { id: 'crimson', label: 'Crimson Rose', emoji: '❤️‍🔥' },
   { id: 'coral', label: 'Coral Peach', emoji: '🍑' },
+  { id: 'lavender', label: 'Lavender Mist', emoji: '🪻' },
+  { id: 'mocha', label: 'Café Mocha', emoji: '☕' },
+  { id: 'honey', label: 'Honey Gold', emoji: '🍯' },
+  { id: 'marigold', label: 'Marigold Yellow', emoji: '🌼' },
+  { id: 'champagne', label: 'Champagne', emoji: '🥂' },
+  { id: 'sage', label: 'Sage Green', emoji: '🌿' },
+  { id: 'emerald', label: 'Emerald Forest', emoji: '🌲' },
   { id: 'ocean', label: 'Ocean Breeze', emoji: '🌊' },
-  { id: 'crimson', label: 'Crimson Rose', emoji: '🌹' },
+  { id: 'indigo', label: 'Deep Indigo', emoji: '💜' },
+  { id: 'slate', label: 'Slate Gray', emoji: '⛰️' },
+  { id: 'frost', label: 'Nordic Frost', emoji: '❄️' },
+  // Dark & Moody
+  { id: 'midnight', label: 'Midnight Cyber', emoji: '🌌' },
+  { id: 'twilight', label: 'Twilight Haze', emoji: '🌆' },
+  { id: 'aurora', label: 'Northern Aurora', emoji: '🌠' },
+  { id: 'stargazer', label: 'Stargazer', emoji: '🌃' },
+  { id: 'synthwave', label: 'Synthwave Sunset', emoji: '🌇' },
+  { id: 'vampire', label: 'Gothic Crimson', emoji: '🦇' },
 ] as const;
+
 
 export const TEXT_SIZES = [
   { id: 'small', label: 'Small', emoji: '▫️' },

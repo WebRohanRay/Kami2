@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Colors, Radii, FontSize, FontWeight, Space } from '@shared/constants';
+import { Colors, Radii, FontSize, FontWeight, Space, Opacity } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 export interface SocialProvider {
   id: string;
@@ -57,6 +58,8 @@ const GoogleButton: React.FC<{
   loading?: boolean;
   disabled?: boolean;
 }> = ({ label, onPress, loading, disabled }) => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const scale = useRef(new Animated.Value(1)).current;
 
   const pressIn  = () =>
@@ -77,22 +80,22 @@ const GoogleButton: React.FC<{
     >
       <Animated.View
         style={[
-          btn.wrap,
-          (disabled || loading) && btn.disabled,
+          styles.wrap,
+          (disabled || loading) && styles.disabled,
           { transform: [{ scale }] },
         ]}
       >
         {loading ? (
-          <ActivityIndicator color={Colors.primary} size="small" />
+          <ActivityIndicator color={colors.primary} size="small" />
         ) : (
           <>
             {/* Left: white pill with the G icon */}
-            <View style={btn.iconPill}>
+            <View style={styles.iconPill}>
               <GoogleIcon />
             </View>
 
             {/* Centre label */}
-            <Text style={btn.label}>Continue with {label}</Text>
+            <Text style={styles.label}>Continue with {label}</Text>
           </>
         )}
       </Animated.View>
@@ -100,15 +103,15 @@ const GoogleButton: React.FC<{
   );
 };
 
-const btn = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 54,
     borderRadius: Radii.button,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    borderColor: colors.border,
     paddingHorizontal: Space[2],
     gap: 0,
     // subtle shadow so it pops off the cream background
@@ -123,19 +126,19 @@ const btn = StyleSheet.create({
     width: 44,
     height: 38,
     borderRadius: Radii.sm,
-    backgroundColor: '#F8F8F8',
+    backgroundColor: colors.inputBg,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Space[2],
     borderWidth: 1,
-    borderColor: '#ECECEC',
+    borderColor: colors.border + Opacity.medium,
   },
   label: {
     flex: 1,
     textAlign: 'center',
     fontSize: FontSize.base,
     fontWeight: FontWeight.semibold,
-    color: '#3C3C3C',
+    color: colors.textPrimary,
     letterSpacing: 0.1,
     // offset the icon width so text is visually centred across full button
     marginRight: 44 + Space[2],

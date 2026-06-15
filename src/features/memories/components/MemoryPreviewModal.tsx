@@ -14,8 +14,9 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Radii, Space } from '@shared/constants';
+import { FontSize, Radii, Space } from '@shared/constants';
 import { useTheme } from '@shared/hooks';
+import { ImageZoomModal } from '@shared/ui';
 import type { Memory } from '@features/home/types';
 import type { CoupleMemory } from '@features/couple/types';
 
@@ -40,10 +41,14 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   useEffect(() => {
     if (visible) {
       setActiveImageIndex(0);
+      setLightboxVisible(false);
+      setLightboxIndex(0);
     }
   }, [visible]);
 
@@ -81,7 +86,7 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[pv.root, { backgroundColor: colors.pageBg }]}>
-        <View style={pv.header}>
+        <View style={[pv.header, { borderBottomColor: colors.divider }]}>
           <KamiText variant="title">Preview Memory</KamiText>
           <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
             <TouchableOpacity
@@ -93,7 +98,7 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
               <Text style={{ fontSize: 18, color: colors.primary, fontWeight: 'bold' }}>☰</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} style={pv.closeBtn} accessibilityRole="button" accessibilityLabel="Close Preview">
-              <KamiText variant="label" color={Colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
+              <KamiText variant="label" color={colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
             </TouchableOpacity>
           </View>
         </View>
@@ -106,7 +111,7 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
                 <KamiText variant="caption" color={colors.primary} bold>Mood: {mood}</KamiText>
               </View>
             ) : <View />}
-            <KamiText variant="caption" color={Colors.textMuted}>
+            <KamiText variant="caption" color={colors.textMuted}>
               {new Date(memory.memoryDate).toLocaleDateString(undefined, {
                 weekday: 'short',
                 month: 'short',
@@ -122,14 +127,14 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
           {location && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -Space[2], marginBottom: Space[2] }}>
               <Text style={{ fontSize: 12 }}>📍</Text>
-              <KamiText variant="caption" color={Colors.textSecondary} bold>{location}</KamiText>
+              <KamiText variant="caption" color={colors.textSecondary} bold>{location}</KamiText>
             </View>
           )}
 
           {/* Title */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[2], marginVertical: Space[1] }}>
             <Text style={{ fontSize: 32 }}>{emoji}</Text>
-            <KamiText variant="subtitle" bold style={[pv.title, { flex: 1 }]}>
+            <KamiText variant="subtitle" bold style={[pv.title, { flex: 1, color: colors.textPrimary }]}>
               {memory.title}
             </KamiText>
           </View>
@@ -161,16 +166,39 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
                 }}
                 scrollEventThrottle={16}
               >
-                {memory.imageUrls.map((url: string, index: number) => (
-                  <View key={index} style={{ width: carouselWidth, height: 250, overflow: 'hidden' }}>
-                    <Image
-                      source={{ uri: url }}
-                      style={pv.scrollerImage}
-                      resizeMode="contain"
-                      testID={`memory-image-${index}`}
-                    />
-                  </View>
-                ))}
+                {memory.imageUrls.map((url: string, index: number) => {
+                  const rotateDeg = index % 2 === 0 ? '-1.5deg' : '1.5deg';
+                  return (
+                    <View key={index} style={{ width: carouselWidth, height: 320, justifyContent: 'center', alignItems: 'center' }}>
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() => {
+                          setLightboxIndex(index);
+                          setLightboxVisible(true);
+                        }}
+                        style={[
+                          pv.polaroidCard,
+                          {
+                            backgroundColor: colors.cardBg,
+                            borderColor: colors.border,
+                            shadowColor: colors.shadowTint,
+                            transform: [{ rotate: rotateDeg }, { scale: 0.98 }]
+                          }
+                        ]}
+                      >
+                        <Image
+                          source={{ uri: url }}
+                          style={[pv.scrollerImage, { width: carouselWidth - 36, height: 220, borderRadius: 4 }]}
+                          resizeMode="cover"
+                          testID={`memory-image-${index}`}
+                        />
+                        <KamiText variant="caption" align="center" style={pv.polaroidCaption}>
+                          ✨ Snap {index + 1} of {memory.imageUrls.length}
+                        </KamiText>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
               </ScrollView>
               {/* Pagination Dots indicator */}
               {memory.imageUrls.length > 1 && (
@@ -192,7 +220,7 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
           {/* Description Body */}
           {desc ? (
             <View style={pv.bodyContainer}>
-              <KamiText variant="body" color={Colors.textSecondary} style={pv.bodyText}>
+              <KamiText variant="body" color={colors.textSecondary} style={pv.bodyText}>
                 {desc}
               </KamiText>
             </View>
@@ -209,13 +237,20 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
             </View>
           )}
         </ScrollView>
+
+        <ImageZoomModal
+          visible={lightboxVisible}
+          imageUris={memory.imageUrls}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxVisible(false)}
+        />
       </SafeAreaView>
     </Modal>
   );
 };
 
 const pv = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+  root: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -224,22 +259,37 @@ const pv = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2],
     paddingBottom: Space[4],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '44',
   },
   menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   closeBtn: { padding: Space[2] },
   scroll: { padding: Space[5], gap: Space[4] },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
   moodBadge: { paddingVertical: 2, paddingHorizontal: Space[2], borderRadius: Radii.sm },
-  title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
+  title: { fontSize: FontSize.lg, lineHeight: 28 },
   authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
-  imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.03)' },
-  imageScrollView: { width: '100%', height: 250 },
-  scrollerImage: { width: '100%', height: '100%', resizeMode: 'contain' },
+  imageScrollerContainer: { marginVertical: Space[3], width: '100%' },
+  imageScrollView: { width: '100%', height: 320 },
+  scrollerImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
   dot: { width: 6, height: 6, borderRadius: 3 },
   bodyContainer: { paddingVertical: Space[2] },
   bodyText: { fontSize: FontSize.base, lineHeight: 26 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2], marginTop: Space[2] },
   tagChip: { paddingVertical: 4, paddingHorizontal: Space[3], borderRadius: Radii.full },
+  polaroidCard: {
+    padding: 12,
+    paddingBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  polaroidCaption: {
+    marginTop: 8,
+    fontFamily: 'Lora-Regular',
+    fontSize: 12,
+    opacity: 0.75,
+  },
 });

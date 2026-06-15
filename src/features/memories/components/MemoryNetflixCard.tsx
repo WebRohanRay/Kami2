@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
+  Animated,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,7 +9,7 @@ import {
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { KamiImage } from '@shared/ui/atoms/KamiImage';
-import { Colors, FontSize, Radii, Space } from '@shared/constants';
+import { FontSize, Radii, Space } from '@shared/constants';
 import { useTheme } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
 
@@ -27,8 +28,30 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
   onDelete,
 }) => {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const user = useAuthStore(s => s.user);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Ken Burns slow zoom animation
+  const kenBurnsAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(kenBurnsAnim, {
+          toValue: 1.08,
+          duration: 8000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(kenBurnsAnim, {
+          toValue: 1,
+          duration: 8000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
 
   const desc = 'description' in memory ? memory.description : memory.body;
   const mood = memory.mood;
@@ -37,7 +60,7 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
   const lastEdited = 'lastEditedNickname' in memory ? memory.lastEditedNickname : null;
 
   return (
-    <View style={[styles.netflixCard, { backgroundColor: Colors.cardBg, borderColor: Colors.border + '44' }]}>
+    <View style={[styles.netflixCard, { backgroundColor: colors.cardBg, borderColor: colors.border + '44' }]}>
       {/* Photo carousel */}
       {memory.imageUrls && memory.imageUrls.length > 0 ? (
         <View style={styles.cardImageContainer}>
@@ -56,12 +79,13 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
             {memory.imageUrls.map((url: string, i: number) => {
               const thumbUrl = url.includes('.jpg') ? url.replace('.jpg', '_thumb.jpg') : url;
               return (
-                <KamiImage
-                  key={i}
-                  src={url}
-                  thumbnailSrc={thumbUrl}
-                  style={styles.netflixCardPhoto}
-                />
+                <Animated.View key={i} style={{ width: 260, height: 140, overflow: 'hidden', transform: [{ scale: kenBurnsAnim }] }}>
+                  <KamiImage
+                    src={url}
+                    thumbnailSrc={thumbUrl}
+                    style={styles.netflixCardPhoto}
+                  />
+                </Animated.View>
               );
             })}
           </ScrollView>
@@ -91,13 +115,13 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
           <KamiText variant="label" bold numberOfLines={1} style={{ flex: 1 }}>
             {memory.title}
           </KamiText>
-          <TouchableOpacity onPress={onDelete} hitSlop={8} style={[styles.netflixCardDelete, { backgroundColor: Colors.border + '44' }]}>
-            <Text style={{ color: Colors.textMuted, fontSize: 11 }}>✕</Text>
+          <TouchableOpacity onPress={onDelete} hitSlop={8} style={[styles.netflixCardDelete, { backgroundColor: colors.border + '44' }]}>
+            <Text style={{ color: colors.textMuted, fontSize: 11 }}>✕</Text>
           </TouchableOpacity>
         </View>
 
         {desc ? (
-          <KamiText variant="body" color={Colors.textSecondary} numberOfLines={2} style={styles.netflixCardDesc}>
+          <KamiText variant="body" color={colors.textSecondary} numberOfLines={2} style={styles.netflixCardDesc}>
             {desc}
           </KamiText>
         ) : null}
@@ -107,7 +131,7 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
           {/* Row 1: Date & Time */}
           <View style={styles.netflixMetaItem}>
             <Text style={styles.netflixMetaIcon}>📅</Text>
-            <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>
+            <KamiText variant="caption" color={colors.textMuted} numberOfLines={1}>
               {new Date(memory.memoryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
               {time ? ` · ${time}` : ''}
             </KamiText>
@@ -119,14 +143,14 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
               {location ? (
                 <View style={styles.netflixMetaItem}>
                   <Text style={styles.netflixMetaIcon}>📍</Text>
-                  <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1} style={{ maxWidth: 120 }}>
+                  <KamiText variant="caption" color={colors.textMuted} numberOfLines={1} style={{ maxWidth: 120 }}>
                     {location}
                   </KamiText>
                 </View>
               ) : null}
               {mood ? (
                 <View style={styles.netflixMetaItem}>
-                  <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>
+                  <KamiText variant="caption" color={colors.textMuted} numberOfLines={1}>
                     Mood: {mood}
                   </KamiText>
                 </View>
@@ -160,7 +184,7 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   tagRow: { flexDirection: 'row', gap: Space[1] },
   tagBadge: { paddingHorizontal: Space[2], paddingVertical: 2, borderRadius: Radii.full },
   netflixCard: {

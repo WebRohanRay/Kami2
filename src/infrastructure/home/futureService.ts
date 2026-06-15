@@ -1,5 +1,5 @@
 import { supabase } from '@shared/lib/supabase';
-import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
+import { resolveSignedUrls, deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import type { Letter, CreateLetterInput, Result } from '@features/home/types';
 import { useAuthStore } from '@features/auth';
 import { letterRepo } from '@shared/db/repo';
@@ -97,9 +97,13 @@ export async function createLetter(
     if (input.imageUrls && input.imageUrls.length > 0) {
       for (let i = 0; i < input.imageUrls.length; i++) {
         const pickerUri = input.imageUrls[i];
-        const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
-        const cachedUri = await enqueueUpload('future_letters', id, pickerUri, remotePath, 'letter_images');
-        localUris.push(cachedUri);
+        if (pickerUri.startsWith('file://') || pickerUri.startsWith('content://')) {
+          const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
+          const cachedUri = await enqueueUpload('future_letters', id, pickerUri, remotePath, 'letter_images');
+          localUris.push(cachedUri);
+        } else {
+          localUris.push(getRelativePathFromSignedUrl(pickerUri, 'letter_images'));
+        }
       }
     }
 
@@ -266,17 +270,20 @@ export async function updateLetter(
 
     const now = new Date().toISOString();
 
-    const localUris = [...(fields.imageUrls ?? letter.imageUrls)];
+    const localUris: string[] = [];
     if (fields.imageUrls) {
       for (let i = 0; i < fields.imageUrls.length; i++) {
         const url = fields.imageUrls[i];
         if (url.startsWith('file://') || url.startsWith('content://')) {
           const remotePath = `${user.id}/${id}/${Date.now()}_${i}.jpg`;
           const cachedUri = await enqueueUpload('future_letters', id, url, remotePath, 'letter_images');
-          const idx = localUris.indexOf(url);
-          if (idx !== -1) localUris[idx] = cachedUri;
+          localUris.push(cachedUri);
+        } else {
+          localUris.push(getRelativePathFromSignedUrl(url, 'letter_images'));
         }
       }
+    } else {
+      localUris.push(...letter.imageUrls);
     }
 
     const updated = {

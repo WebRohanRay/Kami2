@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, Space, Radii, FontSize } from '@shared/constants';
+import { Space, Radii, FontSize } from '@shared/constants';
 import { MOODS } from '../hooks/useHomeDashboard';
 
 interface MoodModalProps {
@@ -31,6 +31,7 @@ export const MoodModal: React.FC<MoodModalProps> = ({
   saving,
 }) => {
   const { colors } = useTheme();
+  const mm = getStyles(colors);
   const [note, setNote] = useState('');
   if (!mood) return null;
 
@@ -41,14 +42,14 @@ export const MoodModal: React.FC<MoodModalProps> = ({
         <View style={mm.top}>
           <Text style={mm.emoji}>{mood.emoji}</Text>
           <KamiText variant="title">{mood.label}</KamiText>
-          <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginTop: 4 }}>
+          <KamiText variant="caption" color={colors.textMuted} align="center" style={{ marginTop: 4 }}>
             Want to add a note about how you're feeling?
           </KamiText>
         </View>
         <TextInput
           style={mm.input}
           placeholder="What's on your mind…"
-          placeholderTextColor={Colors.textMuted}
+          placeholderTextColor={colors.textMuted}
           value={note}
           onChangeText={setNote}
           multiline
@@ -64,7 +65,7 @@ export const MoodModal: React.FC<MoodModalProps> = ({
               onClose();
             }}
           >
-            <KamiText variant="label" color={Colors.textMuted}>Skip</KamiText>
+            <KamiText variant="label" color={colors.textMuted}>Skip</KamiText>
           </TouchableOpacity>
           <TouchableOpacity
             style={[mm.save, { backgroundColor: colors.primary }]}
@@ -86,13 +87,13 @@ export const MoodModal: React.FC<MoodModalProps> = ({
   );
 };
 
-const mm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg, paddingHorizontal: Space[5] },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg, paddingHorizontal: Space[5] },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     alignSelf: 'center',
     marginTop: Space[3],
     marginBottom: Space[4],
@@ -100,14 +101,14 @@ const mm = StyleSheet.create({
   top: { alignItems: 'center', gap: Space[2], marginBottom: Space[5] },
   emoji: { fontSize: 56 },
   input: {
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     padding: Space[4],
     fontSize: FontSize.base,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     height: 140,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     textAlignVertical: 'top',
   },
   btns: { flexDirection: 'row', gap: Space[3], marginTop: Space[5] },
@@ -116,7 +117,7 @@ const mm = StyleSheet.create({
     height: 52,
     borderRadius: Radii.button,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -124,7 +125,6 @@ const mm = StyleSheet.create({
     flex: 2,
     height: 52,
     borderRadius: Radii.button,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

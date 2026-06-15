@@ -13,7 +13,7 @@ import {
 import { useTheme } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, Space, Radii, FontSize } from '@shared/constants';
+import { Space, Radii, FontSize, Opacity } from '@shared/constants';
 
 import type { CoupleJournal, CoupleComment } from '@features/couple/types';
 
@@ -31,6 +31,7 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
   onAddComment,
 }) => {
   const { colors } = useTheme();
+  const cm = getStyles(colors);
   const user = useAuthStore(s => s.user);
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -49,11 +50,11 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
         <ScrollView contentContainerStyle={cm.scroll} keyboardShouldPersistTaps="handled">
           <View style={[cm.entrySummary, { backgroundColor: colors.creamDeep + '15' }]}>
             <KamiText variant="label" bold>{entry.title || 'Shared Entry'}</KamiText>
-            <KamiText variant="caption" color={Colors.textSecondary} numberOfLines={3}>{entry.body}</KamiText>
+            <KamiText variant="caption" color={colors.textSecondary} numberOfLines={3}>{entry.body}</KamiText>
           </View>
           <View style={cm.commentsList}>
             {(entry.comments ?? []).length === 0 ? (
-              <KamiText variant="caption" color={Colors.textMuted} align="center" style={{ marginVertical: Space[4] }}>
+              <KamiText variant="caption" color={colors.textMuted} align="center" style={{ marginVertical: Space[4] }}>
                 No comments yet. Leave a sweet note!
               </KamiText>
             ) : (
@@ -72,18 +73,18 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
                         cm.commentBubble,
                         isMe
                           ? [cm.commentBubbleRight, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '22' }]
-                          : [cm.commentBubbleLeft, { backgroundColor: '#F1F5F9', borderColor: 'rgba(0,0,0,0.03)' }]
+                          : [cm.commentBubbleLeft, { backgroundColor: colors.inputBg, borderColor: colors.border + Opacity.ghost }]
                       ]}
                     >
                       <View style={cm.commentBubbleHeader}>
-                        <KamiText variant="caption" color={isMe ? colors.primaryDark : Colors.textPrimary} bold style={{ fontSize: 10 }}>
+                        <KamiText variant="caption" color={isMe ? colors.primaryDark : colors.textPrimary} bold style={{ fontSize: 10 }}>
                           {isMe ? 'You' : c.userNickname}
                         </KamiText>
-                        <KamiText variant="caption" color={Colors.textMuted} style={{ fontSize: 8 }}>
+                        <KamiText variant="caption" color={colors.textMuted} style={{ fontSize: 8 }}>
                           {new Date(c.createdAt).toLocaleDateString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: user?.timezone ?? 'UTC' })}
                         </KamiText>
                       </View>
-                      <KamiText variant="body" color={Colors.textSecondary} style={{ fontSize: FontSize.sm, lineHeight: 18 }}>{c.body}</KamiText>
+                      <KamiText variant="body" color={colors.textSecondary} style={{ fontSize: FontSize.sm, lineHeight: 18 }}>{c.body}</KamiText>
                     </View>
                   </View>
                 );
@@ -91,11 +92,11 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
             )}
           </View>
         </ScrollView>
-        <View style={[cm.inputRow, { borderTopColor: Colors.border + '44' }]}>
+        <View style={[cm.inputRow, { borderTopColor: colors.border + '44' }]}>
           <TextInput
             style={[cm.input, { borderColor: colors.primary + '22', backgroundColor: colors.creamDeep + '11' }]}
             placeholder="Write a comment..."
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={commentText}
             onChangeText={setCommentText}
             maxLength={250}
@@ -118,15 +119,15 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
   );
 };
 
-const cm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '44' },
   closeBtn: { padding: Space[2] },
   scroll: { padding: Space[5] },
-  entrySummary: { padding: Space[4], borderRadius: Radii.card, gap: Space[1], marginBottom: Space[4], borderWidth: 1, borderColor: Colors.border + '22' },
+  entrySummary: { padding: Space[4], borderRadius: Radii.card, gap: Space[1], marginBottom: Space[4], borderWidth: 1, borderColor: colors.border + '22' },
   commentsList: { gap: Space[3] },
   inputRow: { flexDirection: 'row', alignItems: 'center', padding: Space[3], gap: Space[2], borderTopWidth: 1 },
-  input: { flex: 1, height: 42, borderRadius: Radii.input, borderWidth: 1, paddingHorizontal: Space[3], color: Colors.textPrimary, fontSize: FontSize.sm },
+  input: { flex: 1, height: 42, borderRadius: Radii.input, borderWidth: 1, paddingHorizontal: Space[3], color: colors.textPrimary, fontSize: FontSize.sm },
   sendBtn: { paddingVertical: Space[2] + 2, paddingHorizontal: Space[4], borderRadius: Radii.full },
 
   // Bubble comments styling

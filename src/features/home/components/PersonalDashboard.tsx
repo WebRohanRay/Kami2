@@ -8,10 +8,11 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import { useTheme } from '@shared/hooks';
+import { useTheme, useStaggeredEntrance } from '@shared/hooks';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, Space, Radii, FontSize, FontWeight, Shadows, FontFamily } from '@shared/constants';
+import { ShimmerText } from '@shared/ui/atoms/ShimmerText';
+import { Space, Radii, FontSize, FontWeight, Shadows, FontFamily, Opacity } from '@shared/constants';
 import { Tap } from './Tap';
 import { MOODS } from '../hooks/useHomeDashboard';
 
@@ -35,7 +36,9 @@ interface PersonalDashboardProps {
   getTimeAgo: (date: Date | string) => string;
 }
 
-const PersonalGoalItem = ({ g, colors, navigation }: { g: any; colors: any; navigation: any }) => {
+const PersonalGoalItem = ({ g, navigation }: { g: any; navigation: any }) => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const progressAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
@@ -53,7 +56,7 @@ const PersonalGoalItem = ({ g, colors, navigation }: { g: any; colors: any; navi
       </View>
       <View style={{ flex: 1, gap: 6 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <KamiText variant="label" numberOfLines={1} bold color={Colors.textPrimary}>{g.title}</KamiText>
+          <KamiText variant="label" numberOfLines={1} bold color={colors.textPrimary}>{g.title}</KamiText>
           <KamiText variant="caption" color={colors.primary} bold>{g.progress}%</KamiText>
         </View>
         <View style={styles.singlesProgressBar}>
@@ -94,10 +97,13 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   getTimeAgo,
 }) => {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
+  const entranceAnims = useStaggeredEntrance(5, { delay: 80, offsetY: 25 });
 
   return (
     <View style={styles.container}>
       {/* ── MOOD SANCTUARY ────────────────────────────── */}
+      <Animated.View style={entranceAnims[0].style}>
       <View style={styles.singlesSectionCard}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
@@ -105,9 +111,9 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
             <KamiText variant="subtitle" bold>Mood Sanctuary</KamiText>
           </View>
           {todayMood && (
-            <View style={[styles.donePill, { backgroundColor: Colors.success + '18' }]}>
-              <Text style={{ fontSize: 11, color: Colors.success }}>✓</Text>
-              <KamiText variant="caption" color={Colors.success} bold>Logged</KamiText>
+            <View style={[styles.donePill, { backgroundColor: colors.success + '18' }]}>
+              <Text style={{ fontSize: 11, color: colors.success }}>✓</Text>
+              <KamiText variant="caption" color={colors.success} bold>Logged</KamiText>
             </View>
           )}
         </View>
@@ -125,7 +131,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
                 <KamiText variant="body" bold color={colors.primaryDark}>
                   Feeling {todayMood.moodLabel}
                 </KamiText>
-                <KamiText variant="caption" color={Colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 18 }}>
+                <KamiText variant="caption" color={colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 18 }}>
                   {todayMood.note ? `“${todayMood.note}”` : 'Tap to add some thoughts or reflection...'}
                 </KamiText>
               </View>
@@ -133,7 +139,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
           </Tap>
         ) : (
           <View style={{ gap: Space[3] }}>
-            <KamiText variant="caption" color={Colors.textMuted}>How is your inner world today? Select to check in:</KamiText>
+            <KamiText variant="caption" color={colors.textMuted}>How is your inner world today? Select to check in:</KamiText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -Space[5] }} contentContainerStyle={{ paddingHorizontal: Space[5] }}>
               <View style={styles.singlesMoodRow}>
                 {MOODS.map(m => (
@@ -141,7 +147,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
                     <View style={styles.singlesMoodEmojiWrap}>
                       <Text style={{ fontSize: 24 }}>{m.emoji}</Text>
                     </View>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>{m.label}</KamiText>
+                    <KamiText variant="caption" color={colors.textSecondary} bold>{m.label}</KamiText>
                   </Tap>
                 ))}
               </View>
@@ -154,7 +160,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
             {recentMoods.slice(-7).map(m => (
               <View key={m.id} style={styles.singlesWeekDot}>
                 <Text style={{ fontSize: 16 }}>{m.moodEmoji}</Text>
-                <KamiText variant="caption" style={{ fontSize: 9 }} color={Colors.textMuted}>
+                <KamiText variant="caption" style={{ fontSize: 9 }} color={colors.textMuted}>
                   {new Date(m.loggedDate).toLocaleDateString(undefined, { weekday: 'narrow' })}
                 </KamiText>
               </View>
@@ -162,8 +168,10 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
           </View>
         )}
       </View>
+      </Animated.View>
 
       {/* ── MINDFULNESS PROMPT ───────────────────────── */}
+      <Animated.View style={entranceAnims[1].style}>
       {todayPrompt && (
         <Tap
           onPress={() => navigation.navigate('Journal')}
@@ -177,14 +185,16 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
             <KamiText variant="body" style={styles.notebookPromptText}>
               “{todayPrompt.content}”
             </KamiText>
-            <KamiText variant="caption" color={promptResponse ? Colors.success : colors.primary} bold style={{ marginTop: 8 }}>
+            <KamiText variant="caption" color={promptResponse ? colors.success : colors.primary} bold style={{ marginTop: 8 }}>
               {promptResponse ? '✓ Reflection written — Tap to view' : 'Write your thoughts ›'}
             </KamiText>
           </View>
         </Tap>
       )}
+      </Animated.View>
 
       {/* ── MY JOURNAL ──────────────────────────────── */}
+      <Animated.View style={entranceAnims[2].style}>
       <View style={styles.singlesSectionCard}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
@@ -197,10 +207,13 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
         </View>
         {journalEntries.length === 0 ? (
           <Tap onPress={() => navigation.navigate('Journal')} style={styles.singlesEmptyInner}>
-            <KamiText variant="caption" color={Colors.textMuted} align="center">
+            <Text style={{ fontSize: 28, marginBottom: Space[2] }}>📝</Text>
+            <KamiText variant="caption" color={colors.textMuted} align="center">
               Your journal is a blank canvas.{'\n'}Document your dreams, thoughts, and lessons.
             </KamiText>
-            <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[3] }}>Write your first entry ›</KamiText>
+            <ShimmerText shimmerColor={colors.primary}>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[3] }}>Write your first entry ›</KamiText>
+            </ShimmerText>
           </Tap>
         ) : (
           <View style={{ gap: Space[2] }}>
@@ -208,12 +221,12 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
               <Tap key={e.id} onPress={() => navigation.navigate('Journal')} style={styles.singlesJournalItem}>
                 <View style={[styles.singlesJournalDot, { backgroundColor: colors.primary }]} />
                 <View style={{ flex: 1, gap: 2 }}>
-                  <KamiText variant="label" numberOfLines={1} bold color={Colors.textPrimary}>
+                  <KamiText variant="label" numberOfLines={1} bold color={colors.textPrimary}>
                     {e.title || 'Untitled entry'}
                   </KamiText>
-                  <KamiText variant="caption" color={Colors.textMuted} numberOfLines={1}>{e.body}</KamiText>
+                  <KamiText variant="caption" color={colors.textMuted} numberOfLines={1}>{e.body}</KamiText>
                 </View>
-                <KamiText variant="caption" color={Colors.textMuted}>
+                <KamiText variant="caption" color={colors.textMuted}>
                   {new Date(e.entryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                 </KamiText>
               </Tap>
@@ -221,8 +234,10 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
           </View>
         )}
       </View>
+      </Animated.View>
 
       {/* ── MY GOALS ────────────────────────────────── */}
+      <Animated.View style={entranceAnims[3].style}>
       <View style={styles.singlesSectionCard}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
@@ -235,28 +250,33 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
         </View>
         {activeGoals.length === 0 ? (
           <Tap onPress={() => navigation.navigate('Goals')} style={styles.singlesEmptyInner}>
-            <KamiText variant="caption" color={Colors.textMuted} align="center">No active goals set.</KamiText>
-            <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[3] }}>Grow a new habit ›</KamiText>
+            <Text style={{ fontSize: 28, marginBottom: Space[2] }}>🌱</Text>
+            <KamiText variant="caption" color={colors.textMuted} align="center">No active goals set.</KamiText>
+            <ShimmerText shimmerColor={colors.primary}>
+              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[3] }}>Grow a new habit ›</KamiText>
+            </ShimmerText>
           </Tap>
         ) : (
           <View style={{ gap: Space[3] }}>
             {activeGoals.slice(0, 3).map(g => (
-              <PersonalGoalItem key={g.id} g={g} colors={colors} navigation={navigation} />
+              <PersonalGoalItem key={g.id} g={g} navigation={navigation} />
             ))}
           </View>
         )}
       </View>
+      </Animated.View>
 
       {/* ── ARCHIVE & CAPSULES ───────────────────────── */}
+      <Animated.View style={entranceAnims[4].style}>
       <View style={styles.singlesQuickRow}>
         <Tap onPress={() => navigation.navigate('Memories')} style={styles.premiumHalfCard}>
           <View style={[styles.premiumHalfIconWrap, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '22' }]}>
             <Text style={{ fontSize: 22 }}>📸</Text>
           </View>
-          <KamiText variant="label" bold color={Colors.textPrimary} align="center" style={{ marginTop: Space[2] }}>
+          <KamiText variant="label" bold color={colors.textPrimary} align="center" style={{ marginTop: Space[2] }}>
             Photo Sanctuary
           </KamiText>
-          <KamiText variant="caption" color={Colors.textMuted} align="center">
+          <KamiText variant="caption" color={colors.textMuted} align="center">
             Milestones & Vault
           </KamiText>
         </Tap>
@@ -307,7 +327,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
                           Letter to Self
                         </KamiText>
                       </View>
-                      <KamiText style={[styles.letterExcerptText, !isUnlocked && { fontStyle: 'italic', color: Colors.textMuted }]}>
+                      <KamiText style={[styles.letterExcerptText, !isUnlocked && { fontStyle: 'italic', color: colors.textMuted }]}>
                         {excerpt}
                       </KamiText>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
@@ -330,7 +350,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
             </View>
           ) : (
             <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: Space[4], paddingBottom: Space[4] }}>
-              <KamiText style={{ fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
+              <KamiText style={{ fontSize: 11, color: colors.textMuted, fontStyle: 'italic', lineHeight: 16 }}>
                 No time capsules sealed yet. Write a letter to your future self!
               </KamiText>
               <TouchableOpacity
@@ -351,7 +371,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
                   key={i}
                   style={[
                     styles.carouselDot,
-                    { backgroundColor: i === activePersonalLetterSlide ? colors.primary : Colors.border }
+                    { backgroundColor: i === activePersonalLetterSlide ? colors.primary : colors.border }
                   ]}
                 />
               ))}
@@ -359,11 +379,12 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
           )}
         </View>
       </View>
+      </Animated.View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     gap: Space[5],
   },
@@ -372,16 +393,16 @@ const styles = StyleSheet.create({
   cardIcon: { fontSize: FontSize.lg },
   donePill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.primary + '18', borderRadius: Radii.full,
+    backgroundColor: colors.primary + '18', borderRadius: Radii.full,
     paddingHorizontal: Space[3], paddingVertical: Space[1],
   },
   singlesSectionCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 24,
     padding: Space[5],
     gap: Space[4],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.08)',
+    borderColor: colors.border + Opacity.ghost,
     ...Shadows.card,
   },
   singlesMoodLoggedBox: {
@@ -400,13 +421,13 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.sm,
     elevation: 2,
     borderWidth: 1,
-    borderColor: 'rgba(201, 104, 130, 0.12)',
+    borderColor: colors.border + Opacity.subtle,
   },
   singlesMoodRow: {
     flexDirection: 'row',
@@ -421,18 +442,18 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.inputBg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: colors.border + Opacity.ghost,
   },
   singlesWeekRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: Space[3],
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: colors.border + Opacity.ghost,
     marginTop: Space[1],
   },
   singlesWeekDot: {
@@ -440,11 +461,11 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   singlesNotebookCard: {
-    backgroundColor: '#FFFDF9',
+    backgroundColor: colors.cardBg,
     borderRadius: 24,
     padding: Space[5],
     borderWidth: 1.5,
-    borderColor: '#EADECA',
+    borderColor: colors.border + Opacity.medium,
     ...Shadows.card,
     elevation: 3,
     position: 'relative',
@@ -464,20 +485,20 @@ const styles = StyleSheet.create({
     right: 20,
     height: 8,
     borderBottomWidth: 2,
-    borderBottomColor: '#D3C2B0',
+    borderBottomColor: colors.border + Opacity.medium,
     borderStyle: 'dotted',
   },
   notebookBody: {
     paddingLeft: Space[2],
     borderLeftWidth: 1,
-    borderLeftColor: '#F0E5D8',
+    borderLeftColor: colors.border + Opacity.subtle,
     paddingVertical: Space[1],
   },
   notebookPromptText: {
     fontFamily: FontFamily.display,
     fontSize: FontSize.md,
     lineHeight: 31,
-    color: '#5C4033',
+    color: colors.textPrimary,
     textAlign: 'center',
   },
   singlesEmptyInner: {
@@ -491,9 +512,9 @@ const styles = StyleSheet.create({
     paddingVertical: Space[3] + 2,
     paddingHorizontal: Space[3] + 2,
     borderRadius: 16,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: colors.border + Opacity.ghost,
   },
   singlesJournalDot: {
     width: 6,
@@ -507,15 +528,15 @@ const styles = StyleSheet.create({
     paddingVertical: Space[3],
     paddingHorizontal: Space[4],
     borderRadius: 18,
-    backgroundColor: '#FAF9F6',
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: colors.border + Opacity.ghost,
   },
   singlesGoalEmojiCircle: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadows.sm,
@@ -524,7 +545,7 @@ const styles = StyleSheet.create({
   singlesProgressBar: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    backgroundColor: colors.border + Opacity.ghost,
     overflow: 'hidden',
   },
   singlesProgressFill: {
@@ -537,14 +558,14 @@ const styles = StyleSheet.create({
   },
   premiumHalfCard: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 24,
     paddingVertical: Space[5],
     paddingHorizontal: Space[3],
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.05)',
+    borderColor: colors.border + Opacity.ghost,
     ...Shadows.card,
     elevation: 2,
     gap: 2,
@@ -561,11 +582,11 @@ const styles = StyleSheet.create({
   },
   tornPaperWidget: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
     borderRadius: 20,
     padding: Space[4],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.15)',
+    borderColor: colors.border + Opacity.medium,
     borderStyle: 'dashed',
     ...Shadows.sm,
     elevation: 2,
@@ -581,7 +602,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   toLabelRow: {
     flexDirection: 'row',
@@ -598,12 +619,12 @@ const styles = StyleSheet.create({
   letterExcerptText: {
     fontSize: 12,
     fontStyle: 'italic',
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 17,
   },
   letterWrittenText: {
     fontSize: 8,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   widgetFooterCta: {

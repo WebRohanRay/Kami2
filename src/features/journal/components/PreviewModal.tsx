@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Radii, Space } from '@shared/constants';
+import { FontSize, Radii, Space } from '@shared/constants';
 
 import type { JournalEntry } from '@features/home/types';
 import type { CoupleJournal } from '@features/couple/types';
@@ -63,6 +63,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   user,
 }) => {
   const { colors } = useTheme();
+  const pv = getStyles(colors);
 
   if (!entry) return null;
 
@@ -111,7 +112,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
               <Text style={{ fontSize: 18, color: colors.primary, fontWeight: 'bold' }}>☰</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} style={pv.closeBtn} accessibilityRole="button" accessibilityLabel="Close Preview">
-              <KamiText variant="label" color={Colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
+              <KamiText variant="label" color={colors.textMuted} bold style={{ fontSize: 13 }}>Close</KamiText>
             </TouchableOpacity>
           </View>
         </View>
@@ -124,7 +125,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
                 <KamiText variant="caption" color={colors.primary} bold>{entry.moodId}</KamiText>
               </View>
             ) : <View />}
-            <KamiText variant="caption" color={Colors.textMuted}>
+            <KamiText variant="caption" color={colors.textMuted}>
               {formatDate(entry.entryDate || entry.createdAt, user?.timezone)}
             </KamiText>
           </View>
@@ -202,15 +203,15 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   );
 };
 
-const pv = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '44' },
   menuBtn: { paddingVertical: Space[1] + 2, paddingHorizontal: Space[3], borderRadius: Radii.md },
   closeBtn: { padding: Space[2] },
   scroll: { padding: Space[5], gap: Space[4] },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
   moodBadge: { paddingVertical: 2, paddingHorizontal: Space[2], borderRadius: Radii.sm },
-  title: { fontSize: FontSize.lg, lineHeight: 28, color: Colors.textPrimary },
+  title: { fontSize: FontSize.lg, lineHeight: 28, color: colors.textPrimary },
   authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
   imageScrollerContainer: { marginVertical: Space[3], width: '100%', borderRadius: Radii.card, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.03)' },
   imageScrollView: { width: '100%', height: 250 },
@@ -218,7 +219,7 @@ const pv = StyleSheet.create({
   dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
   dot: { width: 6, height: 6, borderRadius: 3 },
   bodyContainer: { paddingVertical: Space[2] },
-  bodyText: { fontSize: 16, lineHeight: 29, color: 'rgba(28, 25, 23, 0.85)' },
+  bodyText: { fontSize: 16, lineHeight: 29, color: colors.textSecondary },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2], marginTop: Space[2] },
   tagChip: { paddingVertical: 4, paddingHorizontal: Space[3], borderRadius: Radii.full },
 });

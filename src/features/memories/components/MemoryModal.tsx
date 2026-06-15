@@ -16,15 +16,15 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Radii, Space } from '@shared/constants';
+import { FontSize, Radii, Space } from '@shared/constants';
 import type { Memory } from '@features/home/types';
 import type { CoupleMemory } from '@features/couple/types';
 import { pickImages } from '@shared/lib/storage';
 import { memorySchema } from '@shared/lib/validation/schemas';
 import { useTheme } from '@shared/hooks';
 
-export const MEMORY_EMOJIS = ['🌸','📸','🌅','✨','🎉','💛','🌊','🏔','🎵','🍃','🌙','❤️','🎂','✈️','🌺','⭐'];
-export const MOODS = ['😊','😌','🥹','😍','😂','🤩','😢','😤'];
+export const MEMORY_EMOJIS = ['🌸', '📸', '🌅', '✨', '🎉', '💛', '🌊', '🏔', '🎵', '🍃', '🌙', '❤️', '🎂', '✈️', '🌺', '⭐'];
+export const MOODS = ['😊', '😌', '🥹', '😍', '😂', '🤩', '😢', '😤'];
 
 interface MemoryModalProps {
   visible: boolean;
@@ -54,6 +54,8 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
   activeSpace,
 }) => {
   const { colors } = useTheme();
+  const wm = React.useMemo(() => getWmStyles(colors), [colors]);
+  const mm = React.useMemo(() => getMmStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [emoji, setEmoji] = useState('🌸');
@@ -106,7 +108,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
       <SafeAreaView style={[mm.root, { backgroundColor: colors.pageBg }]}>
         <View style={wm.toolbar}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
-            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+            <KamiText variant="label" color={colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
           <KamiText variant="overline">{memory ? 'Edit memory' : 'New memory'}</KamiText>
           <TouchableOpacity
@@ -177,7 +179,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
           <TextInput
             style={mm.input}
             placeholder="e.g. That perfect sunrise"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={title}
             onChangeText={setTitle}
             maxLength={100}
@@ -189,7 +191,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
           <TextInput
             style={[mm.input, { height: 100, textAlignVertical: 'top' }]}
             placeholder="What made this moment special…"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={body}
             onChangeText={setBody}
             multiline
@@ -203,7 +205,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
               <TextInput
                 style={mm.input}
                 placeholder="e.g. 2026-06-07"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={memoryDate}
                 onChangeText={setMemoryDate}
                 maxLength={10}
@@ -213,7 +215,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
               <TextInput
                 style={mm.input}
                 placeholder="e.g. 5:00 PM"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={memoryTime}
                 onChangeText={setMemoryTime}
                 maxLength={20}
@@ -223,7 +225,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
               <TextInput
                 style={mm.input}
                 placeholder="e.g. Eiffel Tower, Paris"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={location}
                 onChangeText={setLocation}
                 maxLength={100}
@@ -233,7 +235,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
               <TextInput
                 style={mm.input}
                 placeholder="e.g. 😊 Happy or Excited"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={mood || ''}
                 onChangeText={setMood}
                 maxLength={30}
@@ -243,7 +245,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
               <TextInput
                 style={mm.input}
                 placeholder="e.g. trip, adventure, special"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={tagsText}
                 onChangeText={setTagsText}
                 maxLength={100}
@@ -309,7 +311,7 @@ export const MemoryModal: React.FC<MemoryModalProps> = ({
   );
 };
 
-const wm = StyleSheet.create({
+const getWmStyles = (colors: any) => StyleSheet.create({
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -318,7 +320,7 @@ const wm = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4],
     paddingBottom: Space[4],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '44',
+    borderBottomColor: colors.border + '44',
   },
   photoHeader: {
     flexDirection: 'row',
@@ -326,7 +328,7 @@ const wm = StyleSheet.create({
     alignItems: 'center',
     marginTop: Space[4],
     borderTopWidth: 1,
-    borderTopColor: Colors.border + '22',
+    borderTopColor: colors.border + '22',
     paddingTop: Space[3],
   },
   addPhotoBtn: { paddingVertical: Space[1], paddingHorizontal: Space[2] },
@@ -345,12 +347,12 @@ const wm = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#fff',
+    borderColor: colors.cardBg,
   },
 });
 
-const mm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+const getMmStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
   content: { padding: Space[5], gap: Space[3], paddingBottom: Space[10] },
   label: { marginBottom: Space[1] },
   emojiRow: { flexDirection: 'row', gap: Space[2], paddingVertical: Space[2] },
@@ -358,33 +360,33 @@ const mm = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: Radii.sm,
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
-  emojiBtnOn: { borderColor: Colors.primary, backgroundColor: Colors.primary + '18' },
+  emojiBtnOn: { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
   input: {
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     borderRadius: Radii.input,
     paddingHorizontal: Space[4],
     paddingVertical: Space[3],
     fontSize: FontSize.base,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   moodRow: { flexDirection: 'row', gap: Space[2] },
   moodBtn: {
     width: 44,
     height: 44,
     borderRadius: Radii.sm,
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
-  moodBtnOn: { borderColor: Colors.primary, backgroundColor: Colors.primary + '18' },
+  moodBtnOn: { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
 });

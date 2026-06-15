@@ -35,25 +35,25 @@ const InputField: React.FC<InputFieldProps> = ({
 
   const hasError = Boolean(error);
   const borderColor = hasError
-    ? Colors.error
+    ? colors.error
     : focused
     ? colors.primary
-    : Colors.border;
+    : colors.border;
 
   return (
     <View style={styles.container}>
-      {label ? <Text style={[styles.label, { fontSize: scaleSize(FontSize.sm) }]}>{label}</Text> : null}
-      <View style={[styles.wrapper, { borderColor }, style as any]}>
+      {label ? <Text style={[styles.label, { fontSize: scaleSize(FontSize.sm), color: colors.textSecondary }]}>{label}</Text> : null}
+      <View style={[styles.wrapper, { borderColor, backgroundColor: colors.inputBg }, style as any]}>
         {icon ? (
-          <Text style={[styles.icon, { fontSize: scaleSize(FontSize.md) }]} accessibilityElementsHidden>
+          <Text style={[styles.icon, { fontSize: scaleSize(FontSize.md), color: colors.textMuted }]} accessibilityElementsHidden>
             {icon}
           </Text>
         ) : null}
         <TextInput
           {...rest}
-          style={[styles.input, { fontSize: scaleSize(FontSize.base) }]}
+          style={[styles.input, { fontSize: scaleSize(FontSize.base), color: colors.textPrimary }]}
           secureTextEntry={isPassword && !visible}
-          placeholderTextColor="rgba(84,66,69,0.40)"
+          placeholderTextColor={colors.textMuted}
           autoCapitalize={rest.autoCapitalize ?? 'none'}
           onFocus={e => { setFocused(true);  rest.onFocus?.(e);  }}
           onBlur={e  => { setFocused(false); rest.onBlur?.(e);   }}
@@ -66,12 +66,12 @@ const InputField: React.FC<InputFieldProps> = ({
             accessibilityRole="button"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={[styles.eyeIcon, { fontSize: scaleSize(FontSize.base) }]}>{visible ? '🙈' : '👁'}</Text>
+            <Text style={[styles.eyeIcon, { fontSize: scaleSize(FontSize.base), color: colors.textMuted }]}>{visible ? '🙈' : '👁'}</Text>
           </TouchableOpacity>
         )}
       </View>
       {(error || hint) ? (
-        <Text style={[styles.helper, hasError && { color: Colors.error }, { fontSize: scaleSize(FontSize.xs) }]}>
+        <Text style={[styles.helper, { color: hasError ? colors.error : colors.textMuted, fontSize: scaleSize(FontSize.xs) }]}>
           {error ?? hint}
         </Text>
       ) : null}
@@ -86,14 +86,12 @@ const styles = StyleSheet.create({
   label: {
     fontSize: FontSize.sm,
     fontWeight: '600',
-    color: Colors.textSecondary,
     marginLeft: Space[1],
   },
   wrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     height: Sizing.inputHeight,
-    backgroundColor: Colors.inputBg,
     borderWidth: 1.5,
     borderRadius: Radii.input,
     paddingHorizontal: Space[4],
@@ -101,19 +99,16 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: FontSize.md,
-    color: Colors.textMuted,
   },
   input: {
     flex: 1,
     height: '100%',
     fontSize: FontSize.base,
-    color: Colors.textPrimary,
   },
   eyeBtn: { padding: Space[1] },
-  eyeIcon: { fontSize: FontSize.base, color: Colors.textMuted },
+  eyeIcon: { fontSize: FontSize.base },
   helper: {
     fontSize: FontSize.xs,
-    color: Colors.textMuted,
     marginLeft: Space[1],
   },
 });

@@ -64,28 +64,28 @@ const KamiButton: React.FC<KamiButtonProps> = ({
 
   const renderContent = () => {
     if (loading) {
-      return <ActivityIndicator color={variant === 'secondary' || variant === 'ghost' ? colors.primary : '#fff'} size="small" />;
+      return <ActivityIndicator color={variant === 'secondary' || variant === 'ghost' ? colors.primary : (colors.textOnPrimary || '#fff')} size="small" />;
     }
     
     return (
       <View style={styles.row}>
         {icon ? (
           <Text style={[
-            variant === 'primary' && styles.primaryLabel,
+            variant === 'primary' && [styles.primaryLabel, { color: colors.textOnPrimary || '#fff' }],
             variant === 'secondary' && [styles.secondaryLabel, { color: colors.primary }],
             variant === 'ghost' && [styles.ghostLabel, { color: colors.primary }],
-            variant === 'danger' && styles.primaryLabel,
+            variant === 'danger' && [styles.primaryLabel, { color: colors.textOnPrimary || '#fff' }],
             { fontSize: fs + scaleSize(2) }
           ]}>{icon}</Text>
         ) : null}
         <Text style={[
-          variant === 'primary' && styles.primaryLabel,
+          variant === 'primary' && [styles.primaryLabel, { color: colors.textOnPrimary || '#fff' }],
           variant === 'secondary' && [styles.secondaryLabel, { color: colors.primary }],
           variant === 'ghost' && [styles.ghostLabel, { color: colors.primary }],
-          variant === 'danger' && styles.primaryLabel,
+          variant === 'danger' && [styles.primaryLabel, { color: colors.textOnPrimary || '#fff' }],
           { fontSize: fs }
         ]}>{label}</Text>
-        {variant === 'primary' ? <Text style={[styles.arrow, { fontSize: scaleSize(FontSize.lg) }]}>›</Text> : null}
+        {variant === 'primary' ? <Text style={[styles.arrow, { fontSize: scaleSize(FontSize.lg), color: (colors.textOnPrimary || '#fff') + 'CC' }]}>›</Text> : null}
       </View>
     );
   };
@@ -98,10 +98,10 @@ const KamiButton: React.FC<KamiButtonProps> = ({
       onPressOut={handlePressOut}
       style={[
         styles.base,
-        variant === 'primary' && [{ backgroundColor: colors.primary }, disabled && styles.primaryDisabled],
+        variant === 'primary' && [{ backgroundColor: colors.primary }, disabled && { backgroundColor: colors.border }],
         variant === 'secondary' && { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: 'transparent' },
         variant === 'ghost' && { backgroundColor: 'transparent' },
-        variant === 'danger' && styles.danger,
+        variant === 'danger' && { backgroundColor: colors.error },
         { height: h, width: w },
         style
       ]}
@@ -124,43 +124,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  primary: {
-    backgroundColor: Colors.primary,
-  },
-  primaryDisabled: {
-    backgroundColor: Colors.border,
-  },
-  secondary: {
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    backgroundColor: 'transparent',
-  },
-  danger: {
-    backgroundColor: Colors.error,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space[2],
   },
   primaryLabel: {
-    color: '#fff',
     fontWeight: FontWeight.bold,
     letterSpacing: 0.3,
   },
   secondaryLabel: {
-    color: Colors.primary,
     fontWeight: FontWeight.semibold,
     letterSpacing: 0.3,
   },
   ghostLabel: {
-    color: Colors.primary,
     fontWeight: FontWeight.semibold,
     letterSpacing: 0.3,
     textDecorationLine: 'underline',
   },
   arrow: {
-    color: 'rgba(255,255,255,0.8)',
     fontSize: FontSize.lg,
     fontWeight: FontWeight.regular,
     marginTop: -1,

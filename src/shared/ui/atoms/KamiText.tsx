@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text as RNText, TextProps, StyleSheet } from 'react-native';
-import { Colors, FontSize, FontWeight } from '@shared/constants';
-import { useTextScale } from '@shared/hooks';
+import { FontSize, FontWeight } from '@shared/constants';
+import { useTextScale, useTheme } from '@shared/hooks';
 
 type Variant =
   | 'display'    // large screen titles (Lora-Regular/SemiBold)
@@ -27,16 +27,6 @@ const variantStyles: Record<Variant, object> = {
   caption:  { fontSize: FontSize.xs,    lineHeight: 17                      },
   label:    { fontSize: FontSize.base,  lineHeight: 22                      },
   overline: { fontSize: FontSize.xs,    lineHeight: 17, letterSpacing: 1.5, textTransform: 'uppercase' },
-};
-
-const defaultColors: Record<Variant, string> = {
-  display:  Colors.textPrimary,
-  title:    Colors.textPrimary,
-  subtitle: Colors.textSecondary,
-  body:     Colors.textSecondary,
-  caption:  Colors.textMuted,
-  label:    Colors.textPrimary,
-  overline: Colors.textMuted,
 };
 
 const getFontAndWeight = (variant: Variant, bold?: boolean, customFontWeight?: string) => {
@@ -80,8 +70,11 @@ const KamiText: React.FC<KamiTextProps> = ({
   ...rest
 }) => {
   const { multiplier } = useTextScale();
+  const { colors } = useTheme();
+  
   const flatStyle = StyleSheet.flatten(style) || {};
   const customFontWeight = flatStyle.fontWeight ? String(flatStyle.fontWeight) : undefined;
+  const styleColor = flatStyle.color;
   
   const fontProps = getFontAndWeight(variant, bold, customFontWeight);
 
@@ -92,13 +85,21 @@ const KamiText: React.FC<KamiTextProps> = ({
   const scaledFontSize = Math.round(customFontSize * multiplier);
   const scaledLineHeight = customLineHeight ? Math.round(customLineHeight * multiplier) : undefined;
 
+  const resolvedColor = color ?? styleColor ?? (
+    variant === 'display' || variant === 'title' || variant === 'label'
+      ? colors.textPrimary
+      : variant === 'subtitle' || variant === 'body'
+      ? colors.textSecondary
+      : colors.textMuted
+  );
+
   return (
     <RNText
       style={[
         variantStyles[variant],
-        { color: color ?? defaultColors[variant], textAlign: align },
         fontProps,
         style,
+        { color: resolvedColor, textAlign: align },
         { fontSize: scaledFontSize, lineHeight: scaledLineHeight },
       ]}
       {...rest}
@@ -109,3 +110,4 @@ const KamiText: React.FC<KamiTextProps> = ({
 };
 
 export default KamiText;
+

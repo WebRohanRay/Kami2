@@ -16,12 +16,13 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   height = 6,
   color,
-  trackColor = Colors.border + '55',
+  trackColor,
   animated = true,
   style,
 }) => {
   const { colors } = useTheme();
   const activeColor = color ?? colors.primary;
+  const resolvedTrackColor = trackColor ?? (colors.border + '55');
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -39,7 +40,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
   const width = anim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
   return (
-    <View style={[styles.track, { height, backgroundColor: trackColor, borderRadius: height }, style]}>
+    <View style={[styles.track, { height, backgroundColor: resolvedTrackColor, borderRadius: height }, style]}>
       <Animated.View
         style={[
           styles.fill,

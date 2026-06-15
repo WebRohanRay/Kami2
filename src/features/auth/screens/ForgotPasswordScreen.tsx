@@ -25,6 +25,7 @@ import KamiText   from '@shared/ui/atoms/KamiText';
 import KamiButton from '@shared/ui/atoms/KamiButton';
 import InputField from '@shared/ui/atoms/InputField';
 import { Colors, Space, Radii } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { forgotPasswordSchema } from '@shared/lib/validation/schemas';
 
@@ -40,6 +41,7 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
 
   const { isConnected } = useNetworkStatus();
   const { forgotPassword } = useAuthActions();
+  const { isDark } = useTheme();
 
   // ── Send Reset Email ──────────────────────────────────────────────────────
   const handleSend = async () => {
@@ -72,7 +74,7 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
   if (sent) {
     return (
       <SafeAreaView style={styles.root}>
-        <StatusBar style="dark" />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <View style={styles.sentContainer}>
           <Text style={styles.sentEmoji}>📩</Text>
 

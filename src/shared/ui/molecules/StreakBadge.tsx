@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated, TouchableOpacity, Vibration } from 'react-native';
 import KamiText from '../atoms/KamiText';
-import { Colors, Radii, Shadows, Space, FontSize, FontWeight } from '@shared/constants';
+import { Radii, Shadows, Space, FontSize, Opacity } from '@shared/constants';
+import { useTheme } from '@shared/hooks';
 
 interface StreakBadgeProps {
   count: number;
@@ -9,6 +10,8 @@ interface StreakBadgeProps {
 }
 
 const StreakBadge: React.FC<StreakBadgeProps> = ({ count, label = 'day streak' }) => {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const flameAnim = useRef(new Animated.Value(1)).current;
 
@@ -73,26 +76,27 @@ const StreakBadge: React.FC<StreakBadgeProps> = ({ count, label = 'day streak' }
 
 export default StreakBadge;
 
-const styles = StyleSheet.create({
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFBEB', // premium light amber
-    borderRadius: Radii.lg,
-    paddingHorizontal: Space[4],
-    paddingVertical: Space[2],
-    gap: Space[3],
-    alignSelf: 'flex-start',
-    borderWidth: 1.5,
-    borderColor: '#FEF3C7',
-    ...Shadows.sm,
-  },
-  flame: { fontSize: 24 },
-  count: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: FontSize.xl,
-    fontWeight: '600',
-    color: '#D97706', // rich amber
-    lineHeight: 32,
-  },
-});
+const getStyles = (colors: any) =>
+  StyleSheet.create({
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.warning + Opacity.subtle,
+      borderRadius: Radii.lg,
+      paddingHorizontal: Space[4],
+      paddingVertical: Space[2],
+      gap: Space[3],
+      alignSelf: 'flex-start',
+      borderWidth: 1.5,
+      borderColor: colors.warning + Opacity.muted,
+      ...Shadows.sm,
+    },
+    flame: { fontSize: 24 },
+    count: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: FontSize.xl,
+      fontWeight: '600',
+      color: colors.warning,
+      lineHeight: 32,
+    },
+  });

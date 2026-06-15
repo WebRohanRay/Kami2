@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, Text, ViewStyle } from 'react-native';
-import { Colors, Radii, FontSize, FontWeight, Space } from '@shared/constants';
+import { Colors, Radii, FontSize, FontWeight, Space, Opacity } from '@shared/constants';
 import { useTheme } from '@shared/hooks';
 
 interface SyncStatusBadgeProps {
@@ -21,12 +21,12 @@ const SyncStatusBadge: React.FC<SyncStatusBadgeProps> = ({ status, onPressConfli
         onPress={onPressConflict}
         style={[
           styles.badge,
-          { backgroundColor: '#ffe4e6', borderColor: '#f43f5e' },
+          { backgroundColor: colors.error + Opacity.subtle, borderColor: colors.error },
           style,
         ]}
       >
-        <Text style={[styles.icon, { color: '#e11d48' }]}>⚠️</Text>
-        <Text style={[styles.text, { color: '#e11d48' }]}>Sync Conflict</Text>
+        <Text style={[styles.icon, { color: colors.error }]}>⚠️</Text>
+        <Text style={[styles.text, { color: colors.error }]}>Sync Conflict</Text>
       </TouchableOpacity>
     );
   }
@@ -37,12 +37,12 @@ const SyncStatusBadge: React.FC<SyncStatusBadgeProps> = ({ status, onPressConfli
       disabled={true}
       style={[
         styles.badge,
-        { backgroundColor: '#fef3c7', borderColor: '#d97706' },
+        { backgroundColor: colors.warning + Opacity.subtle, borderColor: colors.warning },
         style,
       ]}
     >
-      <Text style={[styles.icon, { color: '#d97706' }]}>⏳</Text>
-      <Text style={[styles.text, { color: '#d97706' }]}>Saving locally</Text>
+      <Text style={[styles.icon, { color: colors.warning }]}>⏳</Text>
+      <Text style={[styles.text, { color: colors.warning }]}>Saving locally</Text>
     </TouchableOpacity>
   );
 };

@@ -24,6 +24,7 @@ const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
   onResolve,
 }) => {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const [loading, setLoading] = useState(true);
   const [localData, setLocalData] = useState<any>(null);
   const [serverData, setServerData] = useState<any>(null);
@@ -295,7 +296,7 @@ const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
         <View style={styles.header}>
           <Text style={styles.title}>Resolve Sync Conflict</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={{ fontSize: 20, color: Colors.textMuted }}>✕</Text>
+            <Text style={{ fontSize: 20, color: colors.textMuted }}>✕</Text>
           </TouchableOpacity>
         </View>
 
@@ -321,7 +322,7 @@ const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
 
               <TouchableOpacity
                 onPress={handleKeepServer}
-                style={[styles.button, { backgroundColor: Colors.creamDeep, borderWidth: 1.5, borderColor: colors.primary }]}
+                style={[styles.button, { backgroundColor: colors.creamDeep, borderWidth: 1.5, borderColor: colors.primary }]}
               >
                 <Text style={[styles.buttonText, { color: colors.primary }]}>Keep Server Version</Text>
               </TouchableOpacity>
@@ -335,8 +336,8 @@ const ConflictResolverModal: React.FC<ConflictResolverModalProps> = ({
 
 export default ConflictResolverModal;
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -344,19 +345,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space[5],
     paddingVertical: Space[4],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '44',
+    borderBottomColor: colors.border + '44',
   },
   title: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   closeBtn: { padding: Space[2] },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { padding: Space[5], gap: Space[4] },
   subtitle: {
     fontSize: FontSize.base,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 22,
   },
   comparisonContainer: {
@@ -368,27 +369,27 @@ const styles = StyleSheet.create({
   columnHeader: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.bold,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     textAlign: 'center',
   },
   card: {
-    backgroundColor: Colors.cardBg,
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     padding: Space[4],
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     minHeight: 250,
   },
   fieldLabel: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.bold,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     marginTop: Space[2],
     textTransform: 'uppercase',
   },
   fieldValue: {
     fontSize: FontSize.sm,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     marginTop: Space[1],
     lineHeight: 20,
   },

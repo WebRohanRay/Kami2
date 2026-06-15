@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Radii, Space, Shadows } from '@shared/constants';
+import { FontSize, Radii, Space, Shadows, Opacity } from '@shared/constants';
 import { useTheme, useTextScale } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
 import type { Goal } from '@features/home/types';
@@ -40,6 +40,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
   onProgress,
 }) => {
   const { colors } = useTheme();
+  const gp = React.useMemo(() => getStyles(colors), [colors]);
   const { scaleSize } = useTextScale();
   const user = useAuthStore(s => s.user);
 
@@ -87,19 +88,19 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[gp.root, { backgroundColor: colors.pageBg }]}>
         {/* Modern Borderless Header */}
-        <View style={[gp.header, { borderBottomColor: 'rgba(28,25,23,0.06)' }]}>
+        <View style={[gp.header, { borderBottomColor: colors.border + Opacity.ghost }]}>
           <KamiText variant="title" bold>Preview Goal</KamiText>
           <View style={{ flexDirection: 'row', gap: Space[2], alignItems: 'center' }}>
             <TouchableOpacity
               onPress={handleOptionsPress}
-              style={[gp.menuBtn, { backgroundColor: colors.primary + '18' }]}
+              style={[gp.menuBtn, { backgroundColor: colors.primary + Opacity.light }]}
               accessibilityRole="button"
               accessibilityLabel="Options"
             >
               <Text style={{ fontSize: 16, color: colors.primary, fontWeight: 'bold' }}>•••</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={[gp.closeBtn, { backgroundColor: 'rgba(28,25,23,0.06)' }]} accessibilityRole="button" accessibilityLabel="Close Preview">
-              <KamiText variant="caption" color={Colors.textPrimary} bold>Close</KamiText>
+            <TouchableOpacity onPress={onClose} style={[gp.closeBtn, { backgroundColor: colors.border + Opacity.ghost }]} accessibilityRole="button" accessibilityLabel="Close Preview">
+              <KamiText variant="caption" color={colors.textPrimary} bold>Close</KamiText>
             </TouchableOpacity>
           </View>
         </View>
@@ -132,7 +133,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
             {/* Description quote styling */}
             {goal.description && (
               <View style={[gp.descBox, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primary + '1a' }]}>
-                <KamiText variant="body" color={Colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 22 }}>
+                <KamiText variant="body" color={colors.textSecondary} style={{ fontStyle: 'italic', lineHeight: 22 }}>
                   "{goal.description}"
                 </KamiText>
               </View>
@@ -146,8 +147,8 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
                 </View>
               )}
               {goal.targetDate && (
-                <View style={[gp.badge, { backgroundColor: 'rgba(28,25,23,0.05)' }]}>
-                  <KamiText variant="caption" color={Colors.textSecondary} bold>
+                <View style={[gp.badge, { backgroundColor: colors.border + Opacity.ghost }]}>
+                  <KamiText variant="caption" color={colors.textSecondary} bold>
                     🗓 Due {new Date(goal.targetDate).toLocaleDateString(undefined, {
                       month: 'short',
                       day: 'numeric',
@@ -161,15 +162,15 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
           </View>
 
           {/* Botanical Vine Progress Section */}
-          <View style={[gp.progressCard, { backgroundColor: '#FFFFFF', borderColor: colors.creamMid }]}>
+          <View style={[gp.progressCard, { backgroundColor: colors.cardBg, borderColor: colors.creamMid }]}>
             <View style={gp.progressHeader}>
               <View style={gp.stageIndicator}>
                 <Text style={{ fontSize: 18 }}>{getStageEmoji()}</Text>
-                <KamiText variant="label" bold color={completed ? Colors.success : colors.primary}>
+                <KamiText variant="label" bold color={completed ? colors.success : colors.primary}>
                   {getStageName()}
                 </KamiText>
               </View>
-              <KamiText variant="title" bold color={completed ? Colors.success : colors.primary}>
+              <KamiText variant="title" bold color={completed ? colors.success : colors.primary}>
                 {goal.progress}%
               </KamiText>
             </View>
@@ -177,7 +178,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
             <View style={gp.vineTrackContainer}>
               <View style={gp.vineBg} />
               <LinearGradient
-                colors={completed ? ['#34D399', '#059669'] : [colors.primary, colors.primaryDark || colors.primary]}
+                colors={completed ? [colors.success, colors.success + 'CC'] : [colors.primary, colors.primaryDark || colors.primary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[gp.vineFill, { width: `${goal.progress}%` }]}
@@ -186,7 +187,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
               <View style={[
                 gp.vineNotch,
                 { left: '30%' },
-                goal.progress >= 30 && [gp.vineNotchActive, { borderColor: completed ? Colors.success : colors.primary }],
+                goal.progress >= 30 && [gp.vineNotchActive, { borderColor: completed ? colors.success : colors.primary }],
               ]}>
                 <Text style={[gp.vineNotchEmoji, { opacity: goal.progress >= 30 ? 1 : 0.4 }]}>🌱</Text>
               </View>
@@ -194,7 +195,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
               <View style={[
                 gp.vineNotch,
                 { left: '70%' },
-                goal.progress >= 70 && [gp.vineNotchActive, { borderColor: completed ? Colors.success : colors.primary }],
+                goal.progress >= 70 && [gp.vineNotchActive, { borderColor: completed ? colors.success : colors.primary }],
               ]}>
                 <Text style={[gp.vineNotchEmoji, { opacity: goal.progress >= 70 ? 1 : 0.4 }]}>🌿</Text>
               </View>
@@ -202,7 +203,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
               <View style={[
                 gp.vineNotch,
                 { left: '100%' },
-                goal.progress >= 100 && [gp.vineNotchActive, { borderColor: completed ? Colors.success : '#34D399' }],
+                goal.progress >= 100 && [gp.vineNotchActive, { borderColor: colors.success }],
               ]}>
                 <Text style={[gp.vineNotchEmoji, { opacity: goal.progress >= 100 ? 1 : 0.4 }]}>🌸</Text>
               </View>
@@ -212,25 +213,25 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
           {/* Premium Stepper controls */}
           {!completed && (
             <View style={gp.stepperContainer}>
-              <KamiText variant="overline" style={{ marginBottom: Space[3], color: Colors.textSecondary }}>Adjust Progress</KamiText>
+              <KamiText variant="overline" style={{ marginBottom: Space[3], color: colors.textSecondary }}>Adjust Progress</KamiText>
               <View style={gp.stepperRow}>
                 {/* Decrement group */}
                 <View style={gp.stepperGroup}>
                   <TouchableOpacity style={gp.stepperBtn} onPress={() => { Vibration.vibrate(15); onProgress(goal, -10); }} disabled={goal.progress === 0}>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>-10</KamiText>
+                    <KamiText variant="caption" color={colors.textSecondary} bold>-10</KamiText>
                   </TouchableOpacity>
                   <TouchableOpacity style={gp.stepperBtn} onPress={() => { Vibration.vibrate(15); onProgress(goal, -5); }} disabled={goal.progress === 0}>
-                    <KamiText variant="caption" color={Colors.textSecondary} bold>-5</KamiText>
+                    <KamiText variant="caption" color={colors.textSecondary} bold>-5</KamiText>
                   </TouchableOpacity>
                 </View>
 
                 {/* Increment group */}
                 <View style={gp.stepperGroup}>
-                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '22' }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 5); }} disabled={goal.progress === 100}>
+                  <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary + Opacity.subtle, borderColor: colors.primary + Opacity.muted }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 5); }} disabled={goal.progress === 100}>
                     <KamiText variant="caption" color={colors.primary} bold>+5</KamiText>
                   </TouchableOpacity>
                   <TouchableOpacity style={[gp.stepperBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} onPress={() => { Vibration.vibrate(15); onProgress(goal, 10); }} disabled={goal.progress === 100}>
-                    <KamiText variant="caption" color="#fff" bold>+10</KamiText>
+                    <KamiText variant="caption" color={colors.textOnPrimary} bold>+10</KamiText>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -239,11 +240,11 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
 
           {completed && (
             <LinearGradient
-              colors={['#ECFDF5', '#D1FAE5']}
-              style={[gp.completedBadge, { borderColor: '#A7F3D0' }]}
+              colors={[colors.success + Opacity.ghost, colors.success + Opacity.muted]}
+              style={[gp.completedBadge, { borderColor: colors.success + Opacity.medium }]}
             >
               <Text style={{ fontSize: 20 }}>🌸</Text>
-              <KamiText variant="body" color={Colors.success} bold>Bloomed & Completed Goal!</KamiText>
+              <KamiText variant="body" color={colors.success} bold>Bloomed & Completed Goal!</KamiText>
             </LinearGradient>
           )}
         </ScrollView>
@@ -252,41 +253,41 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
   );
 };
 
-const gp = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 20 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1 },
   menuBtn: { paddingVertical: Space[2], paddingHorizontal: Space[3], borderRadius: Radii.md, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
   closeBtn: { paddingVertical: Space[2], paddingHorizontal: Space[4], borderRadius: Radii.full, minWidth: 60, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: Space[5], gap: Space[5] },
-  
+
   coverWrap: { width: '100%', height: 200, borderRadius: Radii.card, overflow: 'hidden', position: 'relative', ...Shadows.md },
   cover: { width: '100%', height: '100%', resizeMode: 'cover' },
-  coverPlaceholder: { width: '100%', height: 120, borderRadius: Radii.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(28,25,23,0.06)' },
-  
+  coverPlaceholder: { width: '100%', height: 120, borderRadius: Radii.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border + Opacity.ghost },
+
   cardDetails: { gap: Space[3] },
   titleRow: { flexDirection: 'row', gap: Space[3], alignItems: 'center' },
-  emojiBadge: { fontSize: 38, width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFFFFF', textAlign: 'center', lineHeight: 50, ...Shadows.sm, borderWidth: 1, borderColor: 'rgba(28,25,23,0.06)' },
-  title: { fontSize: 20, lineHeight: 28, color: Colors.textPrimary, flex: 1 },
-  
+  emojiBadge: { fontSize: 38, width: 50, height: 50, borderRadius: 25, backgroundColor: colors.cardBg, textAlign: 'center', lineHeight: 50, ...Shadows.sm, borderWidth: 1, borderColor: colors.border + Opacity.ghost },
+  title: { fontSize: 20, lineHeight: 28, color: colors.textPrimary, flex: 1 },
+
   descBox: { padding: Space[4], borderRadius: Radii.card, borderWidth: 1, borderStyle: 'dashed' },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2] },
   badge: { paddingVertical: Space[1], paddingHorizontal: Space[3], borderRadius: Radii.full, flexDirection: 'row', alignItems: 'center' },
-  
+
   progressCard: { padding: Space[4], borderRadius: Radii.card, borderWidth: 1.5, ...Shadows.sm },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Space[1] },
   stageIndicator: { flexDirection: 'row', alignItems: 'center', gap: Space[2] },
-  
-  vineTrackContainer: { height: 10, borderRadius: 5, backgroundColor: '#E2E8F0', position: 'relative', marginVertical: Space[4] },
-  vineBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#E2E8F0', borderRadius: 5 },
+
+  vineTrackContainer: { height: 10, borderRadius: 5, backgroundColor: colors.border + Opacity.medium, position: 'relative', marginVertical: Space[4] },
+  vineBg: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.border + Opacity.medium, borderRadius: 5 },
   vineFill: { height: '100%', borderRadius: 5 },
-  vineNotch: { position: 'absolute', top: -9, width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center', transform: [{ translateX: -14 }], ...Shadows.sm },
-  vineNotchActive: { backgroundColor: '#F0FDF4', borderWidth: 2, ...Shadows.md },
+  vineNotch: { position: 'absolute', top: -9, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.cardBg, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', transform: [{ translateX: -14 }], ...Shadows.sm },
+  vineNotchActive: { backgroundColor: colors.success + Opacity.ghost, borderWidth: 2, ...Shadows.md },
   vineNotchEmoji: { fontSize: 13 },
-  
+
   stepperContainer: { gap: Space[2] },
   stepperRow: { flexDirection: 'row', justifyContent: 'space-between', gap: Space[4] },
   stepperGroup: { flexDirection: 'row', gap: Space[2], flex: 1 },
-  stepperBtn: { flex: 1, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: 'rgba(28,25,23,0.08)', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', ...Shadows.sm },
-  
+  stepperBtn: { flex: 1, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: colors.border + Opacity.ghost, backgroundColor: colors.cardBg, alignItems: 'center', justifyContent: 'center', ...Shadows.sm },
+
   completedBadge: { flexDirection: 'row', alignItems: 'center', gap: Space[3], borderRadius: Radii.card, paddingHorizontal: Space[4], paddingVertical: Space[4], borderWidth: 1.5, ...Shadows.md },
 });

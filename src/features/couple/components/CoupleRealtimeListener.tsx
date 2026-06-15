@@ -4,7 +4,7 @@ import { useAuthStore } from '@features/auth';
 import { useCoupleStore, PartnerActionType } from '../store/coupleStore';
 import { useCouple } from '../hooks/useCouple';
 import { supabase } from '@shared/lib/supabase';
-import { Colors, FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
+import { FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { navigationRef } from '@core/navigation/navigationRef';
 import { triggerLocalNotificationAsync } from '@infrastructure/notifications/notificationService';
 import { resolveAvatarUrl, fetchProfileNickname } from '@infrastructure/profile';
@@ -13,6 +13,7 @@ import type {
   CoupleLetter, CoupleJournal, CoupleMemory, CoupleGoal, CoupleAnswer, RelationshipEvent, CoupleComment 
 } from '../types';
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
+import { useTheme } from '@shared/hooks';
 
 export function CoupleRealtimeListener() {
   const user = useAuthStore(s => s.user);
@@ -820,6 +821,8 @@ interface GlobalToastProps {
 }
 
 const GlobalToast: React.FC<GlobalToastProps> = ({ toast, onClose }) => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const transY = useRef(new Animated.Value(-150)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -915,7 +918,7 @@ const GlobalToast: React.FC<GlobalToastProps> = ({ toast, onClose }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     top: 0,
@@ -929,12 +932,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: colors.cardBg,
     borderRadius: Radii.card,
     paddingVertical: Space[3],
     paddingHorizontal: Space[4],
     borderWidth: 1.5,
-    borderColor: 'rgba(201, 104, 130, 0.25)', // Primary Rose tint
+    borderColor: colors.primary + '40',
     ...Shadows.md,
   },
   icon: {
@@ -949,16 +952,16 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: FontSize.sm,
     fontWeight: FontWeight.bold,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
   },
   message: {
     fontFamily: FontFamily.body,
     fontSize: FontSize.xs,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   chevron: {
     fontSize: FontSize.lg,
-    color: Colors.primary,
+    color: colors.primary,
     fontWeight: FontWeight.bold,
     marginLeft: Space[2],
   }

@@ -17,16 +17,16 @@ const Badge: React.FC<BadgeProps> = ({ label, variant = 'primary', icon, style }
 
   const bgColors: Record<BadgeVariant, string> = {
     primary: colors.primary + '22',
-    success: Colors.success + '22',
-    warning: Colors.warning + '22',
-    muted:   Colors.border + '55',
+    success: colors.success + '22',
+    warning: colors.warning + '22',
+    muted:   colors.border + '55',
     accent:  colors.accent  + '22',
   };
   const textColors: Record<BadgeVariant, string> = {
     primary: colors.primary,
-    success: Colors.success,
-    warning: Colors.warning,
-    muted:   Colors.textMuted,
+    success: colors.success,
+    warning: colors.warning,
+    muted:   colors.textMuted,
     accent:  colors.accent,
   };
 

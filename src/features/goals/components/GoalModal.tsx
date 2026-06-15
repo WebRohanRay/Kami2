@@ -16,7 +16,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Radii, Space } from '@shared/constants';
+import { FontSize, Radii, Space } from '@shared/constants';
 import type { Goal, GoalCategory } from '@features/home/types';
 import type { CoupleGoal } from '@features/couple/types';
 import { pickImages } from '@shared/lib/storage';
@@ -48,6 +48,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
   activeSpace,
 }) => {
   const { colors } = useTheme();
+  const gm = React.useMemo(() => getStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [category, setCategory] = useState<GoalCategory>('personal');
@@ -81,7 +82,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
       <SafeAreaView style={[gm.root, { backgroundColor: colors.pageBg }]}>
         <View style={gm.toolbar}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
-            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+            <KamiText variant="label" color={colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
           <KamiText variant="overline">{goal ? 'Edit goal' : 'New goal'}</KamiText>
           <TouchableOpacity
@@ -134,7 +135,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
           <TextInput
             style={gm.input}
             placeholder="e.g. Read 12 books this year"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={title}
             onChangeText={setTitle}
             maxLength={100}
@@ -146,7 +147,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
           <TextInput
             style={[gm.input, { height: 75, textAlignVertical: 'top' }]}
             placeholder="Your reason keeps you motivated…"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={desc}
             onChangeText={setDesc}
             multiline
@@ -171,7 +172,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
                 <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
                 <KamiText
                   variant="caption"
-                  color={category === c.id ? colors.primary : Colors.textMuted}
+                  color={category === c.id ? colors.primary : colors.textMuted}
                   bold={category === c.id}
                 >
                   {c.label}
@@ -212,8 +213,8 @@ export const GoalModal: React.FC<GoalModalProps> = ({
   );
 };
 
-const gm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
   toolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -222,7 +223,7 @@ const gm = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4],
     paddingBottom: Space[4],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border + '44',
+    borderBottomColor: colors.border + '44',
   },
   content: { padding: Space[5], gap: Space[3], paddingBottom: Space[10] },
   sectionLabel: { marginBottom: Space[1] },
@@ -231,22 +232,22 @@ const gm = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: Radii.sm,
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
-  emojiBtnOn: { borderColor: Colors.primary, backgroundColor: Colors.primary + '18' },
+  emojiBtnOn: { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
   input: {
-    backgroundColor: Colors.creamDeep,
+    backgroundColor: colors.creamDeep,
     borderRadius: Radii.input,
     paddingHorizontal: Space[4],
     paddingVertical: Space[3],
     fontSize: FontSize.base,
-    color: Colors.textPrimary,
+    color: colors.textPrimary,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Space[2] },
   catChip: {
@@ -257,17 +258,17 @@ const gm = StyleSheet.create({
     paddingVertical: Space[2],
     borderRadius: Radii.full,
     borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.creamDeep,
+    borderColor: colors.border,
+    backgroundColor: colors.creamDeep,
   },
-  catChipOn: { borderColor: Colors.primary, backgroundColor: Colors.primary + '18' },
+  catChipOn: { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
   coverHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: Space[3],
     borderTopWidth: 1,
-    borderTopColor: Colors.border + '22',
+    borderTopColor: colors.border + '22',
     paddingTop: Space[3],
   },
   addCoverBtn: { paddingVertical: Space[1], paddingHorizontal: Space[2] },
@@ -284,6 +285,6 @@ const gm = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#fff',
+    borderColor: colors.cardBg,
   },
 });

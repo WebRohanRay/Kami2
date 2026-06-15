@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@shared/hooks';
 
 import { processSyncQueue, updateStoreSyncState } from '@shared/db/sync';
 
@@ -18,6 +19,8 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(100)).current;
   const wasConnectedRef = useRef<boolean | null>(null);
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
 
   useEffect(() => {
     // Hydrate store sync count on startup (both online and offline)
@@ -96,33 +99,34 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  banner: {
-    backgroundColor: '#f43f5e',
-    paddingTop: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 9999,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  bannerText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-});
+const getStyles = (colors: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    banner: {
+      backgroundColor: colors.error,
+      paddingTop: 12,
+      paddingHorizontal: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 9999,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+    bannerText: {
+      color: colors.textOnPrimary,
+      fontSize: 12,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+  });

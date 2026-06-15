@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { useTheme } from '@shared/hooks';
-import { Colors, Radii, Space, Shadows, FontSize, FontFamily } from '@shared/constants';
+import { Radii, Space, Shadows, FontSize, FontFamily, Opacity } from '@shared/constants';
 import type { Letter } from '@features/home/types';
 import type { CoupleLetter } from '@features/couple/types';
 import { checkUnlocked } from './utils';
@@ -39,11 +39,69 @@ export const LetterCard: React.FC<LetterCardProps> = ({
   isReply,
 }) => {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const sc = useRef(new Animated.Value(1)).current;
   const isUnlocked = checkUnlocked(letter);
 
   const coupleLetter = 'coupleId' in letter ? (letter as CoupleLetter) : null;
   const isMe = coupleLetter ? coupleLetter.senderId === currentUser?.id : true;
+
+  // Urgency animations for sealed letters
+  const glowAnim = useRef(new Animated.Value(0.1)).current;
+  const wobbleAnim = useRef(new Animated.Value(0)).current;
+  const sealScale = useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    if (isUnlocked) return;
+    const msUntilUnlock = new Date(letter.deliverAt).getTime() - Date.now();
+    if (msUntilUnlock <= 0) return;
+
+    const animations: Animated.CompositeAnimation[] = [];
+
+    if (msUntilUnlock < 86400000) {
+      // < 24 hours: glow pulse on border
+      animations.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowAnim, { toValue: 0.4, duration: 1500, useNativeDriver: true }),
+            Animated.timing(glowAnim, { toValue: 0.1, duration: 1500, useNativeDriver: true }),
+          ])
+        )
+      );
+    }
+
+    if (msUntilUnlock < 3600000) {
+      // < 1 hour: wobble
+      animations.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(wobbleAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+            Animated.timing(wobbleAnim, { toValue: -1, duration: 200, useNativeDriver: true }),
+            Animated.timing(wobbleAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+            Animated.delay(2000),
+          ])
+        )
+      );
+    }
+
+    // Gentle seal breathing
+    animations.push(
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(sealScale, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
+          Animated.timing(sealScale, { toValue: 0.97, duration: 2000, useNativeDriver: true }),
+        ])
+      )
+    );
+
+    animations.forEach(a => a.start());
+    return () => animations.forEach(a => a.stop());
+  }, [isUnlocked, letter.deliverAt]);
+
+  const wobbleRotate = wobbleAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-1deg', '0deg', '1deg'],
+  });
 
   return (
     <View style={[
@@ -76,47 +134,48 @@ export const LetterCard: React.FC<LetterCardProps> = ({
           <Animated.View style={[
             styles.bubbleCard,
             isMe
-              ? [styles.bubbleCardSent, { backgroundColor: colors.primary + '11', borderColor: colors.primary + '22' }]
-              : [styles.bubbleCardReceived, { backgroundColor: '#FFFDFB', borderColor: 'rgba(0, 0, 0, 0.06)' }],
+              ? [styles.bubbleCardSent, { backgroundColor: colors.primary + Opacity.subtle, borderColor: colors.primary + Opacity.muted }]
+              : [styles.bubbleCardReceived, { backgroundColor: colors.cardBg, borderColor: colors.border + Opacity.ghost }],
             !isUnlocked && styles.bubbleCardLocked,
-            { transform: [{ scale: sc }] },
+            !isUnlocked && { opacity: glowAnim.interpolate({ inputRange: [0.1, 0.4], outputRange: [1, 1] }) },
+            { transform: [{ scale: sc }, { rotate: !isUnlocked ? wobbleRotate : '0deg' }] },
           ]}>
             {/* Header info */}
             <View style={styles.bubbleHeaderRow}>
-              <KamiText variant="caption" color={Colors.textMuted} bold>
+              <KamiText variant="caption" color={colors.textMuted} bold>
                 {isMe ? 'You' : coupleLetter?.senderNickname || 'Partner'}
               </KamiText>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Space[2] }}>
                 <TouchableOpacity onPress={() => onToggleFavorite?.(letter)} hitSlop={8} style={styles.favBtnMini}>
-                  <Text style={{ fontSize: 13, color: letter.isFavorite ? colors.primary : '#cbd5e1' }}>
+                  <Text style={{ fontSize: 13, color: letter.isFavorite ? colors.primary : colors.textMuted }}>
                     {letter.isFavorite ? '★' : '☆'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={onDelete} hitSlop={8} style={styles.delBtnMini}>
-                  <Text style={{ fontSize: 10, color: Colors.textMuted }}>✕</Text>
+                  <Text style={{ fontSize: 10, color: colors.textMuted }}>✕</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Subject */}
-            <KamiText variant="label" bold style={styles.bubbleSubject} color={isMe ? colors.primaryDark : '#4A3B32'}>
+            <KamiText variant="label" bold style={styles.bubbleSubject} color={isMe ? colors.primaryDark : colors.textPrimary}>
               {letter.subject}
             </KamiText>
 
             {/* Body preview / Sealed state */}
             {isUnlocked ? (
-              <KamiText variant="body" color={Colors.textSecondary} numberOfLines={isReply ? 3 : 4} style={styles.bubbleExcerpt}>
+              <KamiText variant="body" color={colors.textSecondary} numberOfLines={isReply ? 3 : 4} style={styles.bubbleExcerpt}>
                 {letter.body || 'No content preview available.'}
               </KamiText>
             ) : (
               /* Sealed Envelope UI */
-              <View style={[styles.bubbleLockedBox, { backgroundColor: 'rgba(153, 27, 27, 0.04)', borderColor: 'rgba(153, 27, 27, 0.12)' }]}>
-                <View style={styles.bubbleWaxSeal}>
-                  <Text style={{ fontSize: 13, color: '#fff' }}>⚜️</Text>
-                </View>
+              <View style={[styles.bubbleLockedBox, { backgroundColor: colors.error + Opacity.ghost, borderColor: colors.error + Opacity.subtle }]}>
+                <Animated.View style={[styles.bubbleWaxSeal, { transform: [{ scale: sealScale }] }]}>
+                  <Text style={{ fontSize: 13, color: '#fff' }}>⚔️</Text>
+                </Animated.View>
                 <View style={{ flex: 1 }}>
-                  <KamiText variant="caption" color="#7f1d1d" bold style={{ fontSize: 9 }}>SEALED TIME CAPSULE</KamiText>
+                  <KamiText variant="caption" color={colors.error} bold style={{ fontSize: 9 }}>SEALED TIME CAPSULE</KamiText>
                   <CountdownText deliverAt={letter.deliverAt} />
                 </View>
               </View>
@@ -124,7 +183,7 @@ export const LetterCard: React.FC<LetterCardProps> = ({
 
             {/* Date timestamp */}
             <View style={styles.bubbleFooterRow}>
-              <Text style={{ fontSize: 9, color: Colors.textMuted }}>
+              <Text style={{ fontSize: 9, color: colors.textMuted }}>
                 {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: currentUser?.timezone ?? 'UTC' })}
               </Text>
               {isUnlocked && !letter.isRead && !isMe && (
@@ -134,7 +193,7 @@ export const LetterCard: React.FC<LetterCardProps> = ({
 
             {/* One Tap reactions (only if unlocked) */}
             {isUnlocked && activeSpace === 'couple' && (
-              <View style={[styles.bubbleReactionsBar, { borderTopColor: Colors.border + '11' }]}>
+              <View style={[styles.bubbleReactionsBar, { borderTopColor: colors.border + Opacity.ghost }]}>
                 {['❤️', '🥹', '🥰', '😭', '🔥'].map(emoji => {
                   const reactions = coupleLetter?.reactions || [];
                   const userReaction = reactions.find(r => r.userId === currentUser?.id && r.emoji === emoji);
@@ -144,14 +203,14 @@ export const LetterCard: React.FC<LetterCardProps> = ({
                       key={emoji}
                       style={[
                         styles.bubbleReactionChip,
-                        userReaction && [styles.bubbleReactionChipActive, { backgroundColor: colors.primary + '18', borderColor: colors.primary }],
+                        userReaction && [styles.bubbleReactionChipActive, { backgroundColor: colors.primary + Opacity.light, borderColor: colors.primary }],
                       ]}
                       onPress={() => onReact?.(letter.id, emoji)}
                       activeOpacity={0.8}
                     >
                       <Text style={{ fontSize: 13 }}>{emoji}</Text>
                       {count > 0 && (
-                        <Text style={{ fontSize: 9, color: userReaction ? colors.primary : Colors.textMuted, fontWeight: 'bold' }}>{count}</Text>
+                        <Text style={{ fontSize: 9, color: userReaction ? colors.primary : colors.textMuted, fontWeight: 'bold' }}>{count}</Text>
                       )}
                     </TouchableOpacity>
                   );
@@ -161,7 +220,7 @@ export const LetterCard: React.FC<LetterCardProps> = ({
 
             {/* Reply thread button */}
             {isUnlocked && !isMe && activeSpace === 'couple' && onReply && (
-              <TouchableOpacity style={[styles.replyBtnBubble, { borderColor: colors.primary + '33' }]} onPress={onReply}>
+              <TouchableOpacity style={[styles.replyBtnBubble, { borderColor: colors.primary + Opacity.medium }]} onPress={onReply}>
                 <KamiText variant="caption" color={colors.primary} bold>↩ Reply</KamiText>
               </TouchableOpacity>
             )}
@@ -172,7 +231,7 @@ export const LetterCard: React.FC<LetterCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   bubbleRow: {
     flexDirection: 'row',
     width: '100%',
@@ -193,7 +252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-end',
     borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: colors.border + Opacity.ghost,
   },
   bubbleCard: {
     borderRadius: 20,
@@ -251,14 +310,19 @@ const styles = StyleSheet.create({
     padding: Space[2],
   },
   bubbleWaxSeal: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#991b1b',
     borderWidth: 1,
     borderColor: '#7f1d1d',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#991B1B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   replyBtnBubble: {
     alignSelf: 'flex-start',
@@ -267,7 +331,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space[3],
     borderRadius: Radii.full,
     borderWidth: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.cardBg,
   },
   bubbleReactionsBar: {
     flexDirection: 'row',
@@ -281,9 +345,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: colors.border + Opacity.ghost,
     borderRadius: Radii.full,
     paddingHorizontal: Space[2],
     paddingVertical: 1,

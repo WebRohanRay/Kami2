@@ -16,7 +16,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
-import { Colors, FontSize, Radii, Space } from '@shared/constants';
+import { FontSize, FontWeight, Radii, Space, Opacity } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
 import { useTheme } from '@shared/hooks';
 import { ImageZoomModal } from '@shared/ui';
@@ -64,6 +64,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
   const [picking, setPicking] = useState(false);
   const [zoomImageUri, setZoomImageUri] = useState<string | null>(null);
   const { colors } = useTheme();
+  const wm = React.useMemo(() => getStyles(colors), [colors]);
   const timezone = useAuthStore(s => s.user?.timezone);
 
   const reset = () => {
@@ -193,7 +194,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
       <SafeAreaView style={[wm.root, { backgroundColor: colors.pageBg }]}>
         <View style={wm.toolbar}>
           <TouchableOpacity onPress={() => { reset(); onClose(); }} hitSlop={8}>
-            <KamiText variant="label" color={Colors.textMuted}>Cancel</KamiText>
+            <KamiText variant="label" color={colors.textMuted}>Cancel</KamiText>
           </TouchableOpacity>
           <KamiText variant="overline" bold>{draftLetter ? 'Edit Draft' : replyToLetter ? 'Reply Thread' : 'Write a letter'}</KamiText>
           <View style={{ width: 44 }} />
@@ -215,44 +216,44 @@ export const WriteModal: React.FC<WriteModalProps> = ({
               style={[wm.deliveryToggleBtn, deliveryType === 'instant' && [wm.deliveryToggleBtnOn, { backgroundColor: colors.primary }]]}
               onPress={() => setDeliveryType('instant')}
             >
-              <KamiText variant="caption" color={deliveryType === 'instant' ? '#fff' : Colors.textMuted} bold={deliveryType === 'instant'}>Instant ✉️</KamiText>
+              <KamiText variant="caption" color={deliveryType === 'instant' ? colors.textOnPrimary : colors.textMuted} bold={deliveryType === 'instant'}>Instant ✉️</KamiText>
             </TouchableOpacity>
             <TouchableOpacity
               style={[wm.deliveryToggleBtn, deliveryType === 'scheduled' && [wm.deliveryToggleBtnOn, { backgroundColor: colors.primary }]]}
               onPress={() => setDeliveryType('scheduled')}
             >
-              <KamiText variant="caption" color={deliveryType === 'scheduled' ? '#fff' : Colors.textMuted} bold={deliveryType === 'scheduled'}>Schedule 🔒</KamiText>
+              <KamiText variant="caption" color={deliveryType === 'scheduled' ? colors.textOnPrimary : colors.textMuted} bold={deliveryType === 'scheduled'}>Schedule 🔒</KamiText>
             </TouchableOpacity>
           </View>
 
           {deliveryType === 'scheduled' && (
             <View style={wm.schedulerContainer}>
-              <KamiText variant="caption" color={Colors.textMuted} style={{ marginBottom: Space[1] }}>Unlock Date (DD / MM / YYYY)</KamiText>
+              <KamiText variant="caption" color={colors.textMuted} style={{ marginBottom: Space[1] }}>Unlock Date (DD / MM / YYYY)</KamiText>
               <View style={wm.customDateRow}>
                 <TextInput
                   style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
                   placeholder="DD"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="number-pad"
                   maxLength={2}
                   value={customDay}
                   onChangeText={setCustomDay}
                 />
-                <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
+                <KamiText variant="body" color={colors.textMuted}>/</KamiText>
                 <TextInput
                   style={[wm.customInput, { flex: 1.5, backgroundColor: colors.creamDeep }]}
                   placeholder="MM"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="number-pad"
                   maxLength={2}
                   value={customMonth}
                   onChangeText={setCustomMonth}
                 />
-                <KamiText variant="body" color={Colors.textMuted}>/</KamiText>
+                <KamiText variant="body" color={colors.textMuted}>/</KamiText>
                 <TextInput
                   style={[wm.customInput, { flex: 2.5, backgroundColor: colors.creamDeep }]}
                   placeholder="YYYY"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="number-pad"
                   maxLength={4}
                   value={customYear}
@@ -260,22 +261,22 @@ export const WriteModal: React.FC<WriteModalProps> = ({
                 />
               </View>
 
-              <KamiText variant="caption" color={Colors.textMuted} style={{ marginTop: Space[2], marginBottom: Space[1] }}>Unlock Time</KamiText>
+              <KamiText variant="caption" color={colors.textMuted} style={{ marginTop: Space[2], marginBottom: Space[1] }}>Unlock Time</KamiText>
               <View style={wm.customDateRow}>
                 <TextInput
                   style={[wm.customInput, { flex: 2, backgroundColor: colors.creamDeep }]}
                   placeholder="HH"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="number-pad"
                   maxLength={2}
                   value={customHour}
                   onChangeText={setCustomHour}
                 />
-                <KamiText variant="body" color={Colors.textMuted}>:</KamiText>
+                <KamiText variant="body" color={colors.textMuted}>:</KamiText>
                 <TextInput
                   style={[wm.customInput, { flex: 2, backgroundColor: colors.creamDeep }]}
                   placeholder="MM"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   keyboardType="number-pad"
                   maxLength={2}
                   value={customMin}
@@ -307,7 +308,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
 
           {/* Subject */}
           <KamiText variant="overline" style={wm.label}>Subject</KamiText>
-          <TextInput style={[wm.input, { backgroundColor: '#FAF8F5', borderColor: '#E5DEC9' }]} placeholder="Subject..." placeholderTextColor={Colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
+          <TextInput style={[wm.input, { backgroundColor: '#FAF8F5', borderColor: '#E5DEC9' }]} placeholder="Subject..." placeholderTextColor={colors.textMuted} value={subject} onChangeText={setSubject} maxLength={120} />
 
           {/* Body */}
           <KamiText variant="overline" style={wm.label}>Your letter *</KamiText>
@@ -315,7 +316,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
             <TextInput
               style={[wm.bodyInput, { backgroundColor: '#FFFDF6', color: '#4A3B32', fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif' }]}
               placeholder="Dear partner,&#10;&#10;I want to tell you that…"
-              placeholderTextColor="rgba(74, 59, 50, 0.4)"
+              placeholderTextColor={colors.textMuted}
               value={body}
               onChangeText={setBody}
               multiline
@@ -324,7 +325,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
               maxLength={5000}
             />
           </View>
-          <KamiText variant="caption" color={Colors.textMuted} align="right">{body.length} / 5000</KamiText>
+          <KamiText variant="caption" color={colors.textMuted} align="right">{body.length} / 5000</KamiText>
 
           {/* Attachments */}
           <View style={wm.photoHeader}>
@@ -354,7 +355,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
           {/* Action buttons */}
           <View style={{ flexDirection: 'row', gap: Space[2], marginTop: Space[6] }}>
             <TouchableOpacity
-              style={[{ borderColor: colors.primary, backgroundColor: '#fff', flex: 1, height: 50, borderRadius: Radii.button, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' }]}
+              style={[{ borderColor: colors.primary, backgroundColor: colors.cardBg, flex: 1, height: 50, borderRadius: Radii.button, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' }]}
               disabled={saving}
               onPress={() => {
                 const validation = futureLetterSchema.safeParse({ subject, body, deliverAt: deliverAtVal });
@@ -383,9 +384,9 @@ export const WriteModal: React.FC<WriteModalProps> = ({
               }}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.textOnPrimary} />
               ) : (
-                <KamiText variant="label" color="#fff" bold>
+                <KamiText variant="label" color={colors.textOnPrimary} bold>
                   {deliveryType === 'instant' ? 'Send Now ✉️' : 'Seal & Send 🔒'}
                 </KamiText>
               )}
@@ -398,27 +399,27 @@ export const WriteModal: React.FC<WriteModalProps> = ({
   );
 };
 
-const wm = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.pageBg },
-  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: Colors.border + '44' },
+const getStyles = (colors: any) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.pageBg },
+  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '44' },
   content: { padding: Space[5], gap: Space[3], paddingBottom: Space[10] },
   label: { marginBottom: Space[1] },
   replyLabelBox: { padding: Space[3], borderRadius: Radii.md, borderWidth: 1, gap: 2, marginBottom: Space[2] },
   deliveryToggleRow: { flexDirection: 'row', gap: Space[2], marginVertical: Space[1] },
-  deliveryToggleBtn: { flex: 1, height: 40, borderRadius: Radii.full, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.creamDeep, justifyContent: 'center', alignItems: 'center' },
+  deliveryToggleBtn: { flex: 1, height: 40, borderRadius: Radii.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.creamDeep, justifyContent: 'center', alignItems: 'center' },
   deliveryToggleBtnOn: { borderWidth: 0 },
   schedulerContainer: { gap: Space[1], marginVertical: Space[1] },
   customDateRow: { flexDirection: 'row', alignItems: 'center', gap: Space[2], marginTop: Space[1], marginBottom: Space[2] },
-  customInput: { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border, textAlign: 'center' },
-  unlockDate: { flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: Colors.creamDeep, borderRadius: Radii.card, padding: Space[3], marginVertical: Space[1] },
-  input: { backgroundColor: Colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: Colors.textPrimary, borderWidth: 1.5, borderColor: Colors.border },
+  customInput: { backgroundColor: colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: colors.textPrimary, borderWidth: 1.5, borderColor: colors.border, textAlign: 'center' },
+  unlockDate: { flexDirection: 'row', alignItems: 'center', gap: Space[2], backgroundColor: colors.creamDeep, borderRadius: Radii.card, padding: Space[3], marginVertical: Space[1] },
+  input: { backgroundColor: colors.creamDeep, borderRadius: Radii.input, paddingHorizontal: Space[4], paddingVertical: Space[3], fontSize: FontSize.base, color: colors.textPrimary, borderWidth: 1.5, borderColor: colors.border },
   bodyInput: { paddingHorizontal: Space[4], paddingLeft: Space[6], paddingVertical: Space[3], fontSize: FontSize.base, color: '#4A3B32', minHeight: 220, lineHeight: 28, fontStyle: 'italic', borderLeftWidth: 1.5, borderLeftColor: '#fca5a5' },
-  paperWrapper: { position: 'relative', borderRadius: Radii.card, borderWidth: 1.5, borderColor: Colors.border, overflow: 'hidden' },
-  photoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Space[4], borderTopWidth: 1, borderTopColor: Colors.border + '22', paddingTop: Space[3] },
+  paperWrapper: { position: 'relative', borderRadius: Radii.card, borderWidth: 1.5, borderColor: colors.border, overflow: 'hidden' },
+  photoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Space[4], borderTopWidth: 1, borderTopColor: colors.border + '22', paddingTop: Space[3] },
   addPhotoBtn: { paddingVertical: Space[1], paddingHorizontal: Space[2] },
   photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5], marginVertical: Space[2] },
   photoRow: { flexDirection: 'row', gap: Space[3] },
   photoWrap: { position: 'relative' },
   attachedImage: { width: 90, height: 90, borderRadius: Radii.sm, resizeMode: 'contain', backgroundColor: 'rgba(0,0,0,0.03)' },
-  removePhotoBadge: { position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#fff' },
+  removePhotoBadge: { position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBg },
 });
