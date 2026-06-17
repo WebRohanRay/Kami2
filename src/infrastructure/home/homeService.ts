@@ -26,7 +26,7 @@ import type {
   UpdateGoalInput,
   Result,
 } from '@features/home/types';
-import { resolveSignedUrls, deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
+import { deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import { useAuthStore } from '@features/auth';
 import { journalRepo, goalRepo, moodRepo, dailyPromptRepo, streakRepo, promptResponseRepo } from '@shared/db/repo';
 import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
@@ -277,12 +277,6 @@ export async function fetchJournalEntries(
     
     const mapped: JournalEntry[] = [];
     for (const r of rows) {
-      const localPickerUris = r.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
-      const remotePaths = r.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
-      
-      const bucket = 'journal_images';
-      const resolvedRemote = await resolveSignedUrls(bucket, remotePaths);
-      
       mapped.push({
         id: r.id,
         userId: r.userId,
@@ -290,7 +284,7 @@ export async function fetchJournalEntries(
         body: r.body,
         moodId: r.moodId,
         tags: r.tags,
-        imageUrls: [...localPickerUris, ...resolvedRemote],
+        imageUrls: r.imageUrls,
         entryDate: r.entryDate,
         isPinned: r.isPinned,
         createdAt: r.createdAt,
@@ -431,10 +425,6 @@ export async function fetchGoals(): Promise<Result<Goal[]>> {
 
     const mapped: Goal[] = [];
     for (const r of rows) {
-      let resolved = r.imageUrl;
-      if (r.imageUrl && !r.imageUrl.startsWith('file://') && !r.imageUrl.startsWith('content://')) {
-        resolved = (await resolveSignedUrls('goal_images', [r.imageUrl]))[0] || null;
-      }
       mapped.push({
         id: r.id,
         userId: r.userId,
@@ -447,7 +437,7 @@ export async function fetchGoals(): Promise<Result<Goal[]>> {
         completedAt: r.completedAt,
         emoji: r.emoji,
         sortOrder: r.sortOrder,
-        imageUrl: resolved,
+        imageUrl: r.imageUrl,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       });

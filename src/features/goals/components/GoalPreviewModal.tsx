@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Alert,
-  Image,
   Modal,
   Platform,
   SafeAreaView,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { FontSize, Radii, Space, Shadows, Opacity } from '@shared/constants';
 import { useTheme, useTextScale } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
@@ -109,7 +109,7 @@ export const GoalPreviewModal: React.FC<GoalPreviewModalProps> = ({
           {/* Immersive Cover Photo */}
           {imageUrl ? (
             <View style={gp.coverWrap}>
-              <Image source={{ uri: imageUrl }} style={gp.cover} />
+              <KamiImage src={imageUrl} bucket="goal_images" style={gp.cover} />
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.4)']}
                 style={StyleSheet.absoluteFillObject}

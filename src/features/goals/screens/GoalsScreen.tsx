@@ -5,7 +5,7 @@
  * optional cover image uploading, and countdown target dates.
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ import { useHomeStore } from '@features/home/store';
 import { useAuthStore } from '@features/auth';
 import { useShallow } from 'zustand/react/shallow';
 import KamiText from '@shared/ui/atoms/KamiText';
+import KamiLoading from '@shared/ui/atoms/KamiLoading';
 import { FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import type { Goal, GoalCategory } from '@features/home/types';
 import type { CoupleGoal } from '@features/couple/types';
@@ -213,7 +214,42 @@ export function GoalsScreen({ navigation }: Props) {
     return list;
   }, [filtered, paginatedActive, completed, paginatedCompleted, visibleActive, visibleCompleted]);
 
-  const renderItem = ({ item }: { item: any }) => {
+  const handleProgress = useCallback(async (g: Goal | CoupleGoal, delta: number) => {
+    const next = Math.min(100, Math.max(0, g.progress + delta));
+    if (activeSpace === 'couple') {
+      await coupleActions.updateGoalProgress(g.id, next);
+      if (next === 100) {
+        setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
+          { text: 'Mark complete', onPress: () => coupleActions.updateGoal(g.id, { status: 'completed' }) },
+          { text: 'Keep active', style: 'cancel' },
+        ]), 400);
+      }
+    } else {
+      editGoal(g.id, { progress: next });
+      if (next === 100) {
+        setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
+          { text: 'Mark complete', onPress: () => editGoal(g.id, { status: 'completed' }) },
+          { text: 'Keep active', style: 'cancel' },
+        ]), 400);
+      }
+    }
+  }, [activeSpace, coupleActions, editGoal]);
+
+  const handleDelete = useCallback((g: Goal | CoupleGoal) => Alert.alert('Remove goal?', `"${g.title}"`, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Remove', style: 'destructive', onPress: async () => {
+        if (activeSpace === 'couple') {
+          const r = await coupleActions.deleteGoal(g.id);
+          if (!r.success) Alert.alert('Kami', r.error);
+        } else {
+          removeGoal(g.id);
+        }
+      }
+    },
+  ]), [activeSpace, coupleActions, removeGoal]);
+
+  const renderItem = useCallback(({ item }: { item: any }) => {
     if (item.type === 'section-header') {
       return (
         <KamiText variant="overline" style={{ marginTop: item.marginTop || 0, marginVertical: Space[2] }}>
@@ -255,9 +291,9 @@ export function GoalsScreen({ navigation }: Props) {
       );
     }
     return null;
-  };
+  }, [handleDelete, handleProgress, colors.creamDeep, colors.primary, styles.loadMoreBtn]);
 
-  const renderHeader = () => {
+  const renderHeader = useCallback(() => {
     return (
       <View style={{ gap: Space[3], marginBottom: Space[2] }}>
         {/* Summary */}
@@ -298,13 +334,15 @@ export function GoalsScreen({ navigation }: Props) {
 
         {((goalsLoading === 'loading' && activeSpace === 'personal') ||
           (coupleStore.goalsLoading === 'loading' && activeSpace === 'couple')) && currentGoals.length === 0 && (
-          <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
-        )}
+             <View style={styles.center}>
+               <KamiLoading emoji="🌱" message="Growing your goals..." />
+             </View>
+          )}
       </View>
     );
-  };
+  }, [currentGoals, active, completed, filter, goalsLoading, activeSpace, coupleStore.goalsLoading, colors, styles]);
 
-  const renderEmpty = () => {
+  const renderEmpty = useCallback(() => {
     const isLoading = (goalsLoading === 'loading' && activeSpace === 'personal') ||
       (coupleStore.goalsLoading === 'loading' && activeSpace === 'couple');
     if (isLoading || currentGoals.length > 0) return null;
@@ -320,11 +358,11 @@ export function GoalsScreen({ navigation }: Props) {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [goalsLoading, activeSpace, coupleStore.goalsLoading, currentGoals.length, colors, styles.emptyState, styles.emptyBtn]);
 
-  const renderFooter = () => {
+  const renderFooter = useCallback(() => {
     return <View style={{ height: Space[8] }} />;
-  };
+  }, []);
 
   const handleSave = async (title: string, cat: GoalCategory, emoji: string, desc?: string, coverUri: string | null = null) => {
     if (!user?.id) return;
@@ -357,40 +395,9 @@ export function GoalsScreen({ navigation }: Props) {
     }
   };
 
-  const handleProgress = async (g: Goal | CoupleGoal, delta: number) => {
-    const next = Math.min(100, Math.max(0, g.progress + delta));
-    if (activeSpace === 'couple') {
-      await coupleActions.updateGoalProgress(g.id, next);
-      if (next === 100) {
-        setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
-          { text: 'Mark complete', onPress: () => coupleActions.updateGoal(g.id, { status: 'completed' }) },
-          { text: 'Keep active', style: 'cancel' },
-        ]), 400);
-      }
-    } else {
-      editGoal(g.id, { progress: next });
-      if (next === 100) {
-        setTimeout(() => Alert.alert('🎉 Completed!', `"${g.title}"\n\nYou did it!`, [
-          { text: 'Mark complete', onPress: () => editGoal(g.id, { status: 'completed' }) },
-          { text: 'Keep active', style: 'cancel' },
-        ]), 400);
-      }
-    }
-  };
 
-  const handleDelete = (g: Goal | CoupleGoal) => Alert.alert('Remove goal?', `"${g.title}"`, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Remove', style: 'destructive', onPress: async () => {
-      if (activeSpace === 'couple') {
-        const r = await coupleActions.deleteGoal(g.id);
-        if (!r.success) Alert.alert('Kami', r.error);
-      } else {
-        removeGoal(g.id);
-      }
-    }},
-  ]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     if (activeSpace === 'couple') {
       await coupleActions.loadGoals();
@@ -398,7 +405,7 @@ export function GoalsScreen({ navigation }: Props) {
       await refresh();
     }
     setRefreshing(false);
-  };
+  }, [activeSpace, coupleActions, refresh]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
@@ -479,24 +486,24 @@ export function GoalsScreen({ navigation }: Props) {
 }
 
 const getStyles = (colors: any) => StyleSheet.create({
-  root:   { flex: 1, backgroundColor: colors.pageBg },
+  root: { flex: 1, backgroundColor: colors.pageBg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'ios' ? 50 : (RNStatusBar.currentHeight ?? 24) + Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '33', backgroundColor: colors.pageBg },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: colors.primary + '44' },
   addBtnPlus: { fontSize: FontSize.lg, color: colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[4], gap: Space[3] },
 
   summary: { flexDirection: 'row', backgroundColor: colors.cardBg, borderRadius: Radii.card, padding: Space[4], borderWidth: 1, borderColor: colors.border + '44', ...Shadows.card },
-  summaryItem:   { flex: 1, alignItems: 'center', gap: 2 },
-  summaryDivider:{ width: 1, backgroundColor: colors.border + '66', marginVertical: Space[1] },
-  summaryNum:    { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: colors.textPrimary },
+  summaryItem: { flex: 1, alignItems: 'center', gap: 2 },
+  summaryDivider: { width: 1, backgroundColor: colors.border + '66', marginVertical: Space[1] },
+  summaryNum: { fontSize: FontSize.lg, fontWeight: FontWeight.extrabold, color: colors.textPrimary },
 
   filterRow: { flexDirection: 'row', gap: Space[2], paddingHorizontal: Space[5], paddingVertical: Space[2] },
-  filterChip:  { flexDirection: 'row', alignItems: 'center', gap: Space[1], paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.cardBg },
-  filterChipOn:{ borderColor: colors.primary, backgroundColor: colors.primary + '18' },
+  filterChip: { flexDirection: 'row', alignItems: 'center', gap: Space[1], paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.cardBg },
+  filterChipOn: { borderColor: colors.primary, backgroundColor: colors.primary + '18' },
 
-  center:     { paddingVertical: Space[10], alignItems: 'center' },
+  center: { paddingVertical: Space[10], alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
-  emptyBtn:   { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
+  emptyBtn: { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
   loadMoreBtn: {
     alignItems: 'center',
     justifyContent: 'center',

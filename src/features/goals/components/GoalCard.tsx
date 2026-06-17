@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import {
   Animated,
   Easing,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import KamiText from '@shared/ui/atoms/KamiText';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { ParticleEmitter } from '@shared/ui/atoms/ParticleEmitter';
 import { FontSize, Radii, Space, Shadows, Opacity } from '@shared/constants';
 import { useTheme, useTextScale } from '@shared/hooks';
@@ -100,6 +100,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
     <TouchableOpacity
       activeOpacity={1}
       onPress={onPressCard}
+      delayPressIn={0}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
@@ -112,7 +113,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         {/* Cover Photo */}
         {imageUrl && (
           <View style={styles.cardCoverWrap}>
-            <Image source={{ uri: imageUrl }} style={styles.cardCover} />
+            <KamiImage src={imageUrl} bucket="goal_images" style={styles.cardCover} />
             <View style={styles.cardCoverOverlay} />
           </View>
         )}

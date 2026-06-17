@@ -272,6 +272,19 @@ CREATE TABLE IF NOT EXISTS couple_comments (
   retry_count INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS image_records (
+  id TEXT PRIMARY KEY NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  local_uri TEXT,
+  supabase_path TEXT,
+  bucket_name TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'pending',
+  last_synced_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mood_logs_user_date ON mood_logs(user_id, logged_date);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_responses_unq ON prompt_responses(user_id, prompt_id, response_date);
 CREATE INDEX IF NOT EXISTS idx_journal_entries_user_date ON journal_entries(user_id, entry_date);
@@ -288,6 +301,7 @@ CREATE INDEX IF NOT EXISTS idx_couple_journals_couple ON couple_journals(couple_
 CREATE INDEX IF NOT EXISTS idx_couple_memories_couple ON couple_memories(couple_id);
 CREATE INDEX IF NOT EXISTS idx_couple_goals_couple ON couple_goals(couple_id);
 CREATE INDEX IF NOT EXISTS idx_couple_comments_entry ON couple_comments(entry_id);
+CREATE INDEX IF NOT EXISTS idx_image_records_entity ON image_records(entity_type, entity_id);
 `;
 
 export async function initDb(): Promise<void> {

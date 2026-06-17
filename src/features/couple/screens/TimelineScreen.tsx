@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -225,7 +225,7 @@ export default function TimelineScreen() {
   }, [filteredEvents, limit]);
 
   // Group events by date/month headers (Indexing & Grouping details)
-  const getGroupHeader = (date: Date) => {
+  const getGroupHeader = useCallback((date: Date) => {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
@@ -234,7 +234,7 @@ export default function TimelineScreen() {
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
 
     return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  };
+  }, []);
 
   const isPartnerOnline = (() => {
     if (!partner?.lastSeenAt) return false;
@@ -244,7 +244,7 @@ export default function TimelineScreen() {
     return diffMs >= -5 * 60 * 1000 && diffMs < 5 * 60 * 1000;
   })();
 
-  const getPresenceDescription = () => {
+  const presenceDescription = useMemo(() => {
     switch (partnerAction) {
       case 'writing_letter': return `${partnerName} is writing a letter... ✍️`;
       case 'editing_draft': return `${partnerName} is editing a draft... ✍️`;
@@ -264,9 +264,9 @@ export default function TimelineScreen() {
       case 'answering_question': return `${partnerName} is answering today's question... 💕`;
       default: return isPartnerOnline ? `${partnerName} is online` : '';
     }
-  };
+  }, [partnerAction, partnerName, isPartnerOnline]);
 
-  const renderCard = (event: TimelineEvent, displayIndex: number) => {
+  const renderCard = useCallback((event: TimelineEvent, displayIndex: number) => {
     switch (event.type) {
       case 'letter': {
         const isLocked = !checkUnlocked(event.raw.deliverAt);
@@ -297,6 +297,7 @@ export default function TimelineScreen() {
                       key={idx}
                       src={url}
                       thumbnailSrc={thumbUrl}
+                      bucket="couple_letter_images"
                       style={styles.photoThumb}
                     />
                   );
@@ -345,6 +346,7 @@ export default function TimelineScreen() {
                       key={idx}
                       src={url}
                       thumbnailSrc={thumbUrl}
+                      bucket="couple_journal_images"
                       style={styles.photoThumb}
                     />
                   );
@@ -424,6 +426,7 @@ export default function TimelineScreen() {
                             key={idx}
                             src={url}
                             thumbnailSrc={thumbUrl}
+                            bucket="couple_memory_images"
                             style={styles.timelineCardPhoto}
                           />
                         );
@@ -547,9 +550,9 @@ export default function TimelineScreen() {
       default:
         return null;
     }
-  };
+  }, [colors, styles, navigation, dailyAnswers, user?.id, partner?.id, partnerName]);
 
-  const renderHeader = () => {
+  const renderHeader = useCallback(() => {
     if (!couple) return null;
     return (
       <View>
@@ -582,7 +585,7 @@ export default function TimelineScreen() {
           <View style={styles.presenceBox}>
             <View style={styles.greenDot} />
             <KamiText variant="caption" bold color={colors.primary}>
-              {getPresenceDescription()}
+              {presenceDescription}
             </KamiText>
           </View>
         )}
@@ -619,9 +622,9 @@ export default function TimelineScreen() {
         </View>
       </View>
     );
-  };
+  }, [couple, colors, styles, events.length, isPartnerOnline, presenceDescription, filterTab]);
 
-  const renderItem = ({ item, index }: { item: TimelineEvent; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: TimelineEvent; index: number }) => {
     const displayIndex = filteredEvents.length - index;
     const showHeader = index === 0 || getGroupHeader(item.date) !== getGroupHeader(paginatedEvents[index - 1].date);
     
@@ -655,9 +658,9 @@ export default function TimelineScreen() {
         </View>
       </View>
     );
-  };
+  }, [filteredEvents.length, getGroupHeader, paginatedEvents, styles, colors, renderCard]);
 
-  const renderEmpty = () => {
+  const renderEmpty = useCallback(() => {
     return (
       <View style={styles.emptyState}>
         <Text style={{ fontSize: 56, marginBottom: Space[4] }}>⏳</Text>
@@ -667,9 +670,9 @@ export default function TimelineScreen() {
         </KamiText>
       </View>
     );
-  };
+  }, [colors.textMuted, styles.emptyState]);
 
-  const renderFooter = () => {
+  const renderFooter = useCallback(() => {
     if (filteredEvents.length <= limit) {
       return <View style={{ height: Space[10] }} />;
     }
@@ -684,7 +687,7 @@ export default function TimelineScreen() {
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [filteredEvents.length, limit, colors.creamDeep, colors.primary, styles.loadMoreBtn]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>

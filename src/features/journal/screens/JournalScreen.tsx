@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator, Alert, AppState, Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -6,18 +6,19 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { FlashList } from '@shopify/flash-list';
-import { useHome }      from '@features/home/hooks';
+import { useHome } from '@features/home/hooks';
 import { useHomeStore } from '@features/home/store';
 import { useAuthStore } from '@features/auth';
-import { useShallow }   from 'zustand/react/shallow';
-import KamiText         from '@shared/ui/atoms/KamiText';
+import { useShallow } from 'zustand/react/shallow';
+import KamiText from '@shared/ui/atoms/KamiText';
+import KamiLoading from '@shared/ui/atoms/KamiLoading';
 import { FontSize, FontWeight, Radii, Shadows, Space, FontFamily } from '@shared/constants';
 import type { JournalEntry } from '@features/home/types';
 import type { CoupleJournal } from '@features/couple/types';
 import type { MainTabScreenProps } from '@core/navigation/types';
-import { useTheme }     from '@shared/hooks';
+import { useTheme } from '@shared/hooks';
 import { useCoupleStore, PartnerActionType } from '@features/couple/store/coupleStore';
-import { useCouple }      from '@features/couple/hooks/useCouple';
+import { useCouple } from '@features/couple/hooks/useCouple';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
 import ConflictResolverModal from '@shared/ui/organisms/ConflictResolverModal';
 // getPendingSyncCount import removed
@@ -34,7 +35,7 @@ import { uuid } from '@shared/lib/uuid';
 
 function formatDate(iso: string, timezone?: string) {
   const tz = timezone || 'UTC';
-  
+
   const getTzDateString = (date: Date) => {
     try {
       return date.toLocaleDateString('en-US', { timeZone: tz });
@@ -45,15 +46,17 @@ function formatDate(iso: string, timezone?: string) {
 
   const dStr = getTzDateString(new Date(iso));
   const todayStr = getTzDateString(new Date());
-  
+
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = getTzDateString(yesterday);
 
-  if (dStr === todayStr)     return 'Today';
+  if (dStr === todayStr) return 'Today';
   if (dStr === yesterdayStr) return 'Yesterday';
   return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
 }
+
+const renderSeparator = () => <View style={{ height: Space[3] }} />;
 
 export function JournalScreen({ navigation }: Props) {
   const user = useAuthStore(s => s.user);
@@ -61,18 +64,18 @@ export function JournalScreen({ navigation }: Props) {
     useHomeStore(useShallow(s => ({
       journalEntries: s.journalEntries,
       journalLoading: s.journalLoading,
-      todayPrompt:    s.todayPrompt,
+      todayPrompt: s.todayPrompt,
       promptResponse: s.promptResponse,
     })));
   const { loadJournal, loadMoreJournal, addJournalEntry, editJournalEntry, removeJournalEntry, respondToPrompt, refresh } = useHome();
 
-  const [writeVisible, setWriteVisible]   = useState(false);
-  const [editing,      setEditing]        = useState<JournalEntry | CoupleJournal | null>(null);
-  const [writeSaving,  setWriteSaving]    = useState(false);
-  const [promptVisible,setPromptVisible]  = useState(false);
-  const [promptSaving, setPromptSaving]   = useState(false);
-  const [refreshing,   setRefreshing]     = useState(false);
-  const [previewEntry, setPreviewEntry]   = useState<JournalEntry | CoupleJournal | null>(null);
+  const [writeVisible, setWriteVisible] = useState(false);
+  const [editing, setEditing] = useState<JournalEntry | CoupleJournal | null>(null);
+  const [writeSaving, setWriteSaving] = useState(false);
+  const [promptVisible, setPromptVisible] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [previewEntry, setPreviewEntry] = useState<JournalEntry | CoupleJournal | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
 
   // Search & Filter state
@@ -87,14 +90,14 @@ export function JournalScreen({ navigation }: Props) {
 
   // Couple Space state
   const { couple, coupleJournals, journalsHasMore, journalsLoading } = useCoupleStore();
-  const { 
-    loadJournals: loadCoupleJournals, 
+  const {
+    loadJournals: loadCoupleJournals,
     loadMoreJournals: loadMoreCoupleJournals,
-    addJournal: addCoupleJournal, 
+    addJournal: addCoupleJournal,
     updateJournal: updateCoupleJournal,
     deleteJournal: deleteCoupleJournal,
-    addComment: addCoupleComment, 
-    toggleReaction 
+    addComment: addCoupleComment,
+    toggleReaction
   } = useCouple();
 
   const [selectedCommentsEntry, setSelectedCommentsEntry] = useState<any>(null);
@@ -127,7 +130,7 @@ export function JournalScreen({ navigation }: Props) {
     }
   }, [isSyncing, pendingSyncCount]);
 
-  const updatePendingCount = () => {};
+  const updatePendingCount = () => { };
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
   const [appState, setAppState] = useState(AppState.currentState);
@@ -258,28 +261,30 @@ export function JournalScreen({ navigation }: Props) {
     }
   };
 
-  const handleDelete = (e: JournalEntry | CoupleJournal) => Alert.alert('Delete entry?', 'This cannot be undone and will delete all attachments.', [
+  const handleDelete = useCallback((e: JournalEntry | CoupleJournal) => Alert.alert('Delete entry?', 'This cannot be undone and will delete all attachments.', [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: async () => { 
-      if (user?.activeSpace === 'couple') {
-        const r = await deleteCoupleJournal(e.id);
-        if (!r.success) {
-          Alert.alert('Kami', r.error);
+    {
+      text: 'Delete', style: 'destructive', onPress: async () => {
+        if (user?.activeSpace === 'couple') {
+          const r = await deleteCoupleJournal(e.id);
+          if (!r.success) {
+            Alert.alert('Kami', r.error);
+          } else {
+            await loadCoupleJournals();
+            updatePendingCount();
+          }
         } else {
-          await loadCoupleJournals();
-          updatePendingCount();
-        }
-      } else {
-        const r = await removeJournalEntry(e.id); 
-        if (!r.success) {
-          Alert.alert('Kami', r.error);
-        } else {
-          await loadJournal(search.trim() || undefined, selectedTag || undefined);
-          updatePendingCount();
+          const r = await removeJournalEntry(e.id);
+          if (!r.success) {
+            Alert.alert('Kami', r.error);
+          } else {
+            await loadJournal(search.trim() || undefined, selectedTag || undefined);
+            updatePendingCount();
+          }
         }
       }
-    } },
-  ]);
+    },
+  ]), [user?.activeSpace, deleteCoupleJournal, loadCoupleJournals, removeJournalEntry, loadJournal, search, selectedTag]);
 
   const handlePromptSave = async (resp: string) => {
     if (!todayPrompt) return;
@@ -291,22 +296,22 @@ export function JournalScreen({ navigation }: Props) {
     updatePendingCount();
   };
 
-  const togglePin = async (e: JournalEntry | CoupleJournal) => {
+  const togglePin = useCallback(async (e: JournalEntry | CoupleJournal) => {
     const r = await editJournalEntry(e.id, { isPinned: !e.isPinned });
     if (!r.success) {
       Alert.alert('Kami', r.error);
     }
-  };
+  }, [editJournalEntry]);
 
-  const handleRefresh = async () => { 
-    setRefreshing(true); 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
     if (user?.activeSpace === 'couple') {
       await loadCoupleJournals();
     } else {
-      await refresh(); 
+      await refresh();
     }
-    setRefreshing(false); 
-  };
+    setRefreshing(false);
+  }, [user?.activeSpace, loadCoupleJournals, refresh]);
 
   // Calendar View calculations
   const year = calendarDate.getFullYear();
@@ -370,13 +375,13 @@ export function JournalScreen({ navigation }: Props) {
     } else {
       if (search.trim()) {
         const q = search.toLowerCase().trim();
-        list = list.filter(e => 
-          (e.title && e.title.toLowerCase().includes(q)) || 
+        list = list.filter(e =>
+          (e.title && e.title.toLowerCase().includes(q)) ||
           (e.body && e.body.toLowerCase().includes(q))
         );
       }
       if (selectedTag) {
-        list = list.filter(e => 
+        list = list.filter(e =>
           e.tags && e.tags.some(t => t.toLowerCase() === selectedTag.toLowerCase())
         );
       }
@@ -389,7 +394,7 @@ export function JournalScreen({ navigation }: Props) {
   const { colors, isDark } = useTheme();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
 
-  const renderItem = ({ item, index }: { item: JournalEntry | CoupleJournal; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: JournalEntry | CoupleJournal; index: number }) => {
     const getTzDateStr = (dateStr: string) => {
       try {
         return new Date(dateStr).toLocaleDateString('en-US', { timeZone: user?.timezone ?? 'UTC' });
@@ -397,9 +402,9 @@ export function JournalScreen({ navigation }: Props) {
         return new Date(dateStr).toDateString();
       }
     };
-    
+
     const showDate = index === 0 || getTzDateStr(item.entryDate) !== getTzDateStr(paginatedList[index - 1]?.entryDate);
-    
+
     return (
       <View key={item.id} style={{ gap: Space[3] }}>
         {showDate && (
@@ -427,9 +432,9 @@ export function JournalScreen({ navigation }: Props) {
         />
       </View>
     );
-  };
+  }, [user, paginatedList, styles.dateLabel, handleDelete, togglePin, toggleReaction]);
 
-  const renderHeader = () => {
+  const renderHeader = useCallback(() => {
     if (viewMode !== 'feed') return null;
     return (
       <View style={{ gap: Space[3], marginBottom: Space[3] }}>
@@ -452,21 +457,23 @@ export function JournalScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
         {journalLoading === 'loading' && paginatedList.length === 0 && (
-          <View style={styles.centerState}><ActivityIndicator color={colors.primary} /></View>
+          <View style={styles.centerState}>
+            <KamiLoading emoji="✍️" message="Retrieving your journal..." />
+          </View>
         )}
       </View>
     );
-  };
+  }, [viewMode, todayPrompt, promptResponse, journalLoading, paginatedList.length, colors, styles]);
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (user?.activeSpace === 'couple') {
       loadMoreCoupleJournals();
     } else {
       loadMoreJournal(search.trim() || undefined, selectedTag || undefined);
     }
-  };
+  }, [user?.activeSpace, loadMoreCoupleJournals, loadMoreJournal, search, selectedTag]);
 
-  const renderFooter = () => {
+  const renderFooter = useCallback(() => {
     if (viewMode !== 'feed') return null;
     const hasMore = user?.activeSpace === 'couple'
       ? journalsHasMore
@@ -483,9 +490,9 @@ export function JournalScreen({ navigation }: Props) {
       );
     }
     return <View style={{ height: Space[8] }} />;
-  };
+  }, [viewMode, user?.activeSpace, journalsHasMore, journalsLoading, journalLoading, listToRender.length, colors.primary]);
 
-  const renderEmpty = () => {
+  const renderEmpty = useCallback(() => {
     if (journalLoading === 'loading') return null;
     return (
       <TouchableOpacity style={styles.emptyState} onPress={() => { setEditing(null); setWriteVisible(true); }} activeOpacity={0.85}>
@@ -499,7 +506,7 @@ export function JournalScreen({ navigation }: Props) {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [journalLoading, colors, search, selectedTag, selectedDateFilter, styles.emptyState, styles.emptyBtn]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
@@ -541,7 +548,7 @@ export function JournalScreen({ navigation }: Props) {
       <View style={styles.viewToggleRow}>
         <TouchableOpacity
           style={[
-            styles.toggleBtn, 
+            styles.toggleBtn,
             { borderColor: colors.border + '55', backgroundColor: colors.cardBg },
             viewMode === 'feed' && [styles.toggleBtnActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
           ]}
@@ -553,7 +560,7 @@ export function JournalScreen({ navigation }: Props) {
         </TouchableOpacity>
         <TouchableOpacity
           style={[
-            styles.toggleBtn, 
+            styles.toggleBtn,
             { borderColor: colors.border + '55', backgroundColor: colors.cardBg },
             viewMode === 'calendar' && [styles.toggleBtnActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
           ]}
@@ -705,14 +712,14 @@ export function JournalScreen({ navigation }: Props) {
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
-        ItemSeparatorComponent={() => <View style={{ height: Space[3] }} />}
+        ItemSeparatorComponent={renderSeparator}
         contentContainerStyle={{ paddingHorizontal: Space[5], paddingTop: Space[2] }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
       />
 
-      <WriteModal visible={writeVisible} entry={editing} onClose={() => { setWriteVisible(false); setEditing(null); }} onSave={handleSave} saving={writeSaving} />
+      <WriteModal visible={writeVisible} entry={editing} onClose={() => { setWriteVisible(false); setEditing(null); }} onSave={handleSave} saving={writeSaving} activeSpace={user?.activeSpace} />
       <PreviewModal
         visible={previewVisible}
         entry={previewEntry}
@@ -728,10 +735,10 @@ export function JournalScreen({ navigation }: Props) {
       {todayPrompt && (
         <PromptModal visible={promptVisible} prompt={todayPrompt.content} existing={promptResponse?.response} onClose={() => setPromptVisible(false)} onSave={handlePromptSave} saving={promptSaving} />
       )}
-      <CommentsModal 
-        visible={commentsVisible} 
-        entry={selectedCommentsEntry} 
-        onClose={() => { setCommentsVisible(false); setSelectedCommentsEntry(null); }} 
+      <CommentsModal
+        visible={commentsVisible}
+        entry={selectedCommentsEntry}
+        onClose={() => { setCommentsVisible(false); setSelectedCommentsEntry(null); }}
         onAddComment={async (id, text) => {
           const r = await addCoupleComment(id, text);
           if (r.success) {
@@ -741,7 +748,7 @@ export function JournalScreen({ navigation }: Props) {
           } else {
             Alert.alert('Kami', r.error);
           }
-        }} 
+        }}
       />
       <ConflictResolverModal
         visible={conflictModalVisible}
@@ -765,20 +772,20 @@ export function JournalScreen({ navigation }: Props) {
 }
 
 const getStyles = (colors: any) => StyleSheet.create({
-  root:  { flex: 1, backgroundColor: colors.pageBg },
-  header:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '33', backgroundColor: colors.pageBg },
+  root: { flex: 1, backgroundColor: colors.pageBg },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '33', backgroundColor: colors.pageBg },
   writeBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: colors.primary + '44' },
   writeBtnPlus: { fontSize: FontSize.lg, color: colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
 
   // Search
   searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Space[5], marginTop: Space[4], paddingHorizontal: Space[3], backgroundColor: colors.cardBg, borderRadius: Radii.input, borderWidth: 1, borderColor: colors.border + '88', ...Shadows.sm },
-  searchIcon:{ fontSize: FontSize.sm, marginRight: Space[2] },
-  searchInput:{ flex: 1, height: 44, fontSize: FontSize.base, color: colors.textPrimary },
+  searchIcon: { fontSize: FontSize.sm, marginRight: Space[2] },
+  searchInput: { flex: 1, height: 44, fontSize: FontSize.base, color: colors.textPrimary },
 
   // Tags filter
   tagsScrollWrapper: { marginVertical: Space[2] },
   tagsFilterRow: { flexDirection: 'row', gap: Space[2], paddingHorizontal: Space[5] },
-  filterChip:  { paddingHorizontal: Space[3], paddingVertical: Space[1] + 2, borderRadius: Radii.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardBg },
+  filterChip: { paddingHorizontal: Space[3], paddingVertical: Space[1] + 2, borderRadius: Radii.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardBg },
   filterChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '11' },
 
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[2], gap: Space[3] },
@@ -786,11 +793,11 @@ const getStyles = (colors: any) => StyleSheet.create({
   promptCard: { flexDirection: 'row', alignItems: 'center', borderRadius: Radii.card, padding: Space[4], gap: Space[4], borderWidth: 1.5, ...Shadows.card },
   promptIconWrap: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 
-  dateLabel:  { marginTop: Space[2], marginBottom: -Space[1] },
+  dateLabel: { marginTop: Space[2], marginBottom: -Space[1] },
 
-  centerState:{ paddingVertical: Space[10], alignItems: 'center' },
+  centerState: { paddingVertical: Space[10], alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: Space[10], paddingHorizontal: Space[5] },
-  emptyBtn:   { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
+  emptyBtn: { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
 
   // Calendar styles
   calendarCard: {

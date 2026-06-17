@@ -10,13 +10,14 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
   Platform,
   StatusBar as RNStatusBar,
   Vibration,
 } from 'react-native';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { ParticleEmitter } from '@shared/ui/atoms/ParticleEmitter';
+import KamiLoading from '@shared/ui/atoms/KamiLoading';
 import { Space, Radii, FontSize, FontFamily, Shadows, Opacity } from '@shared/constants';
 import { useTheme, useTextScale } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
@@ -76,6 +77,15 @@ export const ReadModal: React.FC<ReadModalProps> = ({
   useEffect(() => {
     if (!visible || !letter) {
       setContent(null);
+      return;
+    }
+
+    if (letter.body) {
+      setContent({
+        body: letter.body,
+        imageUrls: letter.imageUrls || [],
+      });
+      setLoading(false);
       return;
     }
 
@@ -188,33 +198,35 @@ export const ReadModal: React.FC<ReadModalProps> = ({
           /* Unlocked Letter Full View */
           <View style={{ flex: 1 }}>
             {loading ? (
-              <View style={rm.center}><ActivityIndicator color={colors.primary} /></View>
+              <View style={rm.center}>
+                <KamiLoading emoji="🫶" message="Just a tiny moment..." />
+              </View>
             ) : (
               content && (
                 <ScrollView contentContainerStyle={rm.content} showsVerticalScrollIndicator={false}>
                   {/* Physical Paper Scroll card design — with unfold animation */}
                   <Animated.View style={{ transform: [{ scale: paperScale }], opacity: paperOpacity }}>
-                  <View style={[rm.paperScroll, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                    <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
-                      <Text style={rm.envelopeEmoji}>{letter.isFavorite ? '🎀' : '📄'}</Text>
-                      <KamiText variant="overline" align="center" style={{ marginTop: Space[2], letterSpacing: 1 }}>
-                        Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
-                      </KamiText>
-                      {activeSpace === 'couple' && 'senderId' in letter && (
-                        <KamiText variant="caption" align="center" color={colors.textMuted} style={{ marginTop: Space[1] }}>
-                          {(letter as CoupleLetter).senderId === user?.id
-                            ? 'From: You'
-                            : `From: ${(letter as CoupleLetter).senderNickname || 'Partner'}`}
+                    <View style={[rm.paperScroll, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                      <View style={[rm.envelope, { backgroundColor: colors.creamDeep }]}>
+                        <Text style={rm.envelopeEmoji}>{letter.isFavorite ? '🎀' : '📄'}</Text>
+                        <KamiText variant="overline" align="center" style={{ marginTop: Space[2], letterSpacing: 1 }}>
+                          Written {new Date(letter.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric', timeZone: user?.timezone ?? 'UTC' })}
                         </KamiText>
-                      )}
+                        {activeSpace === 'couple' && 'senderId' in letter && (
+                          <KamiText variant="caption" align="center" color={colors.textMuted} style={{ marginTop: Space[1] }}>
+                            {(letter as CoupleLetter).senderId === user?.id
+                              ? 'From: You'
+                              : `From: ${(letter as CoupleLetter).senderNickname || 'Partner'}`}
+                          </KamiText>
+                        )}
+                      </View>
+                      <KamiText variant="title" bold style={{ marginBottom: Space[4], fontFamily: FontFamily.display, color: '#3A2E2B' }}>
+                        {letter.subject}
+                      </KamiText>
+                      <KamiText variant="body" style={{ lineHeight: 28, fontFamily: FontFamily.display, color: '#4A3B30' }}>
+                        {content.body}
+                      </KamiText>
                     </View>
-                    <KamiText variant="title" bold style={{ marginBottom: Space[4], fontFamily: FontFamily.display, color: '#3A2E2B' }}>
-                      {letter.subject}
-                    </KamiText>
-                    <KamiText variant="body" style={{ lineHeight: 28, fontFamily: FontFamily.display, color: '#4A3B30' }}>
-                      {content.body}
-                    </KamiText>
-                  </View>
                   </Animated.View>
 
                   {/* Polaroid Snaps for Attached Photos */}
@@ -230,7 +242,7 @@ export const ReadModal: React.FC<ReadModalProps> = ({
                               activeOpacity={0.9}
                               style={[rm.polaroidCard, { transform: [{ rotate: `${(i % 2 === 0 ? -1.5 : 1.5)}deg` }] }]}
                             >
-                              <Image source={{ uri: url }} style={rm.polaroidImage} />
+                              <KamiImage src={url} bucket={activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images'} style={rm.polaroidImage} />
                               <KamiText variant="caption" style={rm.polaroidText}>
                                 Snap {i + 1}
                               </KamiText>
@@ -300,28 +312,28 @@ const getStyles = (colors: any) => StyleSheet.create({
   toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) + Space[2] : Space[4], paddingBottom: Space[4], borderBottomWidth: 1 },
   closeWrap: { paddingVertical: Space[2], paddingHorizontal: Space[3], backgroundColor: 'rgba(28,25,23,0.06)', borderRadius: Radii.full },
   content: { padding: Space[5], paddingBottom: Space[10] },
-  
+
   paperEnvelope: { width: '100%', borderRadius: Radii.card, borderWidth: 1.5, padding: Space[5], ...Shadows.card },
-  
+
   envelope: { alignItems: 'center', borderRadius: Radii.card, padding: Space[4], marginBottom: Space[4] },
   envelopeEmoji: { fontSize: 44 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: Space[10] },
-  
+
   paperScroll: { padding: Space[5], borderRadius: Radii.card, borderWidth: 1.5, ...Shadows.sm, marginBottom: Space[4] },
-  
+
   photoSection: { marginTop: Space[4], borderTopWidth: 1, borderTopColor: 'rgba(28,25,23,0.06)', paddingTop: Space[4] },
   photoScroll: { marginHorizontal: -Space[5], paddingHorizontal: Space[5] },
   photoRow: { flexDirection: 'row', gap: Space[4], paddingVertical: Space[2] },
-  
+
   polaroidCard: { backgroundColor: colors.cardBg, padding: Space[3], paddingBottom: Space[5], borderRadius: 8, borderWidth: 1, borderColor: colors.border + Opacity.ghost, ...Shadows.md },
   polaroidImage: { width: 130, height: 130, borderRadius: 4, backgroundColor: colors.inputBg },
   polaroidText: { marginTop: Space[2], fontFamily: FontFamily.display, fontSize: 10, color: '#8A7B72', textAlign: 'center' },
-  
+
   favToggleBtn: { paddingVertical: Space[1], paddingHorizontal: Space[2], borderRadius: Radii.full, backgroundColor: 'rgba(28,25,23,0.04)', marginRight: Space[1] },
   reactionBar: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: Space[3], paddingHorizontal: Space[4], borderTopWidth: 1 },
   reactionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Space[3], paddingVertical: Space[2], borderRadius: Radii.full, borderWidth: 1.5, borderColor: 'transparent' },
   reactionBtnActive: { borderColor: colors.primary },
-  
+
   lockedCenterContainer: { alignItems: 'center', paddingVertical: Space[5] },
   lockedWaxSeal: {
     width: 90,

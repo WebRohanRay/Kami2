@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Keyboard,
   Modal,
   Platform,
@@ -15,6 +14,7 @@ import {
   View,
   StatusBar as RNStatusBar,
 } from 'react-native';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { useTheme } from '@shared/hooks';
 import { useAuthStore } from '@features/auth';
 import KamiText from '@shared/ui/atoms/KamiText';
@@ -33,6 +33,7 @@ interface WriteModalProps {
   onClose: () => void;
   onSave: (body: string, title: string | undefined, tags: string[], imageUris: string[], moodId: string | null) => Promise<void>;
   saving: boolean;
+  activeSpace?: 'personal' | 'couple';
 }
 
 export const WriteModal: React.FC<WriteModalProps> = ({
@@ -41,6 +42,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
   onClose,
   onSave,
   saving,
+  activeSpace = 'personal',
 }) => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -212,7 +214,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
               <View style={wm.photoRow}>
                 {localUris.map((uri, idx) => (
                   <View key={idx} style={wm.photoWrap}>
-                    <Image source={{ uri }} style={wm.attachedImage} />
+                    <KamiImage src={uri} bucket={activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images'} style={wm.attachedImage} />
                     <TouchableOpacity style={wm.removePhotoBadge} onPress={() => handleRemovePhoto(idx)}>
                       <Text style={{ color: '#fff', fontSize: 10 }}>✕</Text>
                     </TouchableOpacity>

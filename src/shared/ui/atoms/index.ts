@@ -8,4 +8,5 @@ export { RollingDigit }    from './RollingDigit';
 export { FloatingHearts }  from './FloatingHearts';
 export { ParticleEmitter } from './ParticleEmitter';
 export { ShimmerText }     from './ShimmerText';
+export { default as KamiLoading } from './KamiLoading';
 

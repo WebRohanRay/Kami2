@@ -65,6 +65,7 @@ export const EntryCard: React.FC<EntryCardProps> = ({
     <TouchableOpacity
       activeOpacity={1}
       onPress={onPressCard}
+      delayPressIn={0}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
@@ -131,6 +132,7 @@ export const EntryCard: React.FC<EntryCardProps> = ({
                     key={i}
                     src={url}
                     thumbnailSrc={thumbUrl}
+                    bucket={activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images'}
                     style={styles.cardImage}
                   />
                 );

@@ -31,9 +31,9 @@ const TABS = [
 
 // ─── Custom tab bar ───────────────────────────────────────────────────────────
 
-function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+const KamiTabBar = React.memo(function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   // Only render tabs that are in our TABS list (hides Settings)
   const visibleRoutes = state.routes.filter(r => TABS.some(t => t.name === r.name));
   const activeSpace = useAuthStore((s) => s.user?.activeSpace) ?? 'personal';
@@ -63,8 +63,9 @@ function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
           return (
             <TouchableOpacity
-              key={route.key}
+               key={route.key}
               onPress={onPress}
+              delayPressIn={0}
               accessibilityRole="button"
               accessibilityLabel={tabLabel}
               accessibilityState={{ selected: isFocused }}
@@ -86,7 +87,7 @@ function KamiTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       </View>
     </View>
   );
-}
+});
 
 const getStyles = (colors: any) =>
   StyleSheet.create({
@@ -132,10 +133,16 @@ const getStyles = (colors: any) =>
 
 // ─── Navigator ────────────────────────────────────────────────────────────────
 
+const renderTabBar = (props: BottomTabBarProps) => <KamiTabBar {...props} />;
+
 const MainNavigator: React.FC = () => (
   <Tab.Navigator
-    tabBar={(props) => <KamiTabBar {...props} />}
-    screenOptions={{ headerShown: false }}
+    tabBar={renderTabBar}
+    screenOptions={{
+      headerShown: false,
+      freezeOnBlur: true,
+      lazy: false,
+    }}
   >
     <Tab.Screen name="Home" component={HomeScreen} />
     <Tab.Screen name="Journal" component={JournalScreen} />

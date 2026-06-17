@@ -1,7 +1,9 @@
 import { supabase } from '@shared/lib/supabase';
-import { resolveSignedUrls, deleteImages } from '@shared/lib/storage';
+import { deleteImages } from '@shared/lib/storage';
 import type { Result } from '@features/home/types';
 import { resolveAvatarUrl } from '../profile';
+import { coupleLetterRepo } from '@shared/db/repo';
+import { useAuthStore } from '@features/auth';
 import type { 
   Couple, CoupleInvitation, CoupleJournal, CoupleComment, CoupleReaction, 
   CoupleMemory, CoupleGoal, CoupleLetter, CoupleDailyQuestion, CoupleAnswer, 
@@ -542,18 +544,14 @@ export async function fetchCoupleJournals(coupleId: string, limit = 20, page = 1
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const resolvedImgsList = await Promise.all(
-      (data ?? []).map(r => resolveSignedUrls('couple_journal_images', r.image_urls || []))
-    );
-
-    const mapped = (data ?? []).map((r, i) => ({
+    const mapped = (data ?? []).map((r) => ({
       id: r.id,
       coupleId: r.couple_id,
       userId: r.user_id,
       title: r.title,
       body: r.body,
       moodId: r.mood_id,
-      imageUrls: resolvedImgsList[i],
+      imageUrls: r.image_urls || [],
       tags: r.tags || [],
       entryDate: r.entry_date,
       isPinned: r.is_pinned,
@@ -796,16 +794,12 @@ export async function fetchCoupleMemories(coupleId: string, limit = 15, page = 1
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const resolvedImgsList = await Promise.all(
-      (data ?? []).map(r => resolveSignedUrls('couple_memory_images', r.image_urls || []))
-    );
-
-    const mapped = (data ?? []).map((r: any, i: number) => ({
+    const mapped = (data ?? []).map((r: any) => ({
       id: r.id,
       coupleId: r.couple_id,
       title: r.title,
       description: r.description,
-      imageUrls: resolvedImgsList[i],
+      imageUrls: r.image_urls || [],
       memoryDate: r.memory_date,
       tags: r.tags || [],
       createdAt: r.created_at,
@@ -1151,11 +1145,7 @@ export async function fetchCoupleLetters(coupleId: string, limit = 20, page = 1)
 
     if (error) return { success: false, error: friendly(error.message) };
 
-    const resolvedImgsList = await Promise.all(
-      (data ?? []).map((r: any) => r.image_urls && r.image_urls.length > 0 ? resolveSignedUrls('couple_letter_images', r.image_urls) : Promise.resolve([]))
-    );
-
-    const mapped = (data ?? []).map((r: any, i: number) => {
+    const mapped = (data ?? []).map((r: any) => {
       const unlockTime = new Date(r.deliver_at).getTime();
       return {
         id: r.id,
@@ -1175,7 +1165,7 @@ export async function fetchCoupleLetters(coupleId: string, limit = 20, page = 1)
         deliveredAt: r.delivered_at,
         readAt: r.read_at,
         updatedAt: r.updated_at,
-        imageUrls: resolvedImgsList[i],
+        imageUrls: r.image_urls || [],
         reactions: (r.reactions ?? []).map((rx: any) => ({
           userId: rx.user_id,
           emoji: rx.emoji
@@ -1200,14 +1190,14 @@ export async function createCoupleLetter(
   parentLetterId?: string
 ): Promise<Result<CoupleLetter>> {
   try {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
     const { data, error } = await supabase
       .from('couple_letters')
       .insert({
         couple_id: coupleId,
-        sender_id: userRes.user.id,
+        sender_id: user.id,
         subject: subject.trim(),
         body: body.trim(),
         deliver_at: deliverAt,
@@ -1248,18 +1238,43 @@ export async function createCoupleLetter(
 /** Open/Read unlocked couple letter */
 export async function fetchCoupleLetterDetails(letterId: string): Promise<Result<{ body: string; imageUrls: string[] }>> {
   try {
+    const local = await coupleLetterRepo.fetchLetterById(letterId);
+    const userId = useAuthStore.getState().user?.id;
+
+    if (local && local.body) {
+      const isSender = userId && local.senderId === userId;
+      const isUnlocked = Date.now() >= new Date(local.deliverAt).getTime();
+      if (isSender || isUnlocked) {
+        return {
+          success: true,
+          data: {
+            body: local.body,
+            imageUrls: local.imageUrls || []
+          }
+        };
+      }
+    }
+
     const { data, error } = await supabase
       .rpc('fetch_unlocked_couple_letter', { p_letter_id: letterId });
 
     if (error || !data || data.length === 0) return { success: false, error: 'Could not open letter. It is still sealed.' };
 
     const row = data[0];
-    const resolvedUrls = await resolveSignedUrls('couple_letter_images', row.image_urls || []);
+
+    if (local) {
+      await coupleLetterRepo.saveLetter({
+        ...local,
+        body: row.body,
+        imageUrls: row.image_urls || []
+      });
+    }
+
     return {
       success: true,
       data: {
         body: row.body,
-        imageUrls: resolvedUrls
+        imageUrls: row.image_urls || []
       }
     };
   } catch (e) {
@@ -1381,10 +1396,10 @@ export async function markCoupleLetterRead(id: string): Promise<Result<void>> {
 
 export async function toggleCoupleLetterReaction(letterId: string, emoji: string): Promise<Result<void>> {
   try {
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes?.user) return { success: false, error: 'Not authenticated.' };
+    const user = useAuthStore.getState().user;
+    if (!user) return { success: false, error: 'Not authenticated.' };
 
-    const userId = userRes.user.id;
+    const userId = user.id;
     const { data, error: sErr } = await supabase
       .from('couple_letter_reactions')
       .select('*')

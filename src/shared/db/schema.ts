@@ -268,3 +268,16 @@ export const coupleComments = sqliteTable('couple_comments', {
   retryCount: integer('retry_count').notNull().default(0),
 });
 
+export const imageRecords = sqliteTable('image_records', {
+  id: text('id').primaryKey(),
+  entityType: text('entity_type').notNull(), // 'memory', 'journal', 'goal', 'letter', etc.
+  entityId: text('entity_id').notNull(),
+  localUri: text('local_uri'),            // file:///path/to/local/image
+  supabasePath: text('supabase_path'),     // userId/entityId/timestamp.jpg
+  bucketName: text('bucket_name').notNull(),
+  syncStatus: text('sync_status').notNull().default('pending'), // pending|syncing|synced|failed
+  lastSyncedAt: text('last_synced_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+

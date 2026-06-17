@@ -1,5 +1,5 @@
 import { supabase } from '@shared/lib/supabase';
-import { resolveSignedUrls, deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
+import { deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import type { Letter, CreateLetterInput, Result } from '@features/home/types';
 import { useAuthStore } from '@features/auth';
 import { letterRepo } from '@shared/db/repo';
@@ -65,16 +65,11 @@ export async function fetchLetter(
       return { success: false, error: 'Could not unlock letter. It may still be sealed.' };
     }
 
-    const localPickerUris = letter.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
-    const remotePaths = letter.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
-
-    const resolved = await resolveSignedUrls('letter_images', remotePaths);
-
     return {
       success: true,
       data: {
         body: letter.body || '',
-        imageUrls: [...localPickerUris, ...resolved],
+        imageUrls: letter.imageUrls,
       },
     };
   } catch (e) {

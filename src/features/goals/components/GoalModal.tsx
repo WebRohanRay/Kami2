@@ -12,9 +12,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
   StatusBar as RNStatusBar,
 } from 'react-native';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { FontSize, Radii, Space } from '@shared/constants';
 import type { Goal, GoalCategory } from '@features/home/types';
@@ -199,7 +199,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
 
               {coverUri && (
                 <View style={gm.coverPreviewWrap}>
-                  <Image source={{ uri: coverUri }} style={gm.coverPreview} />
+                  <KamiImage src={coverUri} bucket="goal_images" style={gm.coverPreview} />
                   <TouchableOpacity style={gm.removeCoverBadge} onPress={() => setCoverUri(null)}>
                     <Text style={{ color: '#fff', fontSize: 11 }}>✕</Text>
                   </TouchableOpacity>

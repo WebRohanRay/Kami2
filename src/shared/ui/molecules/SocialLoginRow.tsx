@@ -71,6 +71,7 @@ const GoogleButton: React.FC<{
     <TouchableOpacity
       activeOpacity={1}
       onPress={onPress}
+      delayPressIn={0}
       onPressIn={pressIn}
       onPressOut={pressOut}
       disabled={disabled || loading}

@@ -6,7 +6,7 @@
  * Body content and images are kept sealed on the database level until the unlock date.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,6 +24,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { FlashList } from '@shopify/flash-list';
 import KamiText from '@shared/ui/atoms/KamiText';
+import KamiLoading from '@shared/ui/atoms/KamiLoading';
 import { FontSize, FontWeight, Radii, Shadows, Space } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
 import { useHomeStore } from '@features/home/store';
@@ -158,7 +159,7 @@ export function FutureScreen({ navigation }: Props) {
     }
   }, [activeSpace, couple?.id]);
 
-  async function loadLetters(page = 1) {
+  const loadLetters = useCallback(async (page = 1) => {
     setLoading(true);
     const r = await futureService.fetchLetters(20, page);
     setLoading(false);
@@ -170,7 +171,7 @@ export function FutureScreen({ navigation }: Props) {
     }
     setLettersPage(page);
     setLettersHasMore(r.data.length === 20);
-  }
+  }, []);
 
   const handleSave = async (
     subject: string,
@@ -254,8 +255,17 @@ export function FutureScreen({ navigation }: Props) {
     }
   };
 
-  const handleOpen = async (l: Letter | CoupleLetter) => {
+  const handleOpen = useCallback(async (l: Letter | CoupleLetter) => {
     if (l.isDraft) {
+      if (l.body) {
+        setEditingDraft({
+          ...l,
+          body: l.body,
+          imageUrls: l.imageUrls || []
+        });
+        setWriteOpen(true);
+        return;
+      }
       setLoading(true);
       const res = activeSpace === 'couple'
         ? await coupleService.fetchCoupleLetterDetails(l.id)
@@ -290,9 +300,9 @@ export function FutureScreen({ navigation }: Props) {
         }
       }
     }
-  };
+  }, [activeSpace, coupleActions, loadLetters]);
 
-  const handleToggleFavorite = async (l: Letter | CoupleLetter) => {
+  const handleToggleFavorite = useCallback(async (l: Letter | CoupleLetter) => {
     const isFav = l.isFavorite || false;
     if (activeSpace === 'couple') {
       const res = await coupleService.toggleCoupleLetterFavorite(l.id, isFav);
@@ -315,9 +325,9 @@ export function FutureScreen({ navigation }: Props) {
         Alert.alert('Kami', res.error);
       }
     }
-  };
+  }, [activeSpace, coupleActions, reading, loadLetters]);
 
-  const handleToggleArchive = async (l: Letter | CoupleLetter) => {
+  const handleToggleArchive = useCallback(async (l: Letter | CoupleLetter) => {
     const isArchived = l.isArchived || false;
     if (activeSpace === 'couple') {
       const res = await coupleActions.toggleLetterArchive(l.id, isArchived);
@@ -339,9 +349,9 @@ export function FutureScreen({ navigation }: Props) {
         Alert.alert('Kami', res.error);
       }
     }
-  };
+  }, [activeSpace, coupleActions, reading, loadLetters]);
 
-  const handleToggleReaction = async (letterId: string, emoji: string) => {
+  const handleToggleReaction = useCallback(async (letterId: string, emoji: string) => {
     if (activeSpace !== 'couple') return;
     const res = await coupleActions.toggleLetterReaction(letterId, emoji);
     if (res.success) {
@@ -353,23 +363,25 @@ export function FutureScreen({ navigation }: Props) {
     } else {
       Alert.alert('Kami', res.error);
     }
-  };
+  }, [activeSpace, coupleActions]);
 
-  const handleDelete = (l: Letter | CoupleLetter) => Alert.alert('Delete letter?', `"${l.subject}"`, [
+  const handleDelete = useCallback((l: Letter | CoupleLetter) => Alert.alert('Delete letter?', `"${l.subject}"`, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: async () => {
-      if (activeSpace === 'couple') {
-        const r = await coupleActions.deleteLetter(l.id);
-        if (!r.success) { Alert.alert('Kami', r.error); }
-      } else {
-        const r = await futureService.deleteLetter(l.id);
-        if (!r.success) { Alert.alert('Kami', r.error); return; }
-        setLetters(prev => prev.filter(x => x.id !== l.id));
+    {
+      text: 'Delete', style: 'destructive', onPress: async () => {
+        if (activeSpace === 'couple') {
+          const r = await coupleActions.deleteLetter(l.id);
+          if (!r.success) { Alert.alert('Kami', r.error); }
+        } else {
+          const r = await futureService.deleteLetter(l.id);
+          if (!r.success) { Alert.alert('Kami', r.error); return; }
+          setLetters(prev => prev.filter(x => x.id !== l.id));
+        }
       }
-    }},
-  ]);
+    },
+  ]), [activeSpace, coupleActions]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     if (activeSpace === 'couple') {
       await coupleActions.loadLetters();
@@ -377,7 +389,7 @@ export function FutureScreen({ navigation }: Props) {
       await loadLetters();
     }
     setRefreshing(false);
-  };
+  }, [activeSpace, coupleActions, loadLetters]);
 
   const currentLetters = activeSpace === 'couple' ? coupleStore.coupleLetters : letters;
 
@@ -437,10 +449,14 @@ export function FutureScreen({ navigation }: Props) {
     }));
   }, [displayRoots, repliesMap]);
 
-  const renderEmpty = () => {
+  const renderEmpty = useCallback(() => {
     const isLoading = (loading && activeSpace === 'personal') || (coupleStore.lettersLoading === 'loading' && activeSpace === 'couple');
     if (isLoading) {
-      return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
+      return (
+        <View style={styles.center}>
+          <KamiLoading emoji="💌" message="Opening your letters..." />
+        </View>
+      );
     }
     if (sortedLetters.length > 0) return null;
     return (
@@ -455,18 +471,18 @@ export function FutureScreen({ navigation }: Props) {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [loading, activeSpace, coupleStore.lettersLoading, sortedLetters.length, colors, styles]);
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (activeSpace === 'couple') {
       coupleActions.loadMoreLetters();
     } else {
       if (loading || !lettersHasMore) return;
       loadLetters(lettersPage + 1);
     }
-  };
+  }, [activeSpace, coupleActions, loading, lettersHasMore, lettersPage, loadLetters]);
 
-  const renderFooter = () => {
+  const renderFooter = useCallback(() => {
     const hasMore = activeSpace === 'couple'
       ? coupleStore.lettersHasMore
       : lettersHasMore;
@@ -482,7 +498,46 @@ export function FutureScreen({ navigation }: Props) {
       );
     }
     return <View style={{ height: Space[8] }} />;
-  };
+  }, [activeSpace, coupleStore.lettersHasMore, lettersHasMore, coupleStore.lettersLoading, loading, listData.length, colors.primary]);
+
+  const renderItem = useCallback(({ item }: { item: any }) => (
+    <View style={styles.threadContainer}>
+      {/* Root Letter bubble */}
+      <LetterCard
+        letter={item.rootLetter}
+        onOpen={() => handleOpen(item.rootLetter)}
+        onDelete={() => handleDelete(item.rootLetter)}
+        onToggleFavorite={handleToggleFavorite}
+        onReact={handleToggleReaction}
+        onReply={() => { setReplyTo(item.rootLetter); setWriteOpen(true); }}
+        activeSpace={activeSpace}
+        currentUser={user}
+      />
+
+      {/* Render nested replies with vertical line */}
+      {item.replies.length > 0 && (
+        <View style={styles.repliesSection}>
+          <View style={[styles.treeLine, { borderColor: colors.primary + '33' }]} />
+          <View style={{ flex: 1, gap: Space[3] }}>
+            {item.replies.map((reply: any) => (
+              <LetterCard
+                key={reply.id}
+                letter={reply}
+                onOpen={() => handleOpen(reply)}
+                onDelete={() => handleDelete(reply)}
+                onToggleFavorite={handleToggleFavorite}
+                onReact={handleToggleReaction}
+                onReply={() => { setReplyTo(reply); setWriteOpen(true); }}
+                activeSpace={activeSpace}
+                currentUser={user}
+                isReply
+              />
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  ), [handleOpen, handleDelete, handleToggleFavorite, handleToggleReaction, activeSpace, user, colors.primary, styles]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
@@ -541,44 +596,7 @@ export function FutureScreen({ navigation }: Props) {
 
       <FlashList
         data={listData}
-        renderItem={({ item }: { item: any }) => (
-          <View style={styles.threadContainer}>
-            {/* Root Letter bubble */}
-            <LetterCard
-              letter={item.rootLetter}
-              onOpen={() => handleOpen(item.rootLetter)}
-              onDelete={() => handleDelete(item.rootLetter)}
-              onToggleFavorite={handleToggleFavorite}
-              onReact={handleToggleReaction}
-              onReply={() => { setReplyTo(item.rootLetter); setWriteOpen(true); }}
-              activeSpace={activeSpace}
-              currentUser={user}
-            />
-
-            {/* Render nested replies with vertical line */}
-            {item.replies.length > 0 && (
-              <View style={styles.repliesSection}>
-                <View style={[styles.treeLine, { borderColor: colors.primary + '33' }]} />
-                <View style={{ flex: 1, gap: Space[3] }}>
-                  {item.replies.map((reply: any) => (
-                    <LetterCard
-                      key={reply.id}
-                      letter={reply}
-                      onOpen={() => handleOpen(reply)}
-                      onDelete={() => handleDelete(reply)}
-                      onToggleFavorite={handleToggleFavorite}
-                      onReact={handleToggleReaction}
-                      onReply={() => { setReplyTo(reply); setWriteOpen(true); }}
-                      activeSpace={activeSpace}
-                      currentUser={user}
-                      isReply
-                    />
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
+        renderItem={renderItem}
         keyExtractor={(item: any) => item.id}
         contentContainerStyle={styles.scroll}
         ListEmptyComponent={renderEmpty}
@@ -619,10 +637,10 @@ export function FutureScreen({ navigation }: Props) {
 }
 
 const getStyles = (colors: any) => StyleSheet.create({
-  root:   { flex: 1, backgroundColor: colors.pageBg },
+  root: { flex: 1, backgroundColor: colors.pageBg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? 40 : Space[2], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '33', backgroundColor: colors.pageBg },
   writeBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: colors.primary + '44' },
-  writePlus:{ fontSize: FontSize.lg, color: colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
+  writePlus: { fontSize: FontSize.lg, color: colors.primary, fontWeight: FontWeight.bold, lineHeight: 22 },
 
   filterScroll: { flexDirection: 'row', paddingHorizontal: Space[5], gap: Space[2], alignItems: 'center' },
   filterTab: { height: 36, paddingHorizontal: Space[4], borderRadius: Radii.full, borderWidth: 1.5, borderColor: colors.border + '55', backgroundColor: colors.cardBg, alignItems: 'center', justifyContent: 'center' },
@@ -631,7 +649,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   scroll: { paddingHorizontal: Space[5], paddingTop: Space[2], gap: Space[4] },
   center: { paddingVertical: Space[10], alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
-  emptyBtn:   { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
+  emptyBtn: { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
   syncStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',

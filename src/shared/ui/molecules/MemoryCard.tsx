@@ -44,6 +44,7 @@ const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onPress, size = 'md' })
     <TouchableOpacity
       activeOpacity={1}
       onPress={onPress}
+      delayPressIn={0}
       onPressIn={onPress ? handlePressIn : undefined}
       onPressOut={onPress ? handlePressOut : undefined}
       disabled={!onPress}

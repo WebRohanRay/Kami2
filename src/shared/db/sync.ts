@@ -245,6 +245,19 @@ export async function enqueueUpload(
     updatedAt: now,
   });
 
+  // Create image_records entry immediately with pending status
+  await db.insert(schema.imageRecords).values({
+    id: uuid(),
+    entityType,
+    entityId,
+    localUri: permanentUri,
+    supabasePath: remotePath,
+    bucketName,
+    syncStatus: 'pending',
+    createdAt: now,
+    updatedAt: now,
+  });
+
   updateStoreSyncState();
 
   return permanentUri;
@@ -350,7 +363,7 @@ function mapSupabaseCoupleLetter(row: any) {
     coupleId: row.couple_id,
     senderId: row.sender_id,
     subject: row.subject,
-    body: row.body,
+    body: row.body || '',
     deliverAt: row.deliver_at,
     imageUrls: typeof row.image_urls === 'string' ? JSON.parse(row.image_urls) : (row.image_urls || []),
     isRead: row.is_read ? 1 : 0,
@@ -643,7 +656,7 @@ function mapSupabaseFutureLetter(row: any) {
     id: row.id,
     userId: row.user_id,
     subject: row.subject,
-    body: row.body,
+    body: row.body || '',
     deliverAt: row.deliver_at,
     imageUrls: typeof row.image_urls === 'string' ? JSON.parse(row.image_urls) : (row.image_urls || []),
     createdAt: row.created_at,
@@ -1373,6 +1386,24 @@ async function processFileUploads() {
         .set({ status: 'uploading', updatedAt: new Date().toISOString() })
         .where(eq(schema.fileUploadQueue.id, row.id));
 
+      // Mark image record as syncing
+      try {
+        await db
+          .update(schema.imageRecords)
+          .set({
+            syncStatus: 'syncing',
+            updatedAt: new Date().toISOString(),
+          })
+          .where(
+            and(
+              eq(schema.imageRecords.entityId, row.entityId),
+              eq(schema.imageRecords.localUri, row.localUri)
+            )
+          );
+      } catch (imgErr) {
+        console.error('[SyncEngine] Failed to update image_records status to syncing:', imgErr);
+      }
+
       const file = new File(ensureAbsoluteUri(row.localUri));
       if (!file.exists) {
         // Source file doesn't exist locally, fail permanently
@@ -1499,10 +1530,24 @@ async function processFileUploads() {
         .set({ status: 'completed', updatedAt: new Date().toISOString() })
         .where(eq(schema.fileUploadQueue.id, row.id));
 
-      // Clean up permanent cached local file
-      const fileToDelete = new File(ensureAbsoluteUri(row.localUri));
-      if (fileToDelete.exists) {
-        fileToDelete.delete();
+      // Update corresponding image_records entry to synced
+      const nowStr = new Date().toISOString();
+      try {
+        await db
+          .update(schema.imageRecords)
+          .set({
+            syncStatus: 'synced',
+            lastSyncedAt: nowStr,
+            updatedAt: nowStr,
+          })
+          .where(
+            and(
+              eq(schema.imageRecords.entityId, row.entityId),
+              eq(schema.imageRecords.localUri, row.localUri)
+            )
+          );
+      } catch (imgErr) {
+        console.error('[SyncEngine] Failed to update image_records on success:', imgErr);
       }
 
     } catch (err) {
@@ -1531,6 +1576,24 @@ async function processFileUploads() {
           })
           .where(eq(schema.fileUploadQueue.id, row.id));
 
+        // Update corresponding image_records entry to failed
+        try {
+          await db
+            .update(schema.imageRecords)
+            .set({
+              syncStatus: 'failed',
+              updatedAt: new Date().toISOString(),
+            })
+            .where(
+              and(
+                eq(schema.imageRecords.entityId, row.entityId),
+                eq(schema.imageRecords.localUri, row.localUri)
+              )
+            );
+        } catch (imgErr) {
+          console.error('[SyncEngine] Failed to update image_records on discarded:', imgErr);
+        }
+
         // Clean up permanent cached local file
         try {
           const fileToDelete = new File(ensureAbsoluteUri(row.localUri));
@@ -1555,6 +1618,24 @@ async function processFileUploads() {
             updatedAt: new Date().toISOString(),
           })
           .where(eq(schema.fileUploadQueue.id, row.id));
+
+        // Update corresponding image_records entry to failed (so UI knows it's failed for now, though it will retry)
+        try {
+          await db
+            .update(schema.imageRecords)
+            .set({
+              syncStatus: 'failed',
+              updatedAt: new Date().toISOString(),
+            })
+            .where(
+              and(
+                eq(schema.imageRecords.entityId, row.entityId),
+                eq(schema.imageRecords.localUri, row.localUri)
+              )
+            );
+        } catch (imgErr) {
+          console.error('[SyncEngine] Failed to update image_records on failure:', imgErr);
+        }
       }
     }
   }

@@ -12,7 +12,7 @@ import {
 import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 import { uuid } from '@shared/lib/uuid';
 import type { Result } from '@shared/types/result';
-import { resolveSignedUrls, getRelativePathFromSignedUrl } from '@shared/lib/storage';
+import { getRelativePathFromSignedUrl } from '@shared/lib/storage';
 
 export function useCouple() {
   const user = useAuthStore(s => s.user);
@@ -71,10 +71,6 @@ export function useCouple() {
           userAvatarUrl: c.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl,
         }));
 
-        const localPickerUris = entry.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
-        const remotePaths = entry.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
-        const resolvedRemote = await resolveSignedUrls('couple_journal_images', remotePaths);
-
         return {
           id: entry.id,
           coupleId: entry.coupleId,
@@ -82,7 +78,7 @@ export function useCouple() {
           title: entry.title,
           body: entry.body,
           moodId: entry.moodId,
-          imageUrls: [...localPickerUris, ...resolvedRemote],
+          imageUrls: entry.imageUrls,
           tags: entry.tags,
           entryDate: entry.entryDate,
           isPinned: !!entry.isPinned,
@@ -166,16 +162,12 @@ export function useCouple() {
       const partner = s.partner;
 
       const mapped = await Promise.all(local.map(async (m) => {
-        const localPickerUris = m.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
-        const remotePaths = m.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
-        const resolvedRemote = await resolveSignedUrls('couple_memory_images', remotePaths);
-
         return {
           id: m.id,
           coupleId: m.coupleId,
           title: m.title,
           description: m.description,
-          imageUrls: [...localPickerUris, ...resolvedRemote],
+          imageUrls: m.imageUrls,
           memoryDate: m.memoryDate,
           tags: m.tags,
           createdAt: m.createdAt,
@@ -217,10 +209,6 @@ export function useCouple() {
       const partner = s.partner;
 
       const mapped = await Promise.all(local.map(async (l) => {
-        const localPickerUris = l.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
-        const remotePaths = l.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
-        const resolvedRemote = await resolveSignedUrls('couple_letter_images', remotePaths);
-
         return {
           id: l.id,
           coupleId: l.coupleId,
@@ -230,7 +218,7 @@ export function useCouple() {
           isUnlocked: new Date(l.deliverAt).getTime() <= Date.now(),
           createdAt: l.createdAt,
           body: l.body,
-          imageUrls: [...localPickerUris, ...resolvedRemote],
+          imageUrls: l.imageUrls,
           senderNickname: l.senderId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
           isRead: !!l.isRead,
           isFavorite: !!l.isFavorite,

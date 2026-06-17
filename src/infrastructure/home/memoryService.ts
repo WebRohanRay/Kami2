@@ -1,5 +1,5 @@
 import { supabase } from '@shared/lib/supabase';
-import { resolveSignedUrls, deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
+import { deleteImages, getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import type { Memory, CreateMemoryInput, UpdateMemoryInput, Result } from '@features/home/types';
 import { useAuthStore } from '@features/auth';
 import { memoryRepo } from '@shared/db/repo';
@@ -45,11 +45,6 @@ export async function fetchMemories(searchQuery?: string, limit = 15, page = 1):
 
     const mapped: Memory[] = [];
     for (const r of rows) {
-      const localPickerUris = r.imageUrls.filter((u: string) => u.startsWith('file://') || u.startsWith('content://'));
-      const remotePaths = r.imageUrls.filter((u: string) => !u.startsWith('file://') && !u.startsWith('content://'));
-
-      const resolvedRemote = await resolveSignedUrls('memory_images', remotePaths);
-
       mapped.push({
         id: r.id,
         userId: r.userId,
@@ -57,7 +52,7 @@ export async function fetchMemories(searchQuery?: string, limit = 15, page = 1):
         body: r.body || '',
         emoji: r.emoji,
         mood: r.mood,
-        imageUrls: [...localPickerUris, ...resolvedRemote],
+        imageUrls: r.imageUrls,
         memoryDate: r.memoryDate,
         createdAt: r.createdAt,
       });

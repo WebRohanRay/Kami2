@@ -39,6 +39,7 @@ export const SettingRow: React.FC<SettingRowProps> = ({
     <TouchableOpacity
       activeOpacity={onPress ? 0.7 : 1}
       onPress={onPress}
+      delayPressIn={0}
       onPressIn={onPress ? onPressIn : undefined}
       onPressOut={onPress ? onPressOut : undefined}
       disabled={!onPress}

@@ -128,6 +128,7 @@ export const LetterCard: React.FC<LetterCardProps> = ({
             }
             onOpen();
           }}
+          delayPressIn={0}
           onPressIn={() => Animated.spring(sc, { toValue: 0.98, useNativeDriver: true, speed: 60 }).start()}
           onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
         >

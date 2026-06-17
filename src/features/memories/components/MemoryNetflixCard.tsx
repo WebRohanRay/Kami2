@@ -83,6 +83,7 @@ export const MemoryNetflixCard: React.FC<MemoryNetflixCardProps> = ({
                   <KamiImage
                     src={url}
                     thumbnailSrc={thumbUrl}
+                    bucket={'coupleId' in memory ? 'couple_memory_images' : 'memory_images'}
                     style={styles.netflixCardPhoto}
                   />
                 </Animated.View>

@@ -12,9 +12,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
   StatusBar as RNStatusBar,
 } from 'react-native';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import KamiText from '@shared/ui/atoms/KamiText';
 import { FontSize, FontWeight, Radii, Space, Opacity } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
@@ -341,7 +341,7 @@ export const WriteModal: React.FC<WriteModalProps> = ({
                 {localUris.map((uri, idx) => (
                   <View key={idx} style={wm.photoWrap}>
                     <TouchableOpacity onPress={() => setZoomImageUri(uri)} activeOpacity={0.9}>
-                      <Image source={{ uri }} style={wm.attachedImage} />
+                      <KamiImage src={uri} bucket={activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images'} style={wm.attachedImage} />
                     </TouchableOpacity>
                     <TouchableOpacity style={wm.removePhotoBadge} onPress={() => handleRemovePhoto(idx)}>
                       <Text style={{ color: '#fff', fontSize: 10 }}>✕</Text>

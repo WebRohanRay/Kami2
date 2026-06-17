@@ -29,6 +29,21 @@ export function HomeScreen({ navigation }: Props) {
   const styles = getStyles(colors);
   const dashboard = useHomeDashboard(navigation);
 
+  const [showFallback, setShowFallback] = React.useState(false);
+  const activeSpace = dashboard.user?.activeSpace;
+  const hasCouple = !!dashboard.couple;
+
+  React.useEffect(() => {
+    if (activeSpace === 'couple' && !hasCouple) {
+      const timer = setTimeout(() => {
+        setShowFallback(true);
+      }, 5000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowFallback(false);
+    }
+  }, [activeSpace, hasCouple]);
+
   if (dashboard.user?.activeSpace === 'couple') {
     if (!dashboard.couple) {
       return (
@@ -37,12 +52,56 @@ export function HomeScreen({ navigation }: Props) {
           <View style={{ alignItems: 'center', padding: Space[6], gap: Space[4] }}>
             <Text style={{ fontSize: 48 }}>🌸</Text>
             <KamiText variant="subtitle" bold color={colors.primaryDark} align="center">
-              Opening your shared space... 💖
+              {showFallback 
+                ? "Unable to open your shared space right now. Please check your connection or switch to your personal space." 
+                : "Opening your shared space... 💖"}
             </KamiText>
-            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: Space[2] }} />
+            {!showFallback && <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: Space[2] }} />}
+            
+            {showFallback && (
+              <>
+                <TouchableOpacity
+                  style={{
+                    marginTop: Space[4],
+                    paddingVertical: Space[2],
+                    paddingHorizontal: Space[4],
+                    borderRadius: Radii.button,
+                    backgroundColor: colors.primary,
+                  }}
+                  onPress={async () => {
+                    setShowFallback(false);
+                    await dashboard.handleRefresh();
+                  }}
+                >
+                  <KamiText variant="body" color={colors.textOnPrimary} bold>
+                    Retry Connection
+                  </KamiText>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    marginTop: Space[2],
+                    paddingVertical: Space[2],
+                    paddingHorizontal: Space[4],
+                    borderRadius: Radii.button,
+                    borderWidth: 1,
+                    borderColor: colors.primary + '33',
+                    backgroundColor: colors.primary + '08',
+                  }}
+                  onPress={async () => {
+                    await dashboard.updateProfile({ activeSpace: 'personal' });
+                  }}
+                >
+                  <KamiText variant="body" color={colors.primary} bold>
+                    Switch to Personal Space
+                  </KamiText>
+                </TouchableOpacity>
+              </>
+            )}
+
             <TouchableOpacity
               style={{
-                marginTop: Space[4],
+                marginTop: showFallback ? Space[2] : Space[4],
                 paddingVertical: Space[2],
                 paddingHorizontal: Space[4],
                 borderRadius: Radii.button,

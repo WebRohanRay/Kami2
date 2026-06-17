@@ -94,6 +94,7 @@ const KamiButton: React.FC<KamiButtonProps> = ({
     <TouchableOpacity
       activeOpacity={1}
       disabled={disabled || loading}
+      delayPressIn={0}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       style={[

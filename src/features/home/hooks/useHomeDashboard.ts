@@ -4,7 +4,7 @@ import { useAuthStore, useAuthActions } from '@features/auth';
 import { useHome } from './useHome';
 import { useHomeStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
-import { resolveSignedUrls } from '@shared/lib/storage';
+import { resolveImageUri } from '@shared/lib/storage/imageResolver';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useCouple } from '@features/couple/hooks/useCouple';
 import { broadcastPartnerAction } from '@features/couple/services/broadcastService';
@@ -289,17 +289,13 @@ export function useHomeDashboard(navigation: any) {
   useEffect(() => {
     const rawBgUrl = user?.activeSpace === 'couple' ? couple?.heroBgUrl : user?.heroBgUrl;
     if (rawBgUrl) {
-      if (rawBgUrl.startsWith('http')) {
-        setResolvedHeroBg(rawBgUrl);
-      } else {
-        resolveSignedUrls('avatars', [rawBgUrl])
-          .then((urls) => {
-            if (urls && urls[0]) {
-              setResolvedHeroBg(urls[0]);
-            }
-          })
-          .catch((err) => console.error('Failed to resolve hero background URL:', err));
-      }
+      resolveImageUri(rawBgUrl, 'avatars')
+        .then((result) => {
+          if (result.uri) {
+            setResolvedHeroBg(result.uri);
+          }
+        })
+        .catch((err) => console.error('Failed to resolve hero background URL:', err));
     } else {
       setResolvedHeroBg(null);
     }

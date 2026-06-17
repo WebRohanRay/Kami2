@@ -8,7 +8,7 @@ import { FontFamily, FontSize, FontWeight, Radii, Shadows, Space } from '@shared
 import { navigationRef } from '@core/navigation/navigationRef';
 import { triggerLocalNotificationAsync } from '@infrastructure/notifications/notificationService';
 import { resolveAvatarUrl, fetchProfileNickname } from '@infrastructure/profile';
-import { resolveSignedUrls } from '@shared/lib/storage';
+// resolveSignedUrls removed to load raw URLs from SQLite instantly
 import type { 
   CoupleLetter, CoupleJournal, CoupleMemory, CoupleGoal, CoupleAnswer, RelationshipEvent, CoupleComment 
 } from '../types';
@@ -79,9 +79,7 @@ export function CoupleRealtimeListener() {
             store.removeCoupleLetterFromList(payload.old.id);
           } else {
             const newRow = payload.new as any;
-            const resolvedImages = newRow.image_urls && newRow.image_urls.length > 0 
-              ? await resolveSignedUrls('couple_letter_images', newRow.image_urls) 
-              : [];
+            const resolvedImages = newRow.image_urls || [];
             const mapped: CoupleLetter = {
               id: newRow.id,
               coupleId: newRow.couple_id,
@@ -177,9 +175,7 @@ export function CoupleRealtimeListener() {
             store.removeCoupleJournalFromList(payload.old.id);
           } else {
             const newRow = payload.new as any;
-            const resolvedImages = newRow.image_urls && newRow.image_urls.length > 0
-              ? await resolveSignedUrls('couple_journal_images', newRow.image_urls)
-              : [];
+            const resolvedImages = newRow.image_urls || [];
             const isMe = newRow.user_id === user?.id;
             const mapped: CoupleJournal = {
               id: newRow.id,
@@ -449,9 +445,7 @@ export function CoupleRealtimeListener() {
             store.removeCoupleMemoryFromList(payload.old.id);
           } else {
             const newRow = payload.new as any;
-            const resolvedImages = newRow.image_urls && newRow.image_urls.length > 0
-              ? await resolveSignedUrls('couple_memory_images', newRow.image_urls)
-              : [];
+            const resolvedImages = newRow.image_urls || [];
             const isMe = newRow.last_edited_by === user?.id;
             const mapped: CoupleMemory = {
               id: newRow.id,

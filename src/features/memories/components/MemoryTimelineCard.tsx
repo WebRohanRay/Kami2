@@ -71,6 +71,7 @@ export const MemoryTimelineCard: React.FC<MemoryTimelineCardProps> = ({
         <TouchableOpacity
           activeOpacity={1}
           onPress={onPressCard}
+          delayPressIn={0}
           onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
           onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
         >
@@ -111,6 +112,7 @@ export const MemoryTimelineCard: React.FC<MemoryTimelineCardProps> = ({
                             <KamiImage
                               src={url}
                               thumbnailSrc={thumbUrl}
+                              bucket={'coupleId' in memory ? 'couple_memory_images' : 'memory_images'}
                               style={styles.photo}
                             />
                           </TouchableOpacity>

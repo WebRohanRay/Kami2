@@ -25,6 +25,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { FlashList } from '@shopify/flash-list';
 import KamiText from '@shared/ui/atoms/KamiText';
+import KamiLoading from '@shared/ui/atoms/KamiLoading';
 import { FontSize, Radii, Shadows, Space } from '@shared/constants';
 import { useAuthStore } from '@features/auth';
 import { useHomeStore } from '@features/home/store';
@@ -64,7 +65,7 @@ interface GalaxyStarNodeProps {
   styles: any;
 }
 
-const GalaxyStarNode: React.FC<GalaxyStarNodeProps> = ({ memory, coords, opacity, glowColor, onPress, styles }) => {
+const GalaxyStarNode = React.memo<GalaxyStarNodeProps>(({ memory, coords, opacity, glowColor, onPress, styles }) => {
   const starScale = useRef(new Animated.Value(1)).current;
   const emojiStr = 'emoji' in memory ? (memory as any).emoji : '🌸';
 
@@ -100,14 +101,14 @@ const GalaxyStarNode: React.FC<GalaxyStarNodeProps> = ({ memory, coords, opacity
       </TouchableOpacity>
     </FloatingStarWrapper>
   );
-};
+});
 
 interface ConstellationLinesProps {
   stars: (Memory | CoupleMemory)[];
   styles: any;
 }
 
-const ConstellationLines: React.FC<ConstellationLinesProps> = ({ stars, styles }) => {
+const ConstellationLines = React.memo<ConstellationLinesProps>(({ stars, styles }) => {
   if (stars.length < 2) return null;
 
   const canvasWidth = screenWidth;
@@ -147,7 +148,9 @@ const ConstellationLines: React.FC<ConstellationLinesProps> = ({ stars, styles }
       })}
     </View>
   );
-};
+});
+
+const renderSeparator = () => <View style={{ height: Space[3] }} />;
 
 export function MemoriesScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -339,31 +342,33 @@ export function MemoriesScreen({ navigation }: Props) {
     }
   };
 
-  const handleDelete = (m: Memory | CoupleMemory) => Alert.alert('Delete memory?', `"${m.title}"`, [
+  const handleDelete = useCallback((m: Memory | CoupleMemory) => Alert.alert('Delete memory?', `"${m.title}"`, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: async () => {
-      if (activeSpace === 'couple') {
-        const r = await coupleActions.deleteMemory(m.id);
-        if (!r.success) { Alert.alert('Kami', r.error); }
-      } else {
-        const r = await memoryService.deleteMemory(m.id);
-        if (!r.success) { Alert.alert('Kami', r.error); return; }
-        setMemories(prev => prev.filter(x => x.id !== m.id));
+    {
+      text: 'Delete', style: 'destructive', onPress: async () => {
+        if (activeSpace === 'couple') {
+          const r = await coupleActions.deleteMemory(m.id);
+          if (!r.success) { Alert.alert('Kami', r.error); }
+        } else {
+          const r = await memoryService.deleteMemory(m.id);
+          if (!r.success) { Alert.alert('Kami', r.error); return; }
+          setMemories(prev => prev.filter(x => x.id !== m.id));
+        }
       }
-    }},
-  ]);
+    },
+  ]), [activeSpace, coupleActions]);
 
   const isListRefreshing = activeSpace === 'couple'
     ? coupleStore.memoriesLoading === 'refreshing'
     : refreshing;
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     if (activeSpace === 'couple') {
       await coupleActions.loadMemories();
     } else {
       await refresh();
     }
-  };
+  }, [activeSpace, coupleActions, refresh]);
 
   const filteredCoupleMemories = useMemo(() => {
     return coupleMemories.filter((m: CoupleMemory) => {
@@ -388,7 +393,7 @@ export function MemoriesScreen({ navigation }: Props) {
 
   const paginatedMemories = recentMemories;
 
-  const renderItem = ({ item, index }: { item: Memory | CoupleMemory; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: Memory | CoupleMemory; index: number }) => {
     return (
       <MemoryTimelineCard
         memory={item}
@@ -399,16 +404,20 @@ export function MemoriesScreen({ navigation }: Props) {
         onDelete={() => handleDelete(item)}
       />
     );
-  };
+  }, [recentMemories.length, paginatedMemories.length, handleDelete]);
 
-  const renderHeader = () => {
+  const renderHeader = useCallback(() => {
     const showLoading = (loading && activeSpace === 'personal' && memories.length === 0) ||
       (coupleStore.memoriesLoading === 'loading' && activeSpace === 'couple' && coupleMemories.length === 0);
     if (!showLoading) return null;
-    return <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>;
-  };
+    return (
+      <View style={styles.center}>
+        <KamiLoading emoji="📸" message="Finding your memories..." />
+      </View>
+    );
+  }, [loading, activeSpace, memories.length, coupleStore.memoriesLoading, coupleMemories.length, colors.primary, styles.center]);
 
-  const renderEmpty = () => {
+  const renderEmpty = useCallback(() => {
     const showLoading = (loading && activeSpace === 'personal' && memories.length === 0) ||
       (coupleStore.memoriesLoading === 'loading' && activeSpace === 'couple' && coupleMemories.length === 0);
     if (showLoading) return null;
@@ -440,17 +449,17 @@ export function MemoriesScreen({ navigation }: Props) {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [loading, activeSpace, memories.length, coupleStore.memoriesLoading, coupleMemories.length, colors, search, styles.emptyState, styles.emptyBtn]);
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (activeSpace === 'couple') {
       coupleActions.loadMoreMemories();
     } else {
       loadMore();
     }
-  };
+  }, [activeSpace, coupleActions, loadMore]);
 
-  const renderFooter = () => {
+  const renderFooter = useCallback(() => {
     const hasMore = activeSpace === 'couple'
       ? coupleStore.memoriesHasMore
       : memoriesHasMore;
@@ -466,7 +475,7 @@ export function MemoriesScreen({ navigation }: Props) {
       );
     }
     return <View style={{ height: Space[8] }} />;
-  };
+  }, [activeSpace, coupleStore.memoriesHasMore, memoriesHasMore, loading, coupleStore.memoriesLoading, recentMemories.length, colors.primary]);
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.pageBg }]}>
       <StatusBar style={viewMode === 'galaxy' ? 'light' : 'dark'} />
@@ -576,7 +585,7 @@ export function MemoriesScreen({ navigation }: Props) {
                   // Determine starlight colors
                   const moodStr = 'mood' in m ? m.mood : null;
                   const emojiStr = 'emoji' in m ? (m as any).emoji : '🌸';
-                  
+
                   const getGlowColor = () => {
                     if (moodStr) {
                       if (['😍', '❤️', '😘', '🥰'].some(item => moodStr.includes(item))) return 'rgba(244, 160, 181, 0.6)'; // Pink glow
@@ -587,7 +596,7 @@ export function MemoriesScreen({ navigation }: Props) {
                     if (emojiStr === '🌊' || emojiStr === '🌙' || emojiStr === '✨') return 'rgba(56, 189, 248, 0.6)';
                     return 'rgba(252, 211, 77, 0.65)'; // Golden starlight
                   };
-                  
+
                   const glowColor = getGlowColor();
 
                   return (
@@ -651,7 +660,7 @@ export function MemoriesScreen({ navigation }: Props) {
           ListHeaderComponent={renderHeader}
           ListFooterComponent={renderFooter}
           ListEmptyComponent={renderEmpty}
-          ItemSeparatorComponent={() => <View style={{ height: Space[3] }} />}
+          ItemSeparatorComponent={renderSeparator}
           contentContainerStyle={{ paddingHorizontal: Space[5], paddingTop: Space[2] }}
           refreshControl={<RefreshControl refreshing={isListRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
           onEndReached={handleLoadMore}
@@ -675,14 +684,14 @@ export function MemoriesScreen({ navigation }: Props) {
 }
 
 const getStyles = (colors: any) => StyleSheet.create({
-  root:   { flex: 1, backgroundColor: colors.pageBg },
+  root: { flex: 1, backgroundColor: colors.pageBg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Space[5], paddingTop: Platform.OS === 'android' ? 40 : Space[4], paddingBottom: Space[4], borderBottomWidth: 1, borderBottomColor: colors.border + '33', backgroundColor: colors.pageBg },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: Space[1], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[4], paddingVertical: Space[2], borderWidth: 1.5, borderColor: colors.primary + '44' },
-  addPlus:{ fontSize: 18, color: colors.primary, fontWeight: 'bold', lineHeight: 22 },
+  addPlus: { fontSize: 18, color: colors.primary, fontWeight: 'bold', lineHeight: 22 },
 
   searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: Space[5], marginTop: Space[4], paddingHorizontal: Space[3], backgroundColor: colors.cardBg, borderRadius: Radii.input, borderWidth: 1, borderColor: colors.border + '88', ...Shadows.sm },
-  searchIcon:{ fontSize: FontSize.sm, marginRight: Space[2] },
-  searchInput:{ flex: 1, height: 44, fontSize: FontSize.base, color: colors.textPrimary },
+  searchIcon: { fontSize: FontSize.sm, marginRight: Space[2] },
+  searchInput: { flex: 1, height: 44, fontSize: FontSize.base, color: colors.textPrimary },
 
   viewToggleRow: { flexDirection: 'row', marginHorizontal: Space[5], marginVertical: Space[3], gap: Space[2] },
   toggleBtn: { flex: 1, height: 38, borderRadius: Radii.full, borderWidth: 1.5, borderColor: colors.border + '55', backgroundColor: colors.cardBg, alignItems: 'center', justifyContent: 'center' },
@@ -702,7 +711,7 @@ const getStyles = (colors: any) => StyleSheet.create({
 
   center: { paddingVertical: Space[10], alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: Space[10] },
-  emptyBtn:   { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
+  emptyBtn: { marginTop: Space[4], backgroundColor: colors.primary + '18', borderRadius: Radii.full, paddingHorizontal: Space[5], paddingVertical: Space[3], borderWidth: 1.5, borderColor: colors.primary + '44' },
   syncStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',

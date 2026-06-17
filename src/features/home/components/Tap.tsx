@@ -15,6 +15,7 @@ export const Tap: React.FC<TapProps> = ({ onPress, style, children }) => {
       activeOpacity={1}
       onPress={onPress}
       disabled={!onPress}
+      delayPressIn={0}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >

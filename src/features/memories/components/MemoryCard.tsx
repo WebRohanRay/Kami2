@@ -31,6 +31,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onPressCard, onD
     <TouchableOpacity
       activeOpacity={1}
       onPress={onPressCard}
+      delayPressIn={0}
       onPressIn={() => Animated.spring(sc, { toValue: 0.97, useNativeDriver: true, speed: 60 }).start()}
       onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 40 }).start()}
     >
@@ -73,6 +74,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({ memory, onPressCard, onD
                     key={i}
                     src={url}
                     thumbnailSrc={thumbUrl}
+                    bucket="memory_images"
                     style={styles.photo}
                   />
                 );
