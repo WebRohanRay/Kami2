@@ -75,8 +75,7 @@ src/features/myFeature/
 
 | Alias            | Points to               |
 |------------------|-------------------------|
-| `@features/*`    | src/features/*          |
-| `@shared/*`      | src/shared/*            |
+| `@features/*`    | src/features/*          || `@shared/*`      | src/shared/*            |
 | `@infrastructure/*` | src/infrastructure/* |
 | `@app/*`         | src/app/*               |
 | `@assets/*`      | assets/*                |
