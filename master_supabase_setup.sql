@@ -268,6 +268,7 @@ CREATE TABLE public.couples (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name                TEXT,
   anniversary_date    DATE,
+  hero_bg_url         TEXT,
   pending_deletion    BOOLEAN DEFAULT FALSE,
   delete_at           TIMESTAMPTZ,
   creator_id          UUID DEFAULT auth.uid() REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -961,12 +962,24 @@ ON CONFLICT (id) DO UPDATE SET
 -- Storage security policies
 DROP POLICY IF EXISTS "Users can upload own avatar" ON storage.objects;
 CREATE POLICY "Users can upload own avatar" ON storage.objects FOR INSERT WITH CHECK (
-  bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND
+      public.is_couple_member(((storage.foldername(name))[1])::uuid)
+    )
+  )
 );
 
 DROP POLICY IF EXISTS "Users can update own avatar" ON storage.objects;
 CREATE POLICY "Users can update own avatar" ON storage.objects FOR UPDATE USING (
-  bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND
+      public.is_couple_member(((storage.foldername(name))[1])::uuid)
+    )
+  )
 );
 
 DROP POLICY IF EXISTS "Users can read own avatar" ON storage.objects;
@@ -975,14 +988,23 @@ CREATE POLICY "Users can read own avatar" ON storage.objects FOR SELECT USING (
     auth.uid()::text = (storage.foldername(name))[1] OR 
     (
       (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND 
-      public.is_partner_of(((storage.foldername(name))[1])::uuid)
+      (
+        public.is_partner_of(((storage.foldername(name))[1])::uuid) OR
+        public.is_couple_member(((storage.foldername(name))[1])::uuid)
+      )
     )
   )
 );
 
 DROP POLICY IF EXISTS "Users can delete own avatar" ON storage.objects;
 CREATE POLICY "Users can delete own avatar" ON storage.objects FOR DELETE USING (
-  bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]
+  bucket_id = 'avatars' AND (
+    auth.uid()::text = (storage.foldername(name))[1] OR
+    (
+      (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND
+      public.is_couple_member(((storage.foldername(name))[1])::uuid)
+    )
+  )
 );
 
 -- Journal storage policies

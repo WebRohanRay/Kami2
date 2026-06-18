@@ -15,6 +15,9 @@ import {
   Lora_500Medium,
   Lora_600SemiBold,
 } from '@expo-google-fonts/lora';
+import {
+  Caveat_400Regular,
+} from '@expo-google-fonts/caveat';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -28,6 +31,7 @@ export default function App() {
     'Lora-Regular': Lora_400Regular,
     'Lora-Medium': Lora_500Medium,
     'Lora-SemiBold': Lora_600SemiBold,
+    'Caveat-Regular': Caveat_400Regular,
   });
 
   useEffect(() => {

@@ -479,6 +479,7 @@ export const Sizing = {
 export const FontFamily = {
   display: 'Lora-Regular',
   body: 'PlusJakartaSans-Regular',
+  handwriting: 'Caveat-Regular',
 } as const;
 
 export const LineHeight = {

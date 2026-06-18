@@ -7,12 +7,14 @@ import {
   coupleJournalRepo, 
   coupleMemoryRepo, 
   coupleGoalRepo, 
-  coupleCommentRepo 
+  coupleCommentRepo,
+  coupleCandidRepo,
 } from '@shared/db/repo';
 import { enqueueMutation, enqueueUpload, processSyncQueue } from '@shared/db/sync';
 import { uuid } from '@shared/lib/uuid';
 import type { Result } from '@shared/types/result';
 import { getRelativePathFromSignedUrl } from '@shared/lib/storage';
+import * as candidService from '../services/candidService';
 
 export function useCouple() {
   const user = useAuthStore(s => s.user);
@@ -257,6 +259,64 @@ export function useCouple() {
     s.setEventsLoading('idle');
   }, []);
 
+  const loadCandids = useCallback(async (page = 1) => {
+    const s = store.getState();
+    if (!s.couple) return;
+    s.setCandidsLoading('loading');
+    try {
+      const { candids, hasMore } = await candidService.fetchCandidsPaginated(s.couple.id, page, 20);
+      
+      // Resolve remote Supabase paths to displayable signed URLs/local files
+      const { resolveImageBatch } = await import('@shared/lib/storage/imageResolver');
+      const pathsToResolve: string[] = [];
+      candids.forEach(c => {
+        if (c.imagePath) pathsToResolve.push(c.imagePath);
+        if (c.thumbPath) pathsToResolve.push(c.thumbPath);
+      });
+      
+      const resolved = await resolveImageBatch(pathsToResolve, 'couple_candid_images');
+      
+      const currentUser = useAuthStore.getState().user;
+      const partner = s.partner;
+      const mapped = candids.map(c => ({
+        ...c,
+        imagePath: resolved[c.imagePath]?.uri || c.imagePath,
+        thumbPath: (c.thumbPath && resolved[c.thumbPath]?.uri) || c.thumbPath || null,
+        senderNickname: c.senderId === currentUser?.id
+          ? (currentUser?.nickname || 'You')
+          : (partner?.nickname || 'Partner'),
+      }));
+      
+      if (page === 1) {
+        s.setCandids(mapped, currentUser?.id || '');
+      } else {
+        s.setCandids([...s.candids, ...mapped], currentUser?.id || '');
+      }
+      s.setCandidsPage(page);
+      s.setCandidsHasMore(hasMore);
+    } catch (err) {
+      console.error('[loadCandids] Failed:', err);
+    }
+    s.setCandidsLoading('idle');
+  }, []);
+
+  const loadMoreCandids = useCallback(async () => {
+    const s = store.getState();
+    if (s.candidsLoading === 'loading' || !s.candidsHasMore) return;
+    await loadCandids(s.candidsPage + 1);
+  }, [loadCandids]);
+
+  const loadCandidStreak = useCallback(async () => {
+    const s = store.getState();
+    if (!s.couple) return;
+    try {
+      const streak = await candidService.fetchCandidStreak(s.couple.id);
+      s.setCandidStreak(streak);
+    } catch (err) {
+      console.error('[loadCandidStreak] Failed:', err);
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     const metaRes = await loadCoupleMeta();
     if (metaRes.success && metaRes.data.couple) {
@@ -276,9 +336,11 @@ export function useCouple() {
         loadMemories(1),
         loadLetters(1),
         loadEvents(),
+        loadCandids(),
+        loadCandidStreak(),
       ]);
     }
-  }, [loadCoupleMeta, loadEvents, loadJournals, loadGoals, loadMemories, loadLetters]);
+  }, [loadCoupleMeta, loadEvents, loadJournals, loadGoals, loadMemories, loadLetters, loadCandids, loadCandidStreak]);
 
   return {
     loadAll,
@@ -293,6 +355,9 @@ export function useCouple() {
     loadLetters,
     loadMoreLetters,
     loadEvents,
+    loadCandids,
+    loadMoreCandids,
+    loadCandidStreak,
     submitAnswer: async (qId: string, cId: string, response: string): Promise<Result<any>> => {
       const r = await coupleService.submitDailyAnswer(qId, cId, response);
       if (r.success) {

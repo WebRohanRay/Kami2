@@ -3,7 +3,7 @@ import { uuid } from '@shared/lib/uuid';
 import type { 
   Couple, CoupleInvitation, CoupleJournal, CoupleComment, CoupleReaction, 
   CoupleMemory, CoupleGoal, CoupleLetter, CoupleDailyQuestion, CoupleAnswer, 
-  RelationshipEvent 
+  RelationshipEvent, CoupleCandid, CoupleCandidStreak 
 } from '../types';
 
 type LoadingState = 'idle' | 'loading' | 'refreshing' | 'error';
@@ -67,10 +67,20 @@ interface CoupleState {
   goalsHasMore: boolean;
   lettersPage: number;
   lettersHasMore: boolean;
+  candidsPage: number;
+  candidsHasMore: boolean;
 
   // ── Calendar Events ─────────────────────────────────────
   relationshipEvents: RelationshipEvent[];
   eventsLoading: LoadingState;
+
+  // ── Random Candids ───────────────────────────────
+  candids: CoupleCandid[];
+  unseenCandidCount: number;
+  candidsLoading: LoadingState;
+  candidStreak: CoupleCandidStreak | null;
+  showFirstCandidCeremony: boolean;
+  firstCandidImagePath: string | null;
 
   // ── Daily Question & Answers ────────────────────────────
   todayQuestion: CoupleDailyQuestion | null;
@@ -93,6 +103,17 @@ interface CoupleState {
   clearMyActiveAction: (action: PartnerActionType) => boolean;
   realtimeChannel: any | null;
   setRealtimeChannel: (ch: any | null) => void;
+
+  // ── Candid Actions ──────────────────────────────
+  setCandids: (c: CoupleCandid[], myUserId: string) => void;
+  prependCandid: (c: CoupleCandid, myUserId: string) => void;
+  updateCandidInList: (c: CoupleCandid, myUserId: string) => void;
+  removeCandidFromList: (id: string, myUserId: string) => void;
+  markCandidSeen: (id: string, myUserId: string) => void;
+  setCandidsLoading: (s: LoadingState) => void;
+  setCandidStreak: (s: CoupleCandidStreak | null) => void;
+  triggerFirstCandidCeremony: (imagePath: string) => void;
+  dismissFirstCandidCeremony: () => void;
 
   // ── Setters ─────────────────────────────────────────────
   setCouple: (c: Couple | null) => void;
@@ -135,6 +156,8 @@ interface CoupleState {
   setGoalsHasMore: (hm: boolean) => void;
   setLettersPage: (p: number) => void;
   setLettersHasMore: (hm: boolean) => void;
+  setCandidsPage: (p: number) => void;
+  setCandidsHasMore: (hm: boolean) => void;
 
   setRelationshipEvents: (e: RelationshipEvent[]) => void;
   prependRelationshipEvent: (e: RelationshipEvent) => void;
@@ -179,6 +202,8 @@ const initial = {
   goalsHasMore: true,
   lettersPage: 1,
   lettersHasMore: true,
+  candidsPage: 1,
+  candidsHasMore: true,
 
   relationshipEvents: [],
   eventsLoading: 'idle' as LoadingState,
@@ -192,6 +217,13 @@ const initial = {
   partnerAction: 'idle' as PartnerActionType,
   myActiveAction: 'idle' as PartnerActionType,
   realtimeChannel: null,
+
+  candids: [],
+  unseenCandidCount: 0,
+  candidsLoading: 'idle' as LoadingState,
+  candidStreak: null,
+  showFirstCandidCeremony: false,
+  firstCandidImagePath: null,
 };
 
 export const useCoupleStore = create<CoupleState>((set) => ({
@@ -253,6 +285,8 @@ export const useCoupleStore = create<CoupleState>((set) => ({
   setGoalsHasMore: (hm) => set({ goalsHasMore: hm }),
   setLettersPage: (p) => set({ lettersPage: p }),
   setLettersHasMore: (hm) => set({ lettersHasMore: hm }),
+  setCandidsPage: (p) => set({ candidsPage: p }),
+  setCandidsHasMore: (hm) => set({ candidsHasMore: hm }),
 
   setRelationshipEvents: (e) => set({ relationshipEvents: e }),
   prependRelationshipEvent: (e) => set((s) => ({ relationshipEvents: [...s.relationshipEvents, e].sort((a, b) => a.eventDate.localeCompare(b.eventDate)) })),
@@ -285,6 +319,46 @@ export const useCoupleStore = create<CoupleState>((set) => ({
     return changed;
   },
   setRealtimeChannel: (ch) => set({ realtimeChannel: ch }),
+
+  // ── Candid Actions ──────────────────────────────
+  setCandids: (c, myUserId) => set({
+    candids: c,
+    unseenCandidCount: c.filter(x => !x.isSeen && x.senderId !== myUserId).length,
+  }),
+  prependCandid: (c, myUserId) => set((s) => {
+    const updated = [c, ...s.candids];
+    return {
+      candids: updated,
+      unseenCandidCount: updated.filter(x => !x.isSeen && x.senderId !== myUserId).length,
+    };
+  }),
+  updateCandidInList: (c, myUserId) => set((s) => {
+    const updated = s.candids.map((x) => x.id === c.id ? c : x);
+    return {
+      candids: updated,
+      unseenCandidCount: updated.filter(x => !x.isSeen && x.senderId !== myUserId).length,
+    };
+  }),
+  removeCandidFromList: (id, myUserId) => set((s) => {
+    const updated = s.candids.filter((x) => x.id !== id);
+    return {
+      candids: updated,
+      unseenCandidCount: updated.filter(x => !x.isSeen && x.senderId !== myUserId).length,
+    };
+  }),
+  markCandidSeen: (id, myUserId) => set((s) => {
+    const updated = s.candids.map((x) =>
+      x.id === id ? { ...x, isSeen: true, seenAt: new Date().toISOString() } : x
+    );
+    return {
+      candids: updated,
+      unseenCandidCount: updated.filter(x => !x.isSeen && x.senderId !== myUserId).length,
+    };
+  }),
+  setCandidsLoading: (s) => set({ candidsLoading: s }),
+  setCandidStreak: (s) => set({ candidStreak: s }),
+  triggerFirstCandidCeremony: (imagePath) => set({ showFirstCandidCeremony: true, firstCandidImagePath: imagePath }),
+  dismissFirstCandidCeremony: () => set({ showFirstCandidCeremony: false, firstCandidImagePath: null }),
 
   reset: () => set(initial),
 }));

@@ -1379,3 +1379,179 @@ export const coupleCommentRepo = {
       .where(eq(schema.coupleComments.id, id));
   }
 };
+
+// ==========================================
+// Couple Candid Repository
+// ==========================================
+export interface CoupleCandidInput {
+  id: string;
+  coupleId: string;
+  senderId: string;
+  imagePath: string;
+  thumbPath?: string | null;
+  caption?: string | null;
+  reactionEmoji?: string | null;
+  isSeen?: boolean | number;
+  seenAt?: string | null;
+  isFirstCandid?: boolean | number;
+  createdAt: string;
+  updatedAt?: string;
+  syncStatus?: string;
+  serverUpdatedAt?: string | null;
+  deletedAt?: string | null;
+}
+
+export const coupleCandidRepo = {
+  async fetchCandids(coupleId: string, limit?: number, offset?: number) {
+    let query = db
+      .select()
+      .from(schema.coupleCandids)
+      .where(and(eq(schema.coupleCandids.coupleId, coupleId), isNull(schema.coupleCandids.deletedAt)))
+      .orderBy(desc(schema.coupleCandids.createdAt))
+      .$dynamic();
+
+    if (limit !== undefined) {
+      query = query.limit(limit);
+    }
+    if (offset !== undefined) {
+      query = query.offset(offset);
+    }
+
+    const rows = await query;
+    return rows.map(r => ({
+      ...r,
+      isSeen: fromInt(r.isSeen),
+      isFirstCandid: fromInt(r.isFirstCandid),
+    }));
+  },
+  async fetchCandidById(id: string) {
+    const rows = await db.select().from(schema.coupleCandids).where(eq(schema.coupleCandids.id, id));
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      ...r,
+      isSeen: fromInt(r.isSeen),
+      isFirstCandid: fromInt(r.isFirstCandid),
+    };
+  },
+  async countCandids(coupleId: string) {
+    const rows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.coupleCandids)
+      .where(and(eq(schema.coupleCandids.coupleId, coupleId), isNull(schema.coupleCandids.deletedAt)));
+    return rows[0]?.count ?? 0;
+  },
+  async saveCandid(r: CoupleCandidInput): Promise<void> {
+    await db
+      .insert(schema.coupleCandids)
+      .values({
+        id: r.id,
+        coupleId: r.coupleId,
+        senderId: r.senderId,
+        imagePath: r.imagePath,
+        thumbPath: r.thumbPath || null,
+        caption: r.caption || null,
+        reactionEmoji: r.reactionEmoji || null,
+        isSeen: toInt(r.isSeen) ?? 0,
+        seenAt: r.seenAt || null,
+        isFirstCandid: toInt(r.isFirstCandid) ?? 0,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+        syncStatus: r.syncStatus || 'pending',
+        serverUpdatedAt: r.serverUpdatedAt || null,
+        deletedAt: r.deletedAt || null,
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleCandids.id,
+        set: {
+          imagePath: r.imagePath,
+          thumbPath: r.thumbPath || null,
+          caption: r.caption || null,
+          reactionEmoji: r.reactionEmoji || null,
+          isSeen: toInt(r.isSeen) ?? 0,
+          seenAt: r.seenAt || null,
+          isFirstCandid: toInt(r.isFirstCandid) ?? 0,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+          syncStatus: r.syncStatus || 'pending',
+          serverUpdatedAt: r.serverUpdatedAt || null,
+          deletedAt: r.deletedAt || null,
+        }
+      });
+  },
+  async markSeen(id: string): Promise<void> {
+    await db
+      .update(schema.coupleCandids)
+      .set({
+        isSeen: 1,
+        seenAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(schema.coupleCandids.id, id));
+  },
+  async setReaction(id: string, emoji: string): Promise<void> {
+    await db
+      .update(schema.coupleCandids)
+      .set({
+        reactionEmoji: emoji,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(schema.coupleCandids.id, id));
+  },
+  async softDeleteCandid(id: string, deletedAt: string): Promise<void> {
+    await db
+      .update(schema.coupleCandids)
+      .set({
+        deletedAt,
+        syncStatus: 'pending_update',
+      })
+      .where(eq(schema.coupleCandids.id, id));
+  }
+};
+
+// ==========================================
+// Couple Candid Streak Repository
+// ==========================================
+export interface CoupleCandidStreakInput {
+  coupleId: string;
+  currentStreak?: number;
+  longestStreak?: number;
+  lastBothSentDate?: string | null;
+  user1LastSentDate?: string | null;
+  user2LastSentDate?: string | null;
+  updatedAt?: string;
+}
+
+export const coupleCandidStreakRepo = {
+  async fetchStreak(coupleId: string) {
+    const rows = await db
+      .select()
+      .from(schema.coupleCandidStreaks)
+      .where(eq(schema.coupleCandidStreaks.coupleId, coupleId));
+    if (rows.length === 0) return null;
+    return rows[0];
+  },
+  async saveStreak(r: CoupleCandidStreakInput): Promise<void> {
+    await db
+      .insert(schema.coupleCandidStreaks)
+      .values({
+        coupleId: r.coupleId,
+        currentStreak: r.currentStreak ?? 0,
+        longestStreak: r.longestStreak ?? 0,
+        lastBothSentDate: r.lastBothSentDate || null,
+        user1LastSentDate: r.user1LastSentDate || null,
+        user2LastSentDate: r.user2LastSentDate || null,
+        updatedAt: r.updatedAt || new Date().toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: schema.coupleCandidStreaks.coupleId,
+        set: {
+          currentStreak: r.currentStreak ?? 0,
+          longestStreak: r.longestStreak ?? 0,
+          lastBothSentDate: r.lastBothSentDate || null,
+          user1LastSentDate: r.user1LastSentDate || null,
+          user2LastSentDate: r.user2LastSentDate || null,
+          updatedAt: r.updatedAt || new Date().toISOString(),
+        }
+      });
+  },
+};

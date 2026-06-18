@@ -141,3 +141,29 @@ export interface RelationshipEvent {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CoupleCandid {
+  id: string;
+  coupleId: string;
+  senderId: string;
+  imagePath: string;
+  thumbPath?: string | null;
+  caption?: string | null;
+  reactionEmoji?: string | null;
+  isSeen: boolean;
+  seenAt?: string | null;
+  isFirstCandid: boolean;
+  createdAt: string;
+  updatedAt: string;
+  senderNickname?: string;
+}
+
+export interface CoupleCandidStreak {
+  coupleId: string;
+  currentStreak: number;
+  longestStreak: number;
+  lastBothSentDate?: string | null;
+  user1LastSentDate?: string | null;
+  user2LastSentDate?: string | null;
+  updatedAt: string;
+}

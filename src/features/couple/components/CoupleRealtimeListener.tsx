@@ -10,7 +10,8 @@ import { triggerLocalNotificationAsync } from '@infrastructure/notifications/not
 import { resolveAvatarUrl, fetchProfileNickname } from '@infrastructure/profile';
 // resolveSignedUrls removed to load raw URLs from SQLite instantly
 import type { 
-  CoupleLetter, CoupleJournal, CoupleMemory, CoupleGoal, CoupleAnswer, RelationshipEvent, CoupleComment 
+  CoupleLetter, CoupleJournal, CoupleMemory, CoupleGoal, CoupleAnswer, RelationshipEvent, CoupleComment,
+  CoupleCandid
 } from '../types';
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { useTheme } from '@shared/hooks';
@@ -676,6 +677,83 @@ export function CoupleRealtimeListener() {
                 `"${p.nickname || 'Partner'} updated their mood to ${moodText}."`,
                 { screen: 'Home' }
               );
+            }
+          }
+        })
+        // 11. Couple Candids (silent — no notifications per design brief)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'couple_candids', 
+          filter: `couple_id=eq.${coupleId}` 
+        }, async (payload) => {
+          const store = useCoupleStore.getState();
+          if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old as any;
+            if (oldRow) {
+              store.removeCandidFromList(oldRow.id, user.id);
+            }
+          } else {
+            const newRow = payload.new as any;
+            const isMe = newRow.sender_id === user?.id;
+
+            // Resolve remote Supabase paths to displayable signed URLs/local files
+            const { resolveImageUri } = await import('@shared/lib/storage/imageResolver');
+            const [resolvedMain, resolvedThumb] = await Promise.all([
+              resolveImageUri(newRow.image_path, 'couple_candid_images'),
+              resolveImageUri(newRow.thumb_path || null, 'couple_candid_images'),
+            ]);
+
+            const mapped: CoupleCandid = {
+              id: newRow.id,
+              coupleId: newRow.couple_id,
+              senderId: newRow.sender_id,
+              imagePath: resolvedMain.uri || newRow.image_path,
+              thumbPath: resolvedThumb.uri || newRow.thumb_path || null,
+              caption: newRow.caption || null,
+              reactionEmoji: newRow.reaction_emoji || null,
+              isSeen: !!newRow.is_seen,
+              seenAt: newRow.seen_at || null,
+              isFirstCandid: !!newRow.is_first_candid,
+              createdAt: newRow.created_at,
+              updatedAt: newRow.updated_at,
+              senderNickname: isMe ? (user?.nickname || 'You') : (partner?.nickname || 'Partner'),
+            };
+            const exists = store.candids.some(x => x.id === mapped.id);
+            if (exists) {
+              store.updateCandidInList(mapped, user.id);
+            } else {
+              store.prependCandid(mapped, user.id);
+            }
+            // No toast, no notification — candids are silent.
+            // The breathing pulse on CandidStack activates via store subscription.
+          }
+        })
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'couple_candid_streaks', 
+          filter: `couple_id=eq.${coupleId}` 
+        }, (payload) => {
+          const store = useCoupleStore.getState();
+          if (payload.eventType === 'DELETE') {
+            store.setCandidStreak(null);
+          } else {
+            const newRow = payload.new as any;
+            if (newRow) {
+              const dates = Object.values(newRow.last_sent_dates || {}) as string[];
+              const u1Date = dates[0] || null;
+              const u2Date = dates[1] || null;
+
+              store.setCandidStreak({
+                coupleId: newRow.couple_id,
+                currentStreak: newRow.current_streak,
+                longestStreak: newRow.longest_streak,
+                lastBothSentDate: newRow.last_both_sent_date,
+                user1LastSentDate: u1Date,
+                user2LastSentDate: u2Date,
+                updatedAt: newRow.updated_at,
+              });
             }
           }
         })

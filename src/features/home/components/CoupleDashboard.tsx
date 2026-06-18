@@ -71,6 +71,9 @@ interface CoupleDashboardProps {
   getTimeAgo: (date: Date | string) => string;
   friendlyDaysUntil: (iso: string) => string;
   initial: (name: string) => string;
+  onOpenCandidWall: () => void;
+  onOpenCandidViewer: () => void;
+  onCapture: () => void;
 }
 
 export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
@@ -121,6 +124,9 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
   getTimeAgo,
   friendlyDaysUntil,
   initial,
+  onOpenCandidWall,
+  onOpenCandidViewer,
+  onCapture,
 }) => {
   const { colors } = useTheme();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
@@ -336,52 +342,36 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
       </ImageBackground>
       </Animated.View>
 
-      {/* ── 4. QUICK ACTIONS SECTION ────────────────── */}
-      <Animated.View style={entranceAnims[3].style}>
-      <View style={styles.quickActionsRow}>
+      {/* ── CANDID ACCESS BUTTONS ──────────────────── */}
+      <Animated.View style={[entranceAnims[8].style, styles.candidButtonsRow]}>
         <TouchableOpacity
-          style={styles.quickCardCol}
-          onPress={() => { qaPress(0); navigation.navigate('Future'); }}
+          style={[styles.candidBtn, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '30' }]}
+          onPress={onOpenCandidWall}
+          delayPressIn={0}
         >
-          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.primary + Opacity.subtle, transform: [{ scale: qaScales[0] }] }]}>
-            <Text style={{ fontSize: 26, color: colors.primary }}>✍️</Text>
-          </Animated.View>
-          <KamiText style={styles.quickCardLabel} bold>Write Letter</KamiText>
+          <Text style={styles.candidBtnIcon}>📸</Text>
+          <KamiText bold color={colors.primaryDark} style={styles.candidBtnText}>Wall</KamiText>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.quickCardCol}
-          onPress={() => { qaPress(1); navigation.navigate('Memories'); }}
+          style={[styles.candidBtn, { backgroundColor: colors.primary + '25', borderColor: colors.primary + '50' }]}
+          onPress={onCapture}
+          delayPressIn={0}
         >
-          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.accent + Opacity.subtle, transform: [{ scale: qaScales[1] }] }]}>
-            <Text style={{ fontSize: 26, color: colors.primaryDark }}>📸</Text>
-          </Animated.View>
-          <KamiText style={styles.quickCardLabel} bold>Add Memory</KamiText>
+          <Text style={styles.candidBtnIcon}>⚡</Text>
+          <KamiText bold color={colors.primaryDark} style={styles.candidBtnText}>Capture</KamiText>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.quickCardCol}
-          onPress={() => { qaPress(2); navigation.navigate('Goals'); }}
+          style={[styles.candidBtn, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
+          onPress={onOpenCandidViewer}
+          delayPressIn={0}
         >
-          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.success + Opacity.subtle, transform: [{ scale: qaScales[2] }] }]}>
-            <Text style={{ fontSize: 26, color: colors.success }}>🎯</Text>
-          </Animated.View>
-          <KamiText style={styles.quickCardLabel} bold>New Goal</KamiText>
+          <Text style={styles.candidBtnIcon}>✨</Text>
+          <KamiText bold color={colors.accent} style={styles.candidBtnText}>Partner</KamiText>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.quickCardCol, { position: 'relative' }]}
-          onPress={() => { qaPress(3); setLoveTrigger(t => t + 1); handleSendLove(); }}
-          disabled={loveSending}
-        >
-          <Animated.View style={[styles.quickIconBg, { backgroundColor: colors.accent + Opacity.light, transform: [{ scale: qaScales[3] }] }]}>
-            <Text style={{ fontSize: 26, color: colors.accent }}>❤️</Text>
-          </Animated.View>
-          <KamiText style={styles.quickCardLabel} bold>Send Love</KamiText>
-          <FloatingHearts trigger={loveTrigger} count={6} spread={80} />
-        </TouchableOpacity>
-      </View>
       </Animated.View>
+
 
       {/* ── 5. COUPLE MOOD RING WIDGET ───────────── */}
       <Animated.View style={entranceAnims[4].style}>
@@ -477,59 +467,6 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
       </View>
       </Animated.View>
 
-      {/* ── 6. OUR JOURNEY TIMELINE ─────────────────── */}
-      <Animated.View style={entranceAnims[5].style}>
-      <View style={styles.journeySection}>
-        <View style={styles.journeyHeader}>
-          <KamiText variant="subtitle" bold style={styles.journeyTitle}>Couple Timeline ✨</KamiText>
-          <TouchableOpacity onPress={() => navigation.navigate('Timeline')}>
-            <KamiText variant="caption" color={colors.primary} bold>See All ›</KamiText>
-          </TouchableOpacity>
-        </View>
-
-        {shownTimelineEvents.length > 0 ? (
-          <ScrollView
-            style={isTimelineScrollable ? { maxHeight: 220 } : null}
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={true}
-          >
-            <View style={styles.verticalTimelineWrap}>
-              {shownTimelineEvents.map((item: any, index: number) => (
-                <View key={item.id} style={styles.timelineItemRow}>
-                  <View style={styles.timelineLeftCol}>
-                    <View style={[styles.timelineIconCircle, { backgroundColor: colors.creamDeep + '44', borderColor: colors.primaryLight + '33' }]}>
-                      <Text style={{ fontSize: 18 }}>{item.icon}</Text>
-                    </View>
-                    {index < shownTimelineEvents.length - 1 && (
-                      <View style={[styles.timelineConnectorLine, { backgroundColor: colors.border + '55' }]} />
-                    )}
-                  </View>
-                  <View style={styles.timelineRightContent}>
-                    <View style={styles.timelineMetaRow}>
-                      <KamiText bold style={styles.timelineItemTitle} numberOfLines={1}>{item.title}</KamiText>
-                      <KamiText style={styles.timelineItemTime}>{item.time}</KamiText>
-                    </View>
-                    {item.description ? (
-                      <KamiText style={styles.timelineItemDesc} numberOfLines={2}>{item.description}</KamiText>
-                    ) : null}
-                  </View>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        ) : (
-          <View style={styles.emptyJourneyBox}>
-            <Text style={{ fontSize: 32, marginBottom: Space[2] }}>✨</Text>
-            <KamiText variant="caption" color={colors.textMuted} align="center">
-              Your timeline is empty. Write a letter, log a journal entry, or share a memory to see it here!
-            </KamiText>
-            <ShimmerText shimmerColor={colors.primary}>
-              <KamiText variant="caption" color={colors.primary} bold style={{ marginTop: Space[2] }}>Start your journey ›</KamiText>
-            </ShimmerText>
-          </View>
-        )}
-      </View>
-      </Animated.View>
 
       {/* ── 7. MEMORY FLASHBACK CARD ────────────────── */}
       <Animated.View style={entranceAnims[6].style}>
@@ -1540,5 +1477,29 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.textPrimary,
     textAlignVertical: 'top',
     fontSize: FontSize.base,
+  },
+  candidButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Space[3],
+    marginHorizontal: Space[5],
+    marginBottom: Space[5],
+  },
+  candidBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    ...Shadows.sm,
+  },
+  candidBtnIcon: {
+    fontSize: 16,
+    marginRight: Space[2],
+  },
+  candidBtnText: {
+    fontSize: FontSize.sm,
   },
 });

@@ -21,6 +21,8 @@ import { PersonalDashboard } from '../components/PersonalDashboard';
 import { CoupleDashboard } from '../components/CoupleDashboard';
 import { MoodModal } from '../components/MoodModal';
 import { CustomMoodModal } from '../components/CustomMoodModal';
+import CandidStack, { CandidStackRef } from '@features/couple/components/candid/CandidStack';
+import FirstCandidCeremony from '@features/couple/components/candid/FirstCandidCeremony';
 
 type Props = MainTabScreenProps<'Home'>;
 
@@ -30,6 +32,9 @@ export function HomeScreen({ navigation }: Props) {
   const dashboard = useHomeDashboard(navigation);
 
   const [showFallback, setShowFallback] = React.useState(false);
+  const [wallVisible, setWallVisible] = React.useState(false);
+  const [viewerVisible, setViewerVisible] = React.useState(false);
+  const candidStackRef = React.useRef<CandidStackRef>(null);
   const activeSpace = dashboard.user?.activeSpace;
   const hasCouple = !!dashboard.couple;
 
@@ -202,6 +207,9 @@ export function HomeScreen({ navigation }: Props) {
             getTimeAgo={dashboard.getTimeAgo}
             friendlyDaysUntil={dashboard.friendlyDaysUntil}
             initial={initial}
+            onOpenCandidWall={() => setWallVisible(true)}
+            onOpenCandidViewer={() => setViewerVisible(true)}
+            onCapture={() => candidStackRef.current?.handlePickImage()}
           />
         ) : (
           <PersonalDashboard
@@ -226,6 +234,19 @@ export function HomeScreen({ navigation }: Props) {
         )}
       </ScrollView>
 
+      {/* ── 3. CANDID STACK OVERLAY (couple space only) ── */}
+      {dashboard.user?.activeSpace === 'couple' && dashboard.couple && dashboard.user && (
+        <CandidStack
+          ref={candidStackRef}
+          coupleId={dashboard.couple.id}
+          userId={dashboard.user.id}
+          viewerVisible={viewerVisible}
+          setViewerVisible={setViewerVisible}
+          wallVisible={wallVisible}
+          setWallVisible={setWallVisible}
+        />
+      )}
+
       {/* Modals */}
       <MoodModal
         visible={dashboard.moodModal}
@@ -241,6 +262,9 @@ export function HomeScreen({ navigation }: Props) {
         onSave={dashboard.handleCustomMoodSave}
         saving={dashboard.customMoodSaving}
       />
+
+      {/* First Candid Ceremony */}
+      <FirstCandidCeremony />
     </SafeAreaView>
   );
 }

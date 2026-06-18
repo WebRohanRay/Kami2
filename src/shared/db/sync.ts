@@ -1,10 +1,7 @@
 import { db } from './client';
 import * as schema from './schema';
 import { eq, and, or, asc, isNull, sql, ne } from 'drizzle-orm';
-import { Paths, File, Directory } from 'expo-file-system';
-import { requireOptionalNativeModule } from 'expo-modules-core';
-
-const ExponentFileSystem = requireOptionalNativeModule('ExponentFileSystem') as any;
+import { Paths, File, Directory, copyAsync } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@shared/lib/supabase';
@@ -221,14 +218,10 @@ export async function enqueueUpload(
   const permanentUri = `${UPLOADS_DIR}${filename}`;
 
   // Copy picker file to permanent local cache directory
-  if (ExponentFileSystem && ExponentFileSystem.copyAsync) {
-    await ExponentFileSystem.copyAsync({
-      from: localUri,
-      to: permanentUri,
-    });
-  } else {
-    throw new Error('ExponentFileSystem native module or copyAsync method is unavailable');
-  }
+  await copyAsync({
+    from: localUri,
+    to: permanentUri,
+  });
 
   const now = new Date().toISOString();
   await db.insert(schema.fileUploadQueue).values({
@@ -1699,7 +1692,8 @@ async function processOutboxMutations() {
         .where(eq(schema.outboxMutations.id, row.id));
 
       const payloadObj = JSON.parse(row.payloadJson);
-      const payload = payloadObj.current !== undefined ? payloadObj.current : payloadObj;
+      let payload = payloadObj.current !== undefined ? payloadObj.current : payloadObj;
+      payload = await resolvePayloadUris(row.entityType, payload);
       const tableName = supabaseTables[row.entityType];
 
       // File Upload Gate Check: if there are any uploads for this entity that are not completed or discarded, we must skip this mutation for now
@@ -2163,6 +2157,45 @@ async function updateLocalEntitySyncSuccess(entityType: string, entityId: string
   } else if (entityType === 'couple_comments') {
     await db.update(schema.coupleComments).set({ syncStatus: 'synced', serverUpdatedAt }).where(eq(schema.coupleComments.id, entityId));
   }
+}
+
+async function resolvePayloadUris(entityType: string, payload: any): Promise<any> {
+  if (!payload) return payload;
+  const resolved = { ...payload };
+
+  if (entityType === 'goals' && resolved.imageUrl) {
+    if (resolved.imageUrl.startsWith('file://') || resolved.imageUrl.startsWith('/')) {
+      const records = await db
+        .select({ supabasePath: schema.imageRecords.supabasePath })
+        .from(schema.imageRecords)
+        .where(eq(schema.imageRecords.localUri, resolved.imageUrl))
+        .limit(1);
+      if (records.length > 0 && records[0].supabasePath) {
+        resolved.imageUrl = records[0].supabasePath;
+      }
+    }
+  } else if (resolved.imageUrls && Array.isArray(resolved.imageUrls)) {
+    const nextUrls: string[] = [];
+    for (const url of resolved.imageUrls) {
+      if (url && (url.startsWith('file://') || url.startsWith('/'))) {
+        const records = await db
+          .select({ supabasePath: schema.imageRecords.supabasePath })
+          .from(schema.imageRecords)
+          .where(eq(schema.imageRecords.localUri, url))
+          .limit(1);
+        if (records.length > 0 && records[0].supabasePath) {
+          nextUrls.push(records[0].supabasePath);
+        } else {
+          nextUrls.push(url);
+        }
+      } else {
+        nextUrls.push(url);
+      }
+    }
+    resolved.imageUrls = nextUrls;
+  }
+
+  return resolved;
 }
 
 type SyncPayloadInput = Partial<

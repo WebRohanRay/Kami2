@@ -281,3 +281,31 @@ export const imageRecords = sqliteTable('image_records', {
   updatedAt: text('updated_at').notNull(),
 });
 
+export const coupleCandids = sqliteTable('couple_candids', {
+  id: text('id').primaryKey(),
+  coupleId: text('couple_id').notNull(),
+  senderId: text('sender_id').notNull(),
+  imagePath: text('image_path').notNull(),     // Supabase storage path OR local file URI
+  thumbPath: text('thumb_path'),               // Thumbnail path
+  caption: text('caption'),                    // Optional short text
+  reactionEmoji: text('reaction_emoji'),       // Partner's emoji reaction
+  isSeen: integer('is_seen').notNull().default(0),
+  seenAt: text('seen_at'),
+  isFirstCandid: integer('is_first_candid').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  syncStatus: text('sync_status').notNull().default('pending'),
+  serverUpdatedAt: text('server_updated_at'),
+  deletedAt: text('deleted_at'),
+});
+
+export const coupleCandidStreaks = sqliteTable('couple_candid_streaks', {
+  coupleId: text('couple_id').primaryKey(),
+  currentStreak: integer('current_streak').notNull().default(0),
+  longestStreak: integer('longest_streak').notNull().default(0),
+  lastBothSentDate: text('last_both_sent_date'),
+  user1LastSentDate: text('user1_last_sent_date'),
+  user2LastSentDate: text('user2_last_sent_date'),
+  updatedAt: text('updated_at').notNull(),
+});
+

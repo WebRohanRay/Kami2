@@ -302,6 +302,36 @@ CREATE INDEX IF NOT EXISTS idx_couple_memories_couple ON couple_memories(couple_
 CREATE INDEX IF NOT EXISTS idx_couple_goals_couple ON couple_goals(couple_id);
 CREATE INDEX IF NOT EXISTS idx_couple_comments_entry ON couple_comments(entry_id);
 CREATE INDEX IF NOT EXISTS idx_image_records_entity ON image_records(entity_type, entity_id);
+
+CREATE TABLE IF NOT EXISTS couple_candids (
+  id TEXT PRIMARY KEY NOT NULL,
+  couple_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  image_path TEXT NOT NULL,
+  thumb_path TEXT,
+  caption TEXT,
+  reaction_emoji TEXT,
+  is_seen INTEGER NOT NULL DEFAULT 0,
+  seen_at TEXT,
+  is_first_candid INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'pending',
+  server_updated_at TEXT,
+  deleted_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS couple_candid_streaks (
+  couple_id TEXT PRIMARY KEY NOT NULL,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  longest_streak INTEGER NOT NULL DEFAULT 0,
+  last_both_sent_date TEXT,
+  user1_last_sent_date TEXT,
+  user2_last_sent_date TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_couple_candids_couple ON couple_candids(couple_id, created_at);
 `;
 
 export async function initDb(): Promise<void> {
