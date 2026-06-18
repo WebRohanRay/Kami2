@@ -276,6 +276,7 @@ export function useHomeDashboard(navigation: any) {
   const [customMoodModalVisible, setCustomMoodModalVisible] = useState(false);
   const [customMoodSaving, setCustomMoodSaving] = useState(false);
   const [resolvedHeroBg, setResolvedHeroBg] = useState<string | null>(null);
+  const [resolvedFlashbackImage, setResolvedFlashbackImage] = useState<string>('https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop');
 
   const { updateProfile } = useAuthActions();
 
@@ -801,9 +802,32 @@ export function useHomeDashboard(navigation: any) {
       : flashbackMemory.description;
   }, [flashbackMemory]);
 
-  const flashbackImage = flashbackMemory && flashbackMemory.imageUrls && flashbackMemory.imageUrls.length > 0
-    ? flashbackMemory.imageUrls[0]
-    : 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop';
+  useEffect(() => {
+    const rawImage = flashbackMemory && flashbackMemory.imageUrls && flashbackMemory.imageUrls.length > 0
+      ? flashbackMemory.imageUrls[0]
+      : null;
+
+    if (rawImage) {
+      if (rawImage.startsWith('http') || rawImage.startsWith('file://') || rawImage.startsWith('content://')) {
+        setResolvedFlashbackImage(rawImage);
+      } else {
+        resolveImageUri(rawImage, 'couple_memory_images')
+          .then((result) => {
+            if (result.uri) {
+              setResolvedFlashbackImage(result.uri);
+            } else {
+              setResolvedFlashbackImage('https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop');
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to resolve flashback memory URL:', err);
+            setResolvedFlashbackImage('https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop');
+          });
+      }
+    } else {
+      setResolvedFlashbackImage('https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop');
+    }
+  }, [flashbackMemory]);
 
   // Presence mapping description
   const getPresenceDescription = () => {
@@ -1008,7 +1032,7 @@ export function useHomeDashboard(navigation: any) {
     flashbackMemory,
     flashbackTitle,
     flashbackDesc,
-    flashbackImage,
+    flashbackImage: resolvedFlashbackImage,
     personalLettersForSlide,
     activeGoals,
     completedToday,

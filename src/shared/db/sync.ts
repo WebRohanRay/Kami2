@@ -1,7 +1,8 @@
 import { db } from './client';
 import * as schema from './schema';
 import { eq, and, or, asc, isNull, sql, ne } from 'drizzle-orm';
-import { Paths, File, Directory, copyAsync } from 'expo-file-system';
+import { Paths, File, Directory } from 'expo-file-system';
+import { copyAsync } from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@shared/lib/supabase';

@@ -5,10 +5,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Image,
   Dimensions,
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { useCoupleStore } from '../../store/coupleStore';
 import { FontFamily, Radii, Shadows, Space, Opacity } from '@shared/constants';
 import CandidEmptyOutline from './CandidEmptyOutline';
@@ -189,8 +189,9 @@ const CandidStack = forwardRef<CandidStackRef, CandidStackProps>(({
                         },
                       ]}
                     >
-                      <Image
-                        source={{ uri: candid.thumbPath ? candid.thumbPath : candid.imagePath }}
+                      <KamiImage
+                        src={candid.thumbPath ? candid.thumbPath : candid.imagePath}
+                        bucket="couple_candid_images"
                         style={styles.polaroidImage}
                         resizeMode="cover"
                       />

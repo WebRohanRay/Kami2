@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  Image,
 } from 'react-native';
 import { useCoupleStore } from '../../store/coupleStore';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { FontFamily, FontSize, Space, Radii } from '@shared/constants';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -170,8 +170,9 @@ const FirstCandidCeremony: React.FC = () => {
             ]}
           >
             {imagePath && (
-              <Image
-                source={{ uri: imagePath }}
+              <KamiImage
+                src={imagePath}
+                bucket="couple_candid_images"
                 style={styles.polaroidImage}
                 resizeMode="cover"
               />

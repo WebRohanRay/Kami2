@@ -6,13 +6,13 @@ import {
   Modal,
   TouchableOpacity,
   FlatList,
-  Image,
   Dimensions,
   StatusBar,
   Vibration,
   ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { useCoupleStore } from '../../store/coupleStore';
 import { useCouple } from '../../hooks/useCouple';
 import { FontFamily, FontSize, FontWeight, Radii, Shadows, Space, Opacity } from '@shared/constants';
@@ -127,8 +127,9 @@ const CandidWall: React.FC<CandidWallProps> = ({ visible, onClose, userId, coupl
         <View style={[styles.washiTape, { backgroundColor: tapeColor + 'D8', transform: [{ rotate: tapeRotation }] }]} />
 
         <View style={styles.polaroidImageWrapper}>
-          <Image
-            source={{ uri: item.thumbPath || item.imagePath }}
+          <KamiImage
+            src={item.thumbPath || item.imagePath}
+            bucket="couple_candid_images"
             style={styles.cellImage}
             resizeMode="cover"
           />

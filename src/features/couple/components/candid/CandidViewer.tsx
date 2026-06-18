@@ -8,10 +8,10 @@ import {
   TouchableWithoutFeedback,
   Animated,
   Dimensions,
-  Image,
   StatusBar,
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { useCoupleStore } from '../../store/coupleStore';
 import { FontFamily, FontSize, FontWeight, Radii, Space, Shadows } from '@shared/constants';
 import { markCandidAsSeen, reactToCandid } from '../../services/candidService';
@@ -277,8 +277,9 @@ const CandidViewer: React.FC<CandidViewerProps> = ({
                   styles.imageContainer,
                   currentCandid.isFirstCandid && styles.goldenFrame,
                 ]}>
-                  <Image
-                    source={{ uri: currentCandid.imagePath }}
+                  <KamiImage
+                    src={currentCandid.imagePath}
+                    bucket="couple_candid_images"
                     style={styles.fullImage}
                     resizeMode="contain"
                   />
