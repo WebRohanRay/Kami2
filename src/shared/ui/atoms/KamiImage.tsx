@@ -28,6 +28,7 @@ export const KamiImage: React.FC<KamiImageProps> = ({
   const { isConnected } = useNetworkStatus();
   const [currentUri, setCurrentUri] = useState<string | null>(null);
   const [resolutionStatus, setResolutionStatus] = useState<'local' | 'remote' | 'unavailable' | 'resolving'>('resolving');
+  const [isUsingThumbnail, setIsUsingThumbnail] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -37,6 +38,7 @@ export const KamiImage: React.FC<KamiImageProps> = ({
         if (active) {
           setResolutionStatus('unavailable');
           setCurrentUri(null);
+          setIsUsingThumbnail(false);
         }
         return;
       }
@@ -47,15 +49,24 @@ export const KamiImage: React.FC<KamiImageProps> = ({
 
       // Resolve thumbnail if available first, else the original
       const refToResolve = thumbnailSrc || src;
-      const result = await resolveImageUri(refToResolve, bucket);
+      let result = await resolveImageUri(refToResolve, bucket);
+      let usingThumb = !!thumbnailSrc && refToResolve === thumbnailSrc;
+
+      if (usingThumb && result.status === 'unavailable') {
+        // Fallback immediately to original if thumbnail resolution failed
+        result = await resolveImageUri(src, bucket);
+        usingThumb = false;
+      }
 
       if (active) {
         setResolutionStatus(result.status);
         setCurrentUri(result.uri);
+        setIsUsingThumbnail(usingThumb);
 
         // If resolved successfully as remote from Supabase, trigger background caching
-        if (result.status === 'remote' && !refToResolve.startsWith('http') && isConnected) {
-          downloadAndCacheImage(refToResolve, bucket).catch(err => {
+        const cacheRef = usingThumb ? thumbnailSrc! : src;
+        if (result.status === 'remote' && !cacheRef.startsWith('http') && isConnected) {
+          downloadAndCacheImage(cacheRef, bucket).catch(err => {
             console.warn('[KamiImage] Background caching failed:', err);
           });
         }
@@ -70,8 +81,9 @@ export const KamiImage: React.FC<KamiImageProps> = ({
   }, [src, thumbnailSrc, bucket, isConnected]);
 
   const handleLoadError = () => {
-    if (thumbnailSrc && currentUri === thumbnailSrc) {
+    if (isUsingThumbnail) {
       // Fallback to main image
+      setIsUsingThumbnail(false);
       resolveImageUri(src, bucket).then(result => {
         setResolutionStatus(result.status);
         setCurrentUri(result.uri);
@@ -92,6 +104,26 @@ export const KamiImage: React.FC<KamiImageProps> = ({
   if (resolutionStatus === 'unavailable') {
     if (fallbackSrc) {
       return <Image {...props} style={style} source={fallbackSrc} />;
+    }
+
+    if (
+      src &&
+      (src.startsWith('http') ||
+        src.startsWith('file://') ||
+        src.startsWith('content://') ||
+        src.startsWith('data:') ||
+        src.startsWith('ph://') ||
+        src.startsWith('asset://') ||
+        src.startsWith('assets-library://'))
+    ) {
+      return (
+        <Image
+          {...props}
+          style={style}
+          source={{ uri: src }}
+          onError={handleLoadError}
+        />
+      );
     }
 
     if (!isConnected && showOfflineMessage) {

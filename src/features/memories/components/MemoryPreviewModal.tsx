@@ -14,6 +14,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import KamiText from '@shared/ui/atoms/KamiText';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
 import { FontSize, Radii, Space } from '@shared/constants';
 import { useTheme } from '@shared/hooks';
 import { ImageZoomModal } from '@shared/ui';
@@ -168,6 +169,7 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
               >
                 {memory.imageUrls.map((url: string, index: number) => {
                   const rotateDeg = index % 2 === 0 ? '-1.5deg' : '1.5deg';
+                  const thumbUrl = url.includes('.jpg') ? url.replace('.jpg', '_thumb.jpg') : url;
                   return (
                     <View key={index} style={{ width: carouselWidth, height: 320, justifyContent: 'center', alignItems: 'center' }}>
                       <TouchableOpacity
@@ -186,9 +188,11 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
                           }
                         ]}
                       >
-                        <Image
-                          source={{ uri: url }}
-                          style={[pv.scrollerImage, { width: carouselWidth - 36, height: 220, borderRadius: 4 }]}
+                        <KamiImage
+                          src={url}
+                          thumbnailSrc={thumbUrl}
+                          bucket={'coupleId' in memory ? 'couple_memory_images' : 'memory_images'}
+                          style={{ width: carouselWidth - 36, height: 220, borderRadius: 4 }}
                           resizeMode="cover"
                           testID={`memory-image-${index}`}
                         />
@@ -241,6 +245,7 @@ export const MemoryPreviewModal: React.FC<MemoryPreviewModalProps> = ({
         <ImageZoomModal
           visible={lightboxVisible}
           imageUris={memory.imageUrls}
+          bucket={'coupleId' in memory ? 'couple_memory_images' : 'memory_images'}
           initialIndex={lightboxIndex}
           onClose={() => setLightboxVisible(false)}
         />
@@ -269,7 +274,6 @@ const pv = StyleSheet.create({
   authorRow: { marginTop: -Space[2], marginBottom: Space[2] },
   imageScrollerContainer: { marginVertical: Space[3], width: '100%' },
   imageScrollView: { width: '100%', height: 320 },
-  scrollerImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   dotIndicatorRow: { flexDirection: 'row', justifyContent: 'center', gap: Space[1] + 2, marginTop: Space[2] },
   dot: { width: 6, height: 6, borderRadius: 3 },
   bodyContainer: { paddingVertical: Space[2] },

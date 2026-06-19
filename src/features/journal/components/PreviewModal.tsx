@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { useTheme } from '@shared/hooks';
 import KamiText from '@shared/ui/atoms/KamiText';
+import { KamiImage } from '@shared/ui/atoms/KamiImage';
+import { ImageZoomModal } from '@shared/ui';
 import { FontSize, Radii, Space } from '@shared/constants';
 
 import type { JournalEntry } from '@features/home/types';
@@ -64,6 +66,8 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const pv = getStyles(colors);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   if (!entry) return null;
 
@@ -159,14 +163,23 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
                 accessibilityLabel="Journal Image Carousel"
               >
                 {entry.imageUrls.map((url: string, index: number) => (
-                  <View key={index} style={{ width: carouselWidth, height: 240, overflow: 'hidden' }}>
-                    <Image
-                      source={{ uri: url }}
+                  <TouchableOpacity
+                    key={index}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      setLightboxIndex(index);
+                      setLightboxVisible(true);
+                    }}
+                    style={{ width: carouselWidth, height: 240, overflow: 'hidden' }}
+                  >
+                    <KamiImage
+                      src={url}
+                      bucket={activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images'}
                       style={pv.scrollerImage}
                       resizeMode="contain"
                       testID={`journal-image-${index}`}
                     />
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
               {/* Pagination Dots indicator */}
@@ -199,6 +212,13 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
           )}
         </ScrollView>
       </SafeAreaView>
+      <ImageZoomModal
+        visible={lightboxVisible}
+        imageUris={entry.imageUrls}
+        bucket={activeSpace === 'couple' ? 'couple_journal_images' : 'journal_images'}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxVisible(false)}
+      />
     </Modal>
   );
 };

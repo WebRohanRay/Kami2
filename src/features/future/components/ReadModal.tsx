@@ -301,7 +301,12 @@ export const ReadModal: React.FC<ReadModalProps> = ({
             )}
           </View>
         )}
-        <ImageZoomModal visible={zoomImageUri !== null} imageUri={zoomImageUri} onClose={() => setZoomImageUri(null)} />
+        <ImageZoomModal
+          visible={zoomImageUri !== null}
+          imageUri={zoomImageUri}
+          bucket={activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images'}
+          onClose={() => setZoomImageUri(null)}
+        />
       </SafeAreaView>
     </Modal>
   );

@@ -229,6 +229,7 @@ export const MemoryTimelineCard: React.FC<MemoryTimelineCardProps> = ({
       <ImageZoomModal
         visible={lightboxVisible}
         imageUris={memory.imageUrls}
+        bucket={'coupleId' in memory ? 'couple_memory_images' : 'memory_images'}
         initialIndex={lightboxIndex}
         onClose={() => setLightboxVisible(false)}
       />

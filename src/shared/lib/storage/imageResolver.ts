@@ -33,8 +33,15 @@ export async function resolveImageUri(imageRef: string | null | undefined, bucke
   }
 
   // 1. If it starts with http, it is already fully resolved
-  if (imageRef.startsWith('http')) {
-    return { uri: imageRef, status: 'remote' };
+  if (
+    imageRef.startsWith('http') ||
+    imageRef.startsWith('content://') ||
+    imageRef.startsWith('data:') ||
+    imageRef.startsWith('ph://') ||
+    imageRef.startsWith('asset://') ||
+    imageRef.startsWith('assets-library://')
+  ) {
+    return { uri: imageRef, status: imageRef.startsWith('http') ? 'remote' : 'local' };
   }
 
   // 2. If it is a local file URI or raw path
@@ -114,8 +121,15 @@ export async function resolveImageBatch(refs: string[], bucketName: string): Pro
       results[ref] = { uri: null, status: 'unavailable' };
       continue;
     }
-    if (ref.startsWith('http')) {
-      results[ref] = { uri: ref, status: 'remote' };
+    if (
+      ref.startsWith('http') ||
+      ref.startsWith('content://') ||
+      ref.startsWith('data:') ||
+      ref.startsWith('ph://') ||
+      ref.startsWith('asset://') ||
+      ref.startsWith('assets-library://')
+    ) {
+      results[ref] = { uri: ref, status: ref.startsWith('http') ? 'remote' : 'local' };
       continue;
     }
     if (ref.startsWith('file://') || ref.startsWith('/')) {

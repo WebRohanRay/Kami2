@@ -393,7 +393,12 @@ export const WriteModal: React.FC<WriteModalProps> = ({
             </TouchableOpacity>
           </View>
         </ScrollView>
-        <ImageZoomModal visible={zoomImageUri !== null} imageUri={zoomImageUri} onClose={() => setZoomImageUri(null)} />
+        <ImageZoomModal
+          visible={zoomImageUri !== null}
+          imageUri={zoomImageUri}
+          bucket={activeSpace === 'couple' ? 'couple_letter_images' : 'letter_images'}
+          onClose={() => setZoomImageUri(null)}
+        />
       </SafeAreaView>
     </Modal>
   );

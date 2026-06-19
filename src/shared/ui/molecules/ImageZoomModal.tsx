@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -18,6 +19,7 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
+import { resolveImageBatch } from '@shared/lib/storage/imageResolver';
 import KamiText from '../atoms/KamiText';
 
 const { width, height } = Dimensions.get('window');
@@ -28,6 +30,7 @@ interface ImageZoomModalProps {
   imageUris?: string[];      // For multi-photo gallery lightbox
   initialIndex?: number;     // Starting photo index
   onClose: () => void;
+  bucket?: string;           // Bucket name to resolve Supabase paths
 }
 
 const ZoomableImage: React.FC<{ uri: string; onZoomStateChange: (zoomed: boolean) => void }> = ({ uri, onZoomStateChange }) => {
@@ -146,20 +149,84 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
   imageUris,
   initialIndex = 0,
   onClose,
+  bucket,
 }) => {
-  const uris = imageUris && imageUris.length > 0
-    ? imageUris
-    : (imageUri ? [imageUri] : []);
+  const [resolvedUris, setResolvedUris] = useState<string[]>([]);
+  const [resolving, setResolving] = useState(false);
 
-  if (uris.length === 0) return null;
+  const rawUris = React.useMemo(() => {
+    return imageUris && imageUris.length > 0
+      ? imageUris
+      : (imageUri ? [imageUri] : []);
+  }, [imageUri, imageUris]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function resolveAll() {
+      if (!visible) {
+        if (active) {
+          setResolvedUris([]);
+          setResolving(false);
+        }
+        return;
+      }
+
+      if (rawUris.length === 0) {
+        if (active) {
+          setResolvedUris([]);
+          setResolving(false);
+        }
+        return;
+      }
+
+      // Check if all of them are already resolved (http, file://, etc.)
+      const needsResolution = rawUris.some(
+        uri => uri && !uri.startsWith('http') && !uri.startsWith('file://') && !uri.startsWith('/')
+      );
+      if (!needsResolution) {
+        if (active) {
+          setResolvedUris(rawUris.filter((u): u is string => u !== null));
+          setResolving(false);
+        }
+        return;
+      }
+
+      if (active) {
+        setResolving(true);
+      }
+
+      const bucketToUse = bucket || 'memory_images';
+      try {
+        const batchResults = await resolveImageBatch(rawUris.filter((u): u is string => u !== null), bucketToUse);
+        if (active) {
+          const resolved = rawUris.map(uri => uri ? (batchResults[uri]?.uri || uri) : '');
+          setResolvedUris(resolved.filter(u => u !== ''));
+          setResolving(false);
+        }
+      } catch (err) {
+        console.error('[ImageZoomModal] Error resolving batch URIs:', err);
+        if (active) {
+          setResolvedUris(rawUris.filter((u): u is string => u !== null));
+          setResolving(false);
+        }
+      }
+    }
+
+    resolveAll();
+
+    return () => {
+      active = false;
+    };
+  }, [visible, rawUris, bucket]);
 
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [zoomed, setZoomed] = useState(false);
   const flatListRef = useRef<FlatList<string>>(null);
 
-  // Reset index when modal becomes visible
+  // Reset index when modal becomes visible and data is resolved
   useEffect(() => {
-    if (visible) {
+    if (visible && resolvedUris.length > 0) {
       setActiveIndex(initialIndex);
       setZoomed(false);
       // Wait for layout to mount before scrolling
@@ -167,18 +234,20 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
         flatListRef.current?.scrollToIndex({ index: initialIndex, animated: false });
       }, 50);
     }
-  }, [visible, initialIndex]);
+  }, [visible, initialIndex, resolvedUris.length]);
+
+  if (!visible) return null;
 
   const handleScroll = (event: any) => {
     const contentOffset = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffset / width);
-    if (index >= 0 && index < uris.length && index !== activeIndex) {
+    if (index >= 0 && index < resolvedUris.length && index !== activeIndex) {
       setActiveIndex(index);
     }
   };
 
   const handleNext = () => {
-    if (activeIndex < uris.length - 1) {
+    if (activeIndex < resolvedUris.length - 1) {
       flatListRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
       setActiveIndex(activeIndex + 1);
     }
@@ -190,6 +259,33 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
       setActiveIndex(activeIndex - 1);
     }
   };
+
+  if (resolving || resolvedUris.length === 0) {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={onClose}
+      >
+        <SafeAreaView style={styles.modalBg}>
+          <StatusBar barStyle="light-content" />
+          <View style={styles.header}>
+            <View style={{ width: 44 }} />
+            <KamiText variant="overline" color="#fff" bold>
+              Photo Preview
+            </KamiText>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+              <Text style={styles.closeText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -205,7 +301,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
         <View style={styles.header}>
           <View style={{ width: 44 }} />
           <KamiText variant="overline" color="#fff" bold>
-            {uris.length > 1 ? `Memory Gallery (${activeIndex + 1}/${uris.length})` : 'Photo Preview'}
+            {resolvedUris.length > 1 ? `Memory Gallery (${activeIndex + 1}/${resolvedUris.length})` : 'Photo Preview'}
           </KamiText>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
             <Text style={styles.closeText}>✕</Text>
@@ -216,7 +312,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
         <View style={{ flex: 1, position: 'relative' }}>
           <FlatList
             ref={flatListRef}
-            data={uris}
+            data={resolvedUris}
             horizontal
             pagingEnabled
             scrollEnabled={!zoomed}
@@ -235,7 +331,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
           />
 
           {/* Chevron Overlays */}
-          {uris.length > 1 && !zoomed && (
+          {resolvedUris.length > 1 && !zoomed && (
             <>
               {activeIndex > 0 && (
                 <TouchableOpacity
@@ -246,7 +342,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
                   <Text style={styles.chevronText}>‹</Text>
                 </TouchableOpacity>
               )}
-              {activeIndex < uris.length - 1 && (
+              {activeIndex < resolvedUris.length - 1 && (
                 <TouchableOpacity
                   style={[styles.chevronBtn, styles.rightChevron]}
                   onPress={handleNext}
@@ -262,7 +358,7 @@ export const ImageZoomModal: React.FC<ImageZoomModalProps> = ({
         {/* Footer instruction */}
         <View style={styles.footer}>
           <KamiText variant="caption" color="rgba(255, 255, 255, 0.6)" align="center">
-            {uris.length > 1 && !zoomed ? 'Swipe or tap arrows to navigate\n' : ''}
+            {resolvedUris.length > 1 && !zoomed ? 'Swipe or tap arrows to navigate\n' : ''}
             Pinch to zoom • Drag to pan • Double tap to reset
           </KamiText>
         </View>
