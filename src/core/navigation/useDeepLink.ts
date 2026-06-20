@@ -48,6 +48,7 @@ export function useDeepLink(ref: NavRef) {
 
       const isRecovery = url.includes('reset-password') || type === 'recovery';
       const isVerification = url.includes('verify') || type === 'signup';
+      const isPartnerSpace = url.includes('partner-space');
 
       if (isRecovery) {
         const navigateToReset = () => {
@@ -69,6 +70,18 @@ export function useDeepLink(ref: NavRef) {
           setTimeout(navigateToVerify, 100);
         };
         navigateToVerify();
+      } else if (isPartnerSpace) {
+        const navigateToPartnerSpace = () => {
+          const nav = ref.current;
+          if (nav?.isReady()) {
+            nav.navigate('PartnerSpace', {
+              screen: url.includes('partner-space/compose') ? 'PartnerCanvas' : 'SpaceHome',
+            });
+            return;
+          }
+          setTimeout(navigateToPartnerSpace, 100);
+        };
+        navigateToPartnerSpace();
       }
     };
 

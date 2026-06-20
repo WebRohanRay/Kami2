@@ -3,6 +3,7 @@ import { usePartnerSpaceStore } from '../store/partnerSpaceStore';
 import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { useAuthStore } from '@features/auth';
 import * as SpaceService from '@infrastructure/partner-space/partnerSpaceService';
+import { syncPartnerSpaceWidgetFromStore } from './partnerSpaceWidgetSync';
 
 /**
  * Main hook to initialise Partner Space.
@@ -77,6 +78,7 @@ export function usePartnerSpace() {
     }
 
     store.setSpaceLoading('idle');
+    syncPartnerSpaceWidgetFromStore();
   }, [couple?.id, user?.id]);
 
   useEffect(() => {

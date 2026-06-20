@@ -68,6 +68,7 @@ export default {
       'expo-sqlite',
       'expo-file-system',
       'expo-font',
+      './plugins/withPartnerSpaceWidget',
     ],
 
     extra: {

@@ -4,6 +4,7 @@ import { useCoupleStore } from '@features/couple/store/coupleStore';
 import { usePartnerSpaceStore } from '../store/partnerSpaceStore';
 import { supabase } from '@shared/lib/supabase';
 import type { PartnerSpaceItem } from '../types';
+import { syncPartnerSpaceWidgetFromStore } from '../hooks/partnerSpaceWidgetSync';
 
 /**
  * Supabase Realtime listener for Partner Space tables.
@@ -53,6 +54,7 @@ export function PartnerSpaceRealtimeListener() {
 
           if (payload.eventType === 'DELETE') {
             store.removeItem(payload.old.id);
+            syncPartnerSpaceWidgetFromStore();
             return;
           }
 
@@ -89,6 +91,7 @@ export function PartnerSpaceRealtimeListener() {
           // Handle soft-deleted or disappeared items
           if (mapped.isDeleted || mapped.disappeared) {
             store.removeItem(mapped.id);
+            syncPartnerSpaceWidgetFromStore();
             return;
           }
 
@@ -123,6 +126,7 @@ export function PartnerSpaceRealtimeListener() {
               icon: row.reaction_emoji || '❤️',
             });
           }
+          syncPartnerSpaceWidgetFromStore();
         })
 
         // ── Space metadata: goodnight and widget settings ────────────────────
@@ -159,6 +163,7 @@ export function PartnerSpaceRealtimeListener() {
               icon: '🌙',
             });
           }
+          syncPartnerSpaceWidgetFromStore();
         })
 
         .subscribe();
