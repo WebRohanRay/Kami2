@@ -131,7 +131,7 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
   const { colors } = useTheme();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const name = user?.nickname ? user.nickname.split(' ')[0] : 'You';
-  const entranceAnims = useStaggeredEntrance(9, { delay: 80, offsetY: 25 });
+  const entranceAnims = useStaggeredEntrance(10, { delay: 80, offsetY: 25 });
   const { pulseStyle: heartPulse, glowStyle: heartGlow, glowRingStyle: heartGlowRing } = useHeartbeatGlow({ color: colors.primary, size: 44 });
   const [loveTrigger, setLoveTrigger] = useState(0);
 
@@ -372,6 +372,31 @@ export const CoupleDashboard: React.FC<CoupleDashboardProps> = ({
         </TouchableOpacity>
       </Animated.View>
 
+
+      {/* ── PARTNER SPACE CARD ──────────────────────── */}
+      <Animated.View style={entranceAnims[9].style}>
+        <TouchableOpacity
+          style={[styles.partnerSpaceCard, { backgroundColor: colors.cardBg, borderColor: colors.primary + '22' }]}
+          onPress={() => navigation.getParent()?.navigate('PartnerSpace')}
+          activeOpacity={0.85}
+          delayPressIn={0}
+        >
+          <View style={styles.partnerSpaceLeft}>
+            <View style={[styles.partnerSpaceIconCircle, { backgroundColor: colors.primary + '12' }]}>
+              <Text style={{ fontSize: 22 }}>💌</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <KamiText style={styles.widgetHeader} bold>Partner Space</KamiText>
+              <KamiText variant="caption" color={colors.textMuted}>
+                Decorate {partnerName}'s home screen
+              </KamiText>
+            </View>
+          </View>
+          <View style={[styles.partnerSpaceArrow, { backgroundColor: colors.primary + '12' }]}>
+            <KamiText bold color={colors.primary} style={{ fontSize: 14 }}>→</KamiText>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* ── 5. COUPLE MOOD RING WIDGET ───────────── */}
       <Animated.View style={entranceAnims[4].style}>
@@ -1501,5 +1526,34 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   candidBtnText: {
     fontSize: FontSize.sm,
+  },
+  partnerSpaceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Space[4],
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    ...Shadows.sm,
+  },
+  partnerSpaceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space[3],
+    flex: 1,
+  },
+  partnerSpaceIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  partnerSpaceArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

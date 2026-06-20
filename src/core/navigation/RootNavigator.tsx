@@ -6,6 +6,7 @@ import { useAuthStore, ResetPasswordScreen } from '@features/auth';
 import { useTheme } from '@shared/hooks';
 import { AuthNavigator } from './AuthNavigator';
 import MainNavigator from './MainNavigator';
+import PartnerSpaceNavigator from './PartnerSpaceNavigator';
 import { useDeepLink } from './useDeepLink';
 import type { RootStackParamList } from './types';
 import { CoupleRealtimeListener } from '@features/couple/components/CoupleRealtimeListener';
@@ -42,6 +43,11 @@ export const RootNavigator: React.FC = () => {
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}
         <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+        <Stack.Screen
+          name="PartnerSpace"
+          component={PartnerSpaceNavigator}
+          options={{ animation: 'slide_from_right' }}
+        />
       </Stack.Navigator>
       {isAuthenticated && <CoupleRealtimeListener />}
     </NavigationContainer>

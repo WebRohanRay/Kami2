@@ -845,6 +845,32 @@ export function SettingsScreen({ navigation }: Props) {
                 value={couple.anniversaryDate ? `Anniversary: ${new Date(couple.anniversaryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Set anniversary date'}
                 onPress={() => setEditingCouple(v => !v)}
               />
+
+              {/* Partner Space settings */}
+              <SettingRow
+                icon="💌"
+                label="Partner Space"
+                value="Widget settings & theme"
+                onPress={() => navigation.getParent()?.navigate('PartnerSpace', { screen: 'SpaceSettings' })}
+              />
+              <SettingRow
+                icon="🛡️"
+                label="Partner Permissions"
+                value="Control what they can add"
+                onPress={() => navigation.getParent()?.navigate('PartnerSpace', { screen: 'SpacePermissions' })}
+              />
+              <SettingRow
+                icon="📦"
+                label="Widget Preview"
+                value="See how your widget looks"
+                onPress={() => navigation.getParent()?.navigate('PartnerSpace', { screen: 'WidgetPreview' })}
+              />
+              <SettingRow
+                icon="ðŸ“±"
+                label="Add Home Widget"
+                value="Choose size and add it to your home screen"
+                onPress={() => navigation.getParent()?.navigate('PartnerSpace', { screen: 'WidgetPreview' })}
+              />
             </>
           )}
         </SettingGroup>
