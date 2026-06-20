@@ -8,6 +8,7 @@ import Canvas from '../components/Canvas';
 import ReactionBar from '../components/ReactionBar';
 import QuickComposeSheet from '../components/QuickComposeSheet';
 import * as SpaceService from '@infrastructure/partner-space/partnerSpaceService';
+import type { QuickComposeMode } from '../components/QuickComposeSheet';
 import type { PartnerSpaceItem, NoteContent } from '../types';
 import { QUICK_NOTES, MAX_CANVAS_ITEMS } from '../types';
 
@@ -34,6 +35,7 @@ const PartnerCanvasScreen: React.FC = () => {
   const redoStack = usePartnerSpaceStore((s) => s.redoStack);
 
   const [showComposeSheet, setShowComposeSheet] = useState(false);
+  const [composeMode, setComposeMode] = useState<QuickComposeMode>('picker');
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PartnerSpaceItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -169,6 +171,11 @@ const PartnerCanvasScreen: React.FC = () => {
     }
   }, [addItemToStore, items.length, permissions?.allowNotes, pushUndo, space]);
 
+  const openCompose = useCallback((mode: QuickComposeMode) => {
+    setComposeMode(mode);
+    setShowComposeSheet(true);
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.pageBg }]}>
       {/* Top bar */}
@@ -270,7 +277,7 @@ const PartnerCanvasScreen: React.FC = () => {
         {/* Content type buttons */}
         <View style={styles.contentButtons}>
           <TouchableOpacity
-            onPress={() => setShowComposeSheet(true)}
+            onPress={() => openCompose('photo')}
             style={[styles.contentBtn, { backgroundColor: colors.primary + '15' }]}
           >
             <Text style={styles.contentBtnEmoji}>📸</Text>
@@ -278,7 +285,7 @@ const PartnerCanvasScreen: React.FC = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setShowComposeSheet(true)}
+            onPress={() => openCompose('note')}
             style={[styles.contentBtn, { backgroundColor: colors.primary + '15' }]}
           >
             <Text style={styles.contentBtnEmoji}>💌</Text>
@@ -286,7 +293,7 @@ const PartnerCanvasScreen: React.FC = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setShowComposeSheet(true)}
+            onPress={() => openCompose('sticker')}
             style={[styles.contentBtn, { backgroundColor: colors.primary + '15' }]}
           >
             <Text style={styles.contentBtnEmoji}>😊</Text>
@@ -294,7 +301,7 @@ const PartnerCanvasScreen: React.FC = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setShowComposeSheet(true)}
+            onPress={() => openCompose('gift')}
             style={[styles.contentBtn, { backgroundColor: colors.primary + '15' }]}
           >
             <Text style={styles.contentBtnEmoji}>🎁</Text>
@@ -325,6 +332,7 @@ const PartnerCanvasScreen: React.FC = () => {
       {/* Quick compose bottom sheet */}
       {showComposeSheet && (
         <QuickComposeSheet
+          initialMode={composeMode}
           onDismiss={() => setShowComposeSheet(false)}
           onItemAdded={(item) => {
             addItemToStore(item);

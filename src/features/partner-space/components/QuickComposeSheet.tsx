@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Modal, Image, Alert, TextInput, Switch,
+  Modal, Alert, TextInput, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@shared/hooks';
@@ -17,9 +17,10 @@ import type {
   GiftContent, NoteColor, NoteFontStyle, DisappearCondition,
 } from '../types';
 
-type ContentMode = 'picker' | 'photo' | 'note' | 'sticker' | 'gift';
+export type QuickComposeMode = 'picker' | 'photo' | 'note' | 'sticker' | 'gift';
 
 interface QuickComposeSheetProps {
+  initialMode?: QuickComposeMode;
   onDismiss: () => void;
   onItemAdded: (item: PartnerSpaceItem) => void;
 }
@@ -29,7 +30,7 @@ interface QuickComposeSheetProps {
  * Supports: Photo, Note, Sticker, Gift.
  * Includes schedule and disappear toggles.
  */
-const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ onDismiss, onItemAdded }) => {
+const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ initialMode = 'picker', onDismiss, onItemAdded }) => {
   const { colors } = useTheme();
   const space = usePartnerSpaceStore((s) => s.space);
   const permissions = usePartnerSpaceStore((s) => s.permissions);
@@ -44,8 +45,9 @@ const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ onDismiss, onItem
     };
   }, [rawItems]);
 
-  const [mode, setMode] = useState<ContentMode>('picker');
+  const [mode, setMode] = useState<QuickComposeMode>(initialMode);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const autoPhotoOpened = useRef(false);
 
   // Schedule state
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -60,11 +62,7 @@ const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ onDismiss, onItem
   const [noteColor, setNoteColor] = useState<NoteColor>('yellow');
   const [noteFontStyle, setNoteFontStyle] = useState<NoteFontStyle>('handwritten');
 
-  // Recent photos
-  const [recentPhotos, setRecentPhotos] = useState<string[]>([]);
-
   // Gift state
-  const [giftType, setGiftType] = useState<'note' | 'photo'>('note');
   const [giftNoteText, setGiftNoteText] = useState('');
 
   // Load recent photos on mount
@@ -152,6 +150,12 @@ const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ onDismiss, onItem
       await addPhoto(result.assets[0].uri);
     }
   }, [addPhoto]);
+
+  useEffect(() => {
+    if (initialMode !== 'photo' || autoPhotoOpened.current) return;
+    autoPhotoOpened.current = true;
+    pickPhoto();
+  }, [initialMode, pickPhoto]);
 
   // ─── Add Note ──────────────────────────────────────────────────
   const addNote = useCallback(async () => {
@@ -251,7 +255,7 @@ const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ onDismiss, onItem
     <>
       {/* Content type buttons */}
       <View style={styles.typeGrid}>
-        <TouchableOpacity onPress={() => setMode('photo')} style={[styles.typeBtn, { backgroundColor: colors.primary + '10' }]}>
+        <TouchableOpacity onPress={pickPhoto} style={[styles.typeBtn, { backgroundColor: colors.primary + '10' }]}>
           <Text style={styles.typeBtnEmoji}>📸</Text>
           <Text style={[styles.typeBtnLabel, { color: colors.primary }]}>Photo</Text>
         </TouchableOpacity>
@@ -437,85 +441,96 @@ const QuickComposeSheet: React.FC<QuickComposeSheetProps> = ({ onDismiss, onItem
       </TouchableOpacity>
 
       {/* Sheet */}
-      <View
-        style={[styles.sheet, { backgroundColor: colors.cardBg }]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        style={styles.keyboardAvoider}
+        pointerEvents="box-none"
       >
-        {/* Handle */}
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        <View
+          style={[styles.sheet, { backgroundColor: colors.cardBg }]}
+        >
+          {/* Handle */}
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-        {/* Back button if not on picker */}
-        {mode !== 'picker' && (
-          <TouchableOpacity onPress={() => setMode('picker')} style={styles.sheetBack}>
-            <Text style={[styles.sheetBackText, { color: colors.textSecondary }]}>← Back</Text>
-          </TouchableOpacity>
-        )}
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {mode === 'picker' && renderPicker()}
-          {mode === 'photo' && renderPhotoMode()}
-          {mode === 'note' && renderNoteComposer()}
-          {mode === 'sticker' && renderStickerPicker()}
-          {mode === 'gift' && renderGiftComposer()}
-
-          {/* Schedule toggle */}
-          {mode !== 'picker' && mode !== 'sticker' && (
-            <View style={[styles.toggleSection, { borderTopColor: colors.divider }]}>
-              <View style={styles.toggleRow}>
-                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>⏰ Schedule for later</Text>
-                <Switch
-                  value={scheduleEnabled}
-                  onValueChange={setScheduleEnabled}
-                  trackColor={{ false: colors.divider, true: colors.primary + '60' }}
-                  thumbColor={scheduleEnabled ? colors.primary : '#CCC'}
-                />
-              </View>
-              {scheduleEnabled && (
-                <View style={styles.quickScheduleRow}>
-                  <TouchableOpacity onPress={() => setQuickSchedule('tomorrow_morning')} style={[styles.quickScheduleBtn, { backgroundColor: colors.creamDeep }]}>
-                    <Text style={styles.quickScheduleText}>Tomorrow morning</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setQuickSchedule('tonight')} style={[styles.quickScheduleBtn, { backgroundColor: colors.creamDeep }]}>
-                    <Text style={styles.quickScheduleText}>Tonight</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Disappear toggle */}
-              <View style={styles.toggleRow}>
-                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>🫧 Make it disappear</Text>
-                <Switch
-                  value={disappearEnabled}
-                  onValueChange={setDisappearEnabled}
-                  trackColor={{ false: colors.divider, true: colors.primary + '60' }}
-                  thumbColor={disappearEnabled ? colors.primary : '#CCC'}
-                />
-              </View>
-              {disappearEnabled && (
-                <View style={styles.disappearOptions}>
-                  {(['after_24h', 'after_seen', 'after_reacted'] as DisappearCondition[]).map((cond) => (
-                    <TouchableOpacity
-                      key={cond}
-                      onPress={() => setDisappearCondition(cond)}
-                      style={[
-                        styles.disappearBtn,
-                        disappearCondition === cond && { backgroundColor: colors.primary + '15' },
-                      ]}
-                    >
-                      <Text style={[
-                        styles.disappearBtnText,
-                        { color: disappearCondition === cond ? colors.primary : colors.textSecondary },
-                      ]}>
-                        {cond === 'after_24h' ? 'After 24 hours' :
-                         cond === 'after_seen' ? 'After seen' : 'After reacted'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+          {/* Back button if not on picker */}
+          {mode !== 'picker' && initialMode === 'picker' && (
+            <TouchableOpacity onPress={() => setMode('picker')} style={styles.sheetBack}>
+              <Text style={[styles.sheetBackText, { color: colors.textSecondary }]}>← Back</Text>
+            </TouchableOpacity>
           )}
-        </ScrollView>
-      </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.sheetContent}
+          >
+            {mode === 'picker' && renderPicker()}
+            {mode === 'photo' && renderPhotoMode()}
+            {mode === 'note' && renderNoteComposer()}
+            {mode === 'sticker' && renderStickerPicker()}
+            {mode === 'gift' && renderGiftComposer()}
+
+            {/* Schedule toggle */}
+            {mode !== 'picker' && mode !== 'sticker' && (
+              <View style={[styles.toggleSection, { borderTopColor: colors.divider }]}>
+                <View style={styles.toggleRow}>
+                  <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>⏰ Schedule for later</Text>
+                  <Switch
+                    value={scheduleEnabled}
+                    onValueChange={setScheduleEnabled}
+                    trackColor={{ false: colors.divider, true: colors.primary + '60' }}
+                    thumbColor={scheduleEnabled ? colors.primary : '#CCC'}
+                  />
+                </View>
+                {scheduleEnabled && (
+                  <View style={styles.quickScheduleRow}>
+                    <TouchableOpacity onPress={() => setQuickSchedule('tomorrow_morning')} style={[styles.quickScheduleBtn, { backgroundColor: colors.creamDeep }]}>
+                      <Text style={styles.quickScheduleText}>Tomorrow morning</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setQuickSchedule('tonight')} style={[styles.quickScheduleBtn, { backgroundColor: colors.creamDeep }]}>
+                      <Text style={styles.quickScheduleText}>Tonight</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Disappear toggle */}
+                <View style={styles.toggleRow}>
+                  <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>🫧 Make it disappear</Text>
+                  <Switch
+                    value={disappearEnabled}
+                    onValueChange={setDisappearEnabled}
+                    trackColor={{ false: colors.divider, true: colors.primary + '60' }}
+                    thumbColor={disappearEnabled ? colors.primary : '#CCC'}
+                  />
+                </View>
+                {disappearEnabled && (
+                  <View style={styles.disappearOptions}>
+                    {(['after_24h', 'after_seen', 'after_reacted'] as DisappearCondition[]).map((cond) => (
+                      <TouchableOpacity
+                        key={cond}
+                        onPress={() => setDisappearCondition(cond)}
+                        style={[
+                          styles.disappearBtn,
+                          disappearCondition === cond && { backgroundColor: colors.primary + '15' },
+                        ]}
+                      >
+                        <Text style={[
+                          styles.disappearBtnText,
+                          { color: disappearCondition === cond ? colors.primary : colors.textSecondary },
+                        ]}>
+                          {cond === 'after_24h' ? 'After 24 hours' :
+                           cond === 'after_seen' ? 'After seen' : 'After reacted'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -531,21 +546,24 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
+  keyboardAvoider: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+  },
   sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 20,
-    paddingBottom: 36,
+    paddingBottom: 0,
     maxHeight: '80%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 12,
+  },
+  sheetContent: {
+    paddingBottom: 36,
   },
   handle: {
     alignSelf: 'center',
