@@ -174,8 +174,8 @@ export const WIDGET_SIZES: Record<WidgetSize, WidgetSizeConfig> = {
     gridWidth: 2,
     gridHeight: 2,
     maxVisibleItems: 1,
-    previewWidth: 160,
-    previewHeight: 160,
+    previewWidth: 144,
+    previewHeight: 144,
   },
   medium: {
     size: 'medium',
@@ -183,8 +183,8 @@ export const WIDGET_SIZES: Record<WidgetSize, WidgetSizeConfig> = {
     gridWidth: 4,
     gridHeight: 2,
     maxVisibleItems: 4,
-    previewWidth: 320,
-    previewHeight: 160,
+    previewWidth: 288,
+    previewHeight: 144,
   },
   large: {
     size: 'large',
@@ -192,8 +192,8 @@ export const WIDGET_SIZES: Record<WidgetSize, WidgetSizeConfig> = {
     gridWidth: 4,
     gridHeight: 4,
     maxVisibleItems: 20,
-    previewWidth: 320,
-    previewHeight: 320,
+    previewWidth: 288,
+    previewHeight: 288,
   },
 };
 

@@ -28,6 +28,7 @@ const PartnerCanvasScreen: React.FC = () => {
   const permissions = usePartnerSpaceStore((s) => s.permissions);
   const addItemToStore = usePartnerSpaceStore((s) => s.addItem);
   const updateItemInStore = usePartnerSpaceStore((s) => s.updateItem);
+  const removeItemFromStore = usePartnerSpaceStore((s) => s.removeItem);
   const pushUndo = usePartnerSpaceStore((s) => s.pushUndo);
   const undo = usePartnerSpaceStore((s) => s.undo);
   const redo = usePartnerSpaceStore((s) => s.redo);
@@ -62,6 +63,33 @@ const PartnerCanvasScreen: React.FC = () => {
       zIndex: updatedItem.zIndex,
     });
   }, [items, permissions?.allowPartnerMove, pushUndo, updateItemInStore]);
+
+  const handleItemDelete = useCallback((item: PartnerSpaceItem) => {
+    if (!permissions?.allowPartnerDelete) {
+      Alert.alert('Not allowed', 'Deleting items is turned off for this widget.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete this item?',
+      'This will remove it from the widget.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await SpaceService.softDeleteItem(item.id);
+            if (!res.success) {
+              Alert.alert('Could not delete', res.error);
+              return;
+            }
+            removeItemFromStore(item.id);
+          },
+        },
+      ]
+    );
+  }, [permissions?.allowPartnerDelete, removeItemFromStore]);
 
   // Handle long press (reactions for owner, delete for controller)
   const handleItemLongPress = useCallback((item: PartnerSpaceItem) => {
@@ -228,6 +256,7 @@ const PartnerCanvasScreen: React.FC = () => {
         <Canvas
           editable={true}
           onItemUpdate={handleItemUpdate}
+          onItemDelete={handleItemDelete}
           onItemLongPress={handleItemLongPress}
           onItemTap={handleItemTap}
         />

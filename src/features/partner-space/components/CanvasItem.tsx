@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -22,9 +22,13 @@ interface CanvasItemProps {
   canvasWidth: number;
   canvasHeight: number;
   onUpdate?: (item: PartnerSpaceItem) => void;
+  onDelete?: (item: PartnerSpaceItem) => void;
   onLongPress?: (item: PartnerSpaceItem) => void;
   onTap?: (item: PartnerSpaceItem) => void;
 }
+
+const MIN_ITEM_SIZE = 60;
+const MAX_ITEM_SIZE = 300;
 
 const CanvasItem: React.FC<CanvasItemProps> = ({
   item,
@@ -32,6 +36,7 @@ const CanvasItem: React.FC<CanvasItemProps> = ({
   canvasWidth,
   canvasHeight,
   onUpdate,
+  onDelete,
   onLongPress,
   onTap,
 }) => {
@@ -95,12 +100,24 @@ const CanvasItem: React.FC<CanvasItemProps> = ({
       scale.value = Math.max(0.5, Math.min(2.5, e.scale));
     })
     .onEnd(() => {
-      const newWidth = Math.max(60, Math.min(300, item.width * scale.value));
-      const newHeight = Math.max(60, Math.min(300, item.height * scale.value));
+      const widthLimit = Math.min(MAX_ITEM_SIZE, canvasWidth);
+      const heightLimit = Math.min(MAX_ITEM_SIZE, canvasHeight);
+      const newWidth = Math.max(MIN_ITEM_SIZE, Math.min(widthLimit, item.width * scale.value));
+      const newHeight = Math.max(MIN_ITEM_SIZE, Math.min(heightLimit, item.height * scale.value));
+      const nextX = Math.max(0, Math.min(Math.max(0, canvasWidth - newWidth), item.positionX));
+      const nextY = Math.max(0, Math.min(Math.max(0, canvasHeight - newHeight), item.positionY));
       scale.value = withSpring(1);
+      translateX.value = withSpring(nextX, { damping: 20, stiffness: 200 });
+      translateY.value = withSpring(nextY, { damping: 20, stiffness: 200 });
 
       if (onUpdate) {
-        runOnJS(onUpdate)({ ...item, width: newWidth, height: newHeight });
+        runOnJS(onUpdate)({
+          ...item,
+          positionX: nextX,
+          positionY: nextY,
+          width: newWidth,
+          height: newHeight,
+        });
       }
     });
 
@@ -130,6 +147,10 @@ const CanvasItem: React.FC<CanvasItemProps> = ({
       { scale: scale.value },
     ],
   }));
+
+  const deleteItem = useCallback(() => {
+    onDelete?.(item);
+  }, [item, onDelete]);
 
   // Render content based on type
   const renderContent = useCallback(() => {
@@ -216,19 +237,33 @@ const CanvasItem: React.FC<CanvasItemProps> = ({
   };
 
   return (
-    <GestureDetector gesture={composed}>
-      <Animated.View
-        entering={FadeIn.duration(400).delay(100)}
-        style={[
-          styles.itemWrapper,
-          { zIndex: item.zIndex, width: item.width, height: item.height },
-          animatedStyle,
-        ]}
-      >
+    <Animated.View
+      entering={FadeIn.duration(400).delay(100)}
+      style={[
+        styles.itemWrapper,
+        { zIndex: item.zIndex, width: item.width, height: item.height },
+        animatedStyle,
+      ]}
+    >
+      <GestureDetector gesture={composed}>
+        <View style={styles.gestureArea}>
         {renderContent()}
         {renderReactionBadge()}
-      </Animated.View>
-    </GestureDetector>
+        </View>
+      </GestureDetector>
+      {editable && (
+        <View style={styles.controls} pointerEvents="box-none">
+          <TouchableOpacity
+            onPress={deleteItem}
+            style={[styles.controlButton, styles.deleteButton]}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
+            <Text style={styles.deleteText}>×</Text>
+          </TouchableOpacity>
+
+        </View>
+      )}
+    </Animated.View>
   );
 };
 
@@ -237,6 +272,38 @@ export default React.memo(CanvasItem);
 const styles = StyleSheet.create({
   itemWrapper: {
     position: 'absolute',
+  },
+  gestureArea: {
+    width: '100%',
+    height: '100%',
+  },
+  controls: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  controlButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#FF5A6E',
+  },
+  deleteText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '700',
   },
   stickerContainer: {
     alignItems: 'center',

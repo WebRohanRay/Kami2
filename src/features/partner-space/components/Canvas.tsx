@@ -20,8 +20,12 @@ interface CanvasProps {
   canvasWidth?: number;
   /** Canvas height override */
   canvasHeight?: number;
+  /** Scale item positions/sizes into this canvas for compact widget previews */
+  fitItemsToCanvas?: boolean;
   /** Called when an item is updated (position, size, z-index) */
   onItemUpdate?: (item: PartnerSpaceItem) => void;
+  /** Called when an item should be deleted */
+  onItemDelete?: (item: PartnerSpaceItem) => void;
   /** Called when an item is long-pressed (for reactions or delete) */
   onItemLongPress?: (item: PartnerSpaceItem) => void;
   /** Called when an item is tapped (for gifts) */
@@ -32,7 +36,9 @@ const Canvas: React.FC<CanvasProps> = ({
   editable,
   canvasWidth = SCREEN_WIDTH - 32,
   canvasHeight = CANVAS_HEIGHT,
+  fitItemsToCanvas = false,
   onItemUpdate,
+  onItemDelete,
   onItemLongPress,
   onItemTap,
 }) => {
@@ -57,6 +63,28 @@ const Canvas: React.FC<CanvasProps> = ({
     () => [...activeItems].sort((a, b) => a.zIndex - b.zIndex),
     [activeItems]
   );
+
+  const displayItems = useMemo(() => {
+    if (!fitItemsToCanvas) return sortedItems;
+
+    const baseWidth = SCREEN_WIDTH - 32;
+    const baseHeight = CANVAS_HEIGHT;
+    const scaleX = canvasWidth / baseWidth;
+    const scaleY = canvasHeight / baseHeight;
+    const itemScale = Math.max(0.45, Math.min(scaleX, scaleY));
+
+    return sortedItems.map((item) => {
+      const width = Math.max(42, item.width * itemScale);
+      const height = Math.max(42, item.height * itemScale);
+      return {
+        ...item,
+        positionX: Math.max(0, Math.min(canvasWidth - width, item.positionX * scaleX)),
+        positionY: Math.max(0, Math.min(canvasHeight - height, item.positionY * scaleY)),
+        width,
+        height,
+      };
+    });
+  }, [canvasHeight, canvasWidth, fitItemsToCanvas, sortedItems]);
 
   return (
     <Animated.View
@@ -91,7 +119,7 @@ const Canvas: React.FC<CanvasProps> = ({
       )}
 
       {/* Canvas items */}
-      {sortedItems.map((item) => (
+      {displayItems.map((item) => (
         <CanvasItem
           key={item.id}
           item={item}
@@ -99,6 +127,7 @@ const Canvas: React.FC<CanvasProps> = ({
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
           onUpdate={onItemUpdate}
+          onDelete={onItemDelete}
           onLongPress={onItemLongPress}
           onTap={onItemTap}
         />
@@ -118,7 +147,7 @@ const Canvas: React.FC<CanvasProps> = ({
       )}
 
       {/* Empty state */}
-      {sortedItems.length === 0 && (
+      {displayItems.length === 0 && (
         <View style={styles.emptyState}>
           <Animated.Text
             entering={FadeIn.delay(300).duration(600)}
