@@ -29,6 +29,7 @@ export const KamiImage: React.FC<KamiImageProps> = ({
   const [currentUri, setCurrentUri] = useState<string | null>(null);
   const [resolutionStatus, setResolutionStatus] = useState<'local' | 'remote' | 'unavailable' | 'resolving'>('resolving');
   const [isUsingThumbnail, setIsUsingThumbnail] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -117,12 +118,23 @@ export const KamiImage: React.FC<KamiImageProps> = ({
         src.startsWith('assets-library://'))
     ) {
       return (
-        <Image
-          {...props}
-          style={style}
-          source={{ uri: src }}
-          onError={handleLoadError}
-        />
+        <View style={[style, { justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }]}>
+          <Image
+            {...props}
+            style={style}
+            source={{ uri: src }}
+            onError={handleLoadError}
+            onLoadStart={() => setLoading(true)}
+            onLoadEnd={() => setLoading(false)}
+          />
+          {loading && (
+            <ActivityIndicator
+              size="small"
+              color={colors.primary}
+              style={{ position: 'absolute' }}
+            />
+          )}
+        </View>
       );
     }
 
@@ -150,11 +162,22 @@ export const KamiImage: React.FC<KamiImageProps> = ({
   }
 
   return (
-    <Image
-      {...props}
-      style={style}
-      source={{ uri: currentUri! }}
-      onError={handleLoadError}
-    />
+    <View style={[style, { justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }]}>
+      <Image
+        {...props}
+        style={style}
+        source={{ uri: currentUri! }}
+        onError={handleLoadError}
+        onLoadStart={() => setLoading(true)}
+        onLoadEnd={() => setLoading(false)}
+      />
+      {loading && (
+        <ActivityIndicator
+          size="small"
+          color={colors.primary}
+          style={{ position: 'absolute' }}
+        />
+      )}
+    </View>
   );
 };

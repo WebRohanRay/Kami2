@@ -34,6 +34,7 @@ interface ImageZoomModalProps {
 }
 
 const ZoomableImage: React.FC<{ uri: string; onZoomStateChange: (zoomed: boolean) => void }> = ({ uri, onZoomStateChange }) => {
+  const [loading, setLoading] = useState(false);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translationX = useSharedValue(0);
@@ -132,11 +133,20 @@ const ZoomableImage: React.FC<{ uri: string; onZoomStateChange: (zoomed: boolean
 
   return (
     <View style={styles.imageContainer}>
+      {loading && (
+        <ActivityIndicator
+          size="large"
+          color="#ffffff"
+          style={{ position: 'absolute', zIndex: 5 }}
+        />
+      )}
       <GestureDetector gesture={composed}>
         <Animated.Image
           source={{ uri }}
           style={[styles.image, animatedStyle]}
           resizeMode="contain"
+          onLoadStart={() => setLoading(true)}
+          onLoadEnd={() => setLoading(false)}
         />
       </GestureDetector>
     </View>

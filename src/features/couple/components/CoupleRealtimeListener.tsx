@@ -17,7 +17,7 @@ import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { useTheme } from '@shared/hooks';
 import { db } from '@shared/db/client';
 import * as schema from '@shared/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { 
   coupleLetterRepo, 
   coupleJournalRepo, 
@@ -139,14 +139,15 @@ export function CoupleRealtimeListener() {
             };
             await coupleLetterRepo.saveLetter(localInput).catch(err => console.error('[Realtime] Failed to save letter to SQLite:', err));
 
-            const exists = store.coupleLetters.some(x => x.id === mapped.id);
+            const previousLetter = store.coupleLetters.find(x => x.id === mapped.id);
+            const exists = !!previousLetter;
             if (exists) {
               store.updateCoupleLetterInList(mapped);
             } else {
               store.prependCoupleLetter(mapped);
             }
 
-            if (payload.eventType === 'INSERT' && newRow.sender_id !== user.id) {
+            if (payload.eventType === 'INSERT' && newRow.sender_id !== user.id && !newRow.is_draft) {
               setToast({
                 title: 'New Love Letter! ✉️',
                 message: `${partnerName} sealed a new letter for you.`,
@@ -177,24 +178,61 @@ export function CoupleRealtimeListener() {
                   }
                 ]
               );
-            } else if (payload.eventType === 'UPDATE' && newRow.is_read && newRow.sender_id === user.id) {
-              setToast({
-                title: 'Letter Read! ❤️',
-                message: `${partnerName} read your love letter.`,
-                icon: '❤️',
-                targetScreen: 'Future'
-              });
-              store.addHomeAlert({
-                type: 'reaction',
-                title: 'Letter Read ❤️',
-                message: `${partnerName} opened your letter!`,
-                targetScreen: 'Future'
-              });
-              triggerLocalNotificationAsync(
-                'Letter read! ❤️',
-                `"${partnerName} just opened your love letter! They are probably smiling right now. 🥰"`,
-                { screen: 'Future' }
-              );
+            } else if (payload.eventType === 'UPDATE') {
+              const wasDraftToSealed = previousLetter && previousLetter.isDraft && !newRow.is_draft;
+              if (wasDraftToSealed && newRow.sender_id !== user.id) {
+                setToast({
+                  title: 'New Love Letter! ✉️',
+                  message: `${partnerName} sealed a new letter for you.`,
+                  icon: '✉️',
+                  targetScreen: 'Future'
+                });
+                store.addHomeAlert({
+                  type: 'letter',
+                  title: 'New Letter Received 💌',
+                  message: `${partnerName} just sent you a letter!`,
+                  targetScreen: 'Future'
+                });
+                triggerLocalNotificationAsync(
+                  'A secret letter arrived! 💌',
+                  `"${partnerName} sealed a new time capsule for you. Open it to feel all the butterflies! 🦋"`,
+                  { screen: 'Future' }
+                );
+                Alert.alert(
+                  'New Love Letter! ✉️',
+                  `${partnerName} just sealed a new love letter for you.`,
+                  [
+                    { text: 'Dismiss', style: 'cancel' },
+                    {
+                      text: 'View Letters',
+                      onPress: () => {
+                        navigationRef.current?.navigate('Future' as any);
+                      }
+                    }
+                  ]
+                );
+              }
+
+              const wasJustRead = newRow.is_read && (!previousLetter || !previousLetter.isRead);
+              if (wasJustRead && newRow.sender_id === user.id) {
+                setToast({
+                  title: 'Letter Read! ❤️',
+                  message: `${partnerName} read your love letter.`,
+                  icon: '❤️',
+                  targetScreen: 'Future'
+                });
+                store.addHomeAlert({
+                  type: 'reaction',
+                  title: 'Letter Read ❤️',
+                  message: `${partnerName} opened your letter!`,
+                  targetScreen: 'Future'
+                });
+                triggerLocalNotificationAsync(
+                  'Letter read! ❤️',
+                  `"${partnerName} just opened your love letter! They are probably smiling right now. 🥰"`,
+                  { screen: 'Future' }
+                );
+              }
             }
           }
         })
@@ -272,17 +310,26 @@ export function CoupleRealtimeListener() {
                 { screen: 'Journal' }
               );
             } else if (payload.eventType === 'UPDATE' && newRow.user_id !== user.id) {
-              setToast({
-                title: 'Journal Entry Updated! 📓',
-                message: `${partnerName} updated a journal entry.`,
-                icon: '📓',
-                targetScreen: 'Journal'
-              });
-              triggerLocalNotificationAsync(
-                'Journal entry updated! 📓',
-                `"${partnerName} updated an entry in our journal: '${newRow.title || 'Untitled'}'. ✨"`,
-                { screen: 'Journal' }
-              );
+              const didContentChange = !existing ||
+                existing.title !== mapped.title ||
+                existing.body !== mapped.body ||
+                existing.moodId !== mapped.moodId ||
+                JSON.stringify(existing.imageUrls) !== JSON.stringify(mapped.imageUrls) ||
+                JSON.stringify(existing.tags) !== JSON.stringify(mapped.tags);
+
+              if (didContentChange) {
+                setToast({
+                  title: 'Journal Entry Updated! 📓',
+                  message: `${partnerName} updated a journal entry.`,
+                  icon: '📓',
+                  targetScreen: 'Journal'
+                });
+                triggerLocalNotificationAsync(
+                  'Journal entry updated! 📓',
+                  `"${partnerName} updated the entry '${newRow.title || 'Untitled'}' in our journal. Check out what changed! ✨"`,
+                  { screen: 'Journal' }
+                );
+              }
             }
           }
         })
@@ -342,16 +389,21 @@ export function CoupleRealtimeListener() {
                   store.updateCoupleJournalInList(updatedJournal);
                 }
               }
-              if (newRow.user_id === partner?.id && payload.eventType === 'INSERT') {
+              if (newRow.user_id !== user.id && payload.eventType === 'INSERT') {
+                const isMyEntry = targetJournal && targetJournal.userId === user.id;
+                const message = isMyEntry
+                  ? `"${partnerName} left a comment on your journal entry. Go check it out! 😘"`
+                  : `"${partnerName} left a comment on their journal entry. Go check it out! 😘"`;
+
                 setToast({
                   title: 'New Comment! 💬',
-                  message: `${partnerName} commented on a journal entry.`,
+                  message: isMyEntry ? `${partnerName} commented on your entry.` : `${partnerName} commented on their entry.`,
                   icon: '💬',
                   targetScreen: 'Journal'
                 });
                 triggerLocalNotificationAsync(
                   'A sweet whisper! 💬',
-                  `"${partnerName} left a comment on your journal entry. Go check it out! 😘"`,
+                  message,
                   { screen: 'Journal' }
                 );
               }
@@ -396,24 +448,27 @@ export function CoupleRealtimeListener() {
                   store.updateCoupleJournalInList(updatedJournal);
                 }
               }
-              if (newRow.user_id === partner?.id && payload.eventType === 'INSERT') {
-                setToast({
-                  title: 'Partner Reacted! ❤️',
-                  message: `${partnerName} reacted to a journal entry.`,
-                  icon: '❤️',
-                  targetScreen: 'Journal'
-                });
-                store.addHomeAlert({
-                  type: 'reaction',
-                  title: 'Partner Reacted ❤️',
-                  message: `${partnerName} left a reaction in the journal.`,
-                  targetScreen: 'Journal'
-                });
-                triggerLocalNotificationAsync(
-                  'Love is in the air! ❤️',
-                  `"${partnerName} reacted to your journal page. Sending you extra hugs! 🥰"`,
-                  { screen: 'Journal' }
-                );
+              if (newRow.user_id !== user.id && payload.eventType === 'INSERT') {
+                const isMyEntry = targetJournal && targetJournal.userId === user.id;
+                if (isMyEntry) {
+                  setToast({
+                    title: 'Partner Reacted! ❤️',
+                    message: `${partnerName} reacted to your journal entry.`,
+                    icon: '❤️',
+                    targetScreen: 'Journal'
+                  });
+                  store.addHomeAlert({
+                    type: 'reaction',
+                    title: 'Partner Reacted ❤️',
+                    message: `${partnerName} left a reaction on your journal entry.`,
+                    targetScreen: 'Journal'
+                  });
+                  triggerLocalNotificationAsync(
+                    'Love is in the air! ❤️',
+                    `"${partnerName} reacted to your journal page. Sending you extra hugs! 🥰"`,
+                    { screen: 'Journal' }
+                  );
+                }
               }
             }
           }
@@ -465,57 +520,99 @@ export function CoupleRealtimeListener() {
             };
             await coupleGoalRepo.saveGoal(localInput).catch(err => console.error('[Realtime] Failed to save goal to SQLite:', err));
 
-            const exists = store.coupleGoals.some(x => x.id === mapped.id);
+            const localMutations = await db
+              .select({ id: schema.outboxMutations.id })
+              .from(schema.outboxMutations)
+              .where(
+                and(
+                  eq(schema.outboxMutations.entityId, newRow.id),
+                  eq(schema.outboxMutations.entityType, 'couple_goals')
+                )
+              )
+              .limit(1);
+            const isLocalAction = localMutations.length > 0;
+
+            const previousGoal = store.coupleGoals.find(x => x.id === mapped.id);
+            const exists = !!previousGoal;
             if (exists) {
               store.updateCoupleGoalInList(mapped);
             } else {
               store.prependCoupleGoal(mapped);
             }
 
-            if (payload.eventType === 'INSERT') {
-              setToast({
-                title: 'New Couple Goal! 🎯',
-                message: `A new shared goal has been added.`,
-                icon: '🎯',
-                targetScreen: 'Goals'
-              });
-              store.addHomeAlert({
-                type: 'goal',
-                title: 'New Goal Added 🎯',
-                message: `A new shared goal has been created!`,
-                targetScreen: 'Goals'
-              });
-              triggerLocalNotificationAsync(
-                'New dream unlocked! 🎯',
-                `"We just added a new shared goal: let's conquer the world together, one step at a time! 🌱"`,
-                { screen: 'Goals' }
-              );
-            } else if (payload.eventType === 'UPDATE') {
-              if (oldRow && oldRow.progress !== newRow.progress) {
+            if (!isLocalAction) {
+              if (payload.eventType === 'INSERT') {
                 setToast({
-                  title: 'Goal Updated! 📈',
-                  message: `Goal progress has been changed to ${newRow.progress}%.`,
-                  icon: '📈',
+                  title: 'New Couple Goal! 🎯',
+                  message: `${partnerName} added a new shared goal: "${newRow.title}"!`,
+                  icon: '🎯',
                   targetScreen: 'Goals'
                 });
-                if (newRow.progress === 100) {
-                  store.addHomeAlert({
-                    type: 'completed_goal',
-                    title: 'Goal Completed! 🎉',
-                    message: `"${newRow.title}" is fully completed!`,
-                    targetScreen: 'Goals'
-                  });
-                  triggerLocalNotificationAsync(
-                    'Goal Completed! 🎉',
-                    `"We did it! We finished '${newRow.title}'. Time to celebrate with a big kiss! 😘"`,
-                    { screen: 'Goals' }
-                  );
+                store.addHomeAlert({
+                  type: 'goal',
+                  title: 'New Goal Added 🎯',
+                  message: `${partnerName} created a new shared goal: "${newRow.title}"`,
+                  targetScreen: 'Goals'
+                });
+                triggerLocalNotificationAsync(
+                  'New dream unlocked! 🎯',
+                  `"${partnerName} added a new shared goal: '${newRow.title}'. Let's conquer the world together! 🌱"`,
+                  { screen: 'Goals' }
+                );
+              } else if (payload.eventType === 'UPDATE') {
+                const oldProgress = previousGoal ? previousGoal.progress : (oldRow ? oldRow.progress : undefined);
+                if (oldProgress !== undefined && oldProgress !== newRow.progress) {
+                  if (newRow.progress === 100) {
+                    setToast({
+                      title: 'Goal Completed! 🎉',
+                      message: `${partnerName} completed our goal: "${newRow.title}"!`,
+                      icon: '🎉',
+                      targetScreen: 'Goals'
+                    });
+                    store.addHomeAlert({
+                      type: 'completed_goal',
+                      title: 'Goal Completed! 🎉',
+                      message: `"${newRow.title}" is fully completed!`,
+                      targetScreen: 'Goals'
+                    });
+                    triggerLocalNotificationAsync(
+                      'Goal Completed! 🎉',
+                      `"${partnerName} completed our goal '${newRow.title}'! Time to celebrate with a big kiss! 😘"`,
+                      { screen: 'Goals' }
+                    );
+                  } else {
+                    setToast({
+                      title: 'Goal Updated! 📈',
+                      message: `${partnerName} updated progress on "${newRow.title}" to ${newRow.progress}%.`,
+                      icon: '📈',
+                      targetScreen: 'Goals'
+                    });
+                    triggerLocalNotificationAsync(
+                      "We're getting closer! 📈",
+                      `"${partnerName} updated progress on '${newRow.title}' to ${newRow.progress}%! 🌸"`,
+                      { screen: 'Goals' }
+                    );
+                  }
                 } else {
-                  triggerLocalNotificationAsync(
-                    "We're getting closer! 📈",
-                    `"Teamwork makes the dream work! Progress on '${newRow.title}' is now ${newRow.progress}%! 🌸"`,
-                    { screen: 'Goals' }
+                  const didDetailsChange = previousGoal && (
+                    previousGoal.title !== newRow.title ||
+                    previousGoal.description !== newRow.description ||
+                    previousGoal.emoji !== newRow.emoji ||
+                    previousGoal.targetDate !== newRow.target_date
                   );
+                  if (didDetailsChange) {
+                    setToast({
+                      title: 'Goal Updated! 🎯',
+                      message: `${partnerName} updated details for the goal "${newRow.title}".`,
+                      icon: '🎯',
+                      targetScreen: 'Goals'
+                    });
+                    triggerLocalNotificationAsync(
+                      'Goal updated! 🎯',
+                      `"${partnerName} updated details for our goal '${newRow.title}'. Check it out! 🌱"`,
+                      { screen: 'Goals' }
+                    );
+                  }
                 }
               }
             }
@@ -571,14 +668,15 @@ export function CoupleRealtimeListener() {
             };
             await coupleMemoryRepo.saveMemory(localInput).catch(err => console.error('[Realtime] Failed to save memory to SQLite:', err));
 
-            const exists = store.coupleMemories.some(x => x.id === mapped.id);
+            const previousMemory = store.coupleMemories.find(x => x.id === mapped.id);
+            const exists = !!previousMemory;
             if (exists) {
               store.updateCoupleMemoryInList(mapped);
             } else {
               store.prependCoupleMemory(mapped);
             }
 
-            if (payload.eventType === 'INSERT') {
+            if (payload.eventType === 'INSERT' && newRow.last_edited_by !== user?.id) {
               setToast({
                 title: 'New Memory Card! 📸',
                 message: `${partnerName} added a new memory to your timeline.`,
@@ -596,18 +694,30 @@ export function CoupleRealtimeListener() {
                 `"${partnerName} added a new memory to our wall: '${newRow.title}'. Let's keep making milestones! 🥰"`,
                 { screen: 'Memories' }
               );
-            } else if (payload.eventType === 'UPDATE') {
-              setToast({
-                title: 'Memory Updated! 📸',
-                message: `${partnerName} updated a memory: "${newRow.title}".`,
-                icon: '📸',
-                targetScreen: 'Memories'
-              });
-              triggerLocalNotificationAsync(
-                'Memory updated! 📸',
-                `"${partnerName} updated the memory '${newRow.title}' on our timeline. Check out what changed! 🥰"`,
-                { screen: 'Memories' }
-              );
+            } else if (payload.eventType === 'UPDATE' && newRow.last_edited_by !== user?.id) {
+              const didContentChange = !previousMemory ||
+                previousMemory.title !== mapped.title ||
+                previousMemory.description !== mapped.description ||
+                previousMemory.memoryDate !== mapped.memoryDate ||
+                previousMemory.location !== mapped.location ||
+                previousMemory.mood !== mapped.mood ||
+                previousMemory.memoryTime !== mapped.memoryTime ||
+                JSON.stringify(previousMemory.imageUrls) !== JSON.stringify(mapped.imageUrls) ||
+                JSON.stringify(previousMemory.tags) !== JSON.stringify(mapped.tags);
+
+              if (didContentChange) {
+                setToast({
+                  title: 'Memory Updated! 📸',
+                  message: `${partnerName} updated the memory "${newRow.title}".`,
+                  icon: '📸',
+                  targetScreen: 'Memories'
+                });
+                triggerLocalNotificationAsync(
+                  'Memory updated! 📸',
+                  `"${partnerName} updated the memory '${newRow.title}' on our timeline. Check out what changed! 🥰"`,
+                  { screen: 'Memories' }
+                );
+              }
             }
           }
         })
@@ -681,19 +791,22 @@ export function CoupleRealtimeListener() {
               createdAt: newRow.created_at,
               updatedAt: newRow.updated_at || newRow.created_at || new Date().toISOString(),
             };
-            if (payload.eventType === 'INSERT') {
+            const exists = store.relationshipEvents.some(x => x.id === mapped.id);
+            if (!exists) {
               store.prependRelationshipEvent(mapped);
-              setToast({
-                title: 'Event Scheduled! 📅',
-                message: `New calendar event: "${newRow.title}".`,
-                icon: '📅',
-                targetScreen: 'Home'
-              });
-              triggerLocalNotificationAsync(
-                'Date Night scheduled? 📅',
-                `"New countdown: '${newRow.title}' has been added to our calendar! Can't wait! 🥰"`,
-                { screen: 'Home' }
-              );
+              if (payload.eventType === 'INSERT') {
+                setToast({
+                  title: 'Event Scheduled! 📅',
+                  message: `New calendar event: "${newRow.title}".`,
+                  icon: '📅',
+                  targetScreen: 'Home'
+                });
+                triggerLocalNotificationAsync(
+                  'Date Night scheduled? 📅',
+                  `"New countdown: '${newRow.title}' has been added to our calendar! Can't wait! 🥰"`,
+                  { screen: 'Home' }
+                );
+              }
             } else if (payload.eventType === 'UPDATE') {
               store.setRelationshipEvents(store.relationshipEvents.map(x => x.id === mapped.id ? mapped : x));
             }
@@ -736,17 +849,20 @@ export function CoupleRealtimeListener() {
               }
             }
             if (payload.eventType === 'INSERT' && newRow && newRow.user_id !== user.id) {
-              setToast({
-                title: 'Letter Reaction! ✉️',
-                message: `${partnerName} reacted ${newRow.emoji || ''} to your letter.`,
-                icon: newRow.emoji || '✉️',
-                targetScreen: 'Future'
-              });
-              triggerLocalNotificationAsync(
-                'Sweet reaction! ✉️',
-                `"${partnerName} reacted ${newRow.emoji || ''} to your love letter! 🥰"`,
-                { screen: 'Future' }
-              );
+              const isMyLetter = targetLetter && targetLetter.senderId === user.id;
+              if (isMyLetter) {
+                setToast({
+                  title: 'Letter Reaction! ✉️',
+                  message: `${partnerName} reacted ${newRow.emoji || ''} to your letter.`,
+                  icon: newRow.emoji || '✉️',
+                  targetScreen: 'Future'
+                });
+                triggerLocalNotificationAsync(
+                  'Sweet reaction! ✉️',
+                  `"${partnerName} reacted ${newRow.emoji || ''} to your love letter! 🥰"`,
+                  { screen: 'Future' }
+                );
+              }
             }
           }
         })
@@ -781,8 +897,8 @@ export function CoupleRealtimeListener() {
                 targetScreen: 'Home'
               });
               triggerLocalNotificationAsync(
-                'Partner Mood Update! 🔮',
-                `"${p.nickname || 'Partner'} updated their mood to ${moodText}."`,
+                'How is your partner? 🔮',
+                `"${p.nickname || 'Partner'} is feeling: ${moodText}. Send them some love! 💕"`,
                 { screen: 'Home' }
               );
             }

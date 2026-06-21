@@ -95,7 +95,8 @@ export function PartnerSpaceRealtimeListener() {
             return;
           }
 
-          const exists = store.items.some((i) => i.id === mapped.id);
+          const prevItem = store.items.find((i) => i.id === mapped.id);
+          const exists = !!prevItem;
           if (exists) {
             store.updateItem(mapped);
           } else {
@@ -119,7 +120,10 @@ export function PartnerSpaceRealtimeListener() {
           }
 
           // If item just got a reaction from partner, show toast
-          if (!isMe && payload.eventType === 'UPDATE' && row.reaction_emoji) {
+          const isNewReaction = row.reaction_emoji && (!prevItem || prevItem.reactionEmoji !== row.reaction_emoji);
+          const wasReactedByPartner = row.reacted_by && row.reacted_by !== user.id;
+
+          if (isNewReaction && wasReactedByPartner) {
             store.setToast({
               title: 'They reacted! ❤️',
               message: `${partnerName} reacted ${row.reaction_emoji} to your item.`,
@@ -138,6 +142,7 @@ export function PartnerSpaceRealtimeListener() {
         }, (payload) => {
           const store = usePartnerSpaceStore.getState();
           const row = payload.new as any;
+          const wasGoodnightActive = store.space?.goodnightActive;
 
           store.setSpace({
             ...store.space!,
@@ -156,7 +161,8 @@ export function PartnerSpaceRealtimeListener() {
           });
 
           // Goodnight activated by partner
-          if (row.goodnight_active && row.takeover_by !== user.id) {
+          const isNewGoodnight = row.goodnight_active && !wasGoodnightActive;
+          if (isNewGoodnight) {
             store.setToast({
               title: 'Goodnight 🌙',
               message: row.goodnight_message || 'Sweet dreams, love 🌙',
