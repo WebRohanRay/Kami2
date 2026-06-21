@@ -70,7 +70,7 @@ const HistoryScreen: React.FC = () => {
       setSnapshots(res.data);
     }
     setSnapshotsLoading('idle');
-  }, [space?.id, activeFilter, getDateRange]);
+  }, [space?.id, activeFilter, getDateRange, setSnapshots, setSnapshotsLoading]);
 
   useEffect(() => {
     loadSnapshots();

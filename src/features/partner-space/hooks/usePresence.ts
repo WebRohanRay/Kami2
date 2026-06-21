@@ -13,6 +13,8 @@ export function usePresence() {
   const setPartnerPresenceText = usePartnerSpaceStore((s) => s.setPartnerPresenceText);
   const setPartnerLastActionAt = usePartnerSpaceStore((s) => s.setPartnerLastActionAt);
   const presenceText = usePartnerSpaceStore((s) => s.partnerPresenceText);
+  // BUG 12 FIX: Subscribe via hook selector instead of getState() in render
+  const partnerLastActionAt = usePartnerSpaceStore((s) => s.partnerLastActionAt);
 
   const latestPartnerAction = useMemo(() => {
     // Find the most recent item added by partner (not by me)
@@ -26,7 +28,7 @@ export function usePresence() {
   useEffect(() => {
     if (!latestPartnerAction) {
       if (presenceText !== null) setPartnerPresenceText(null);
-      if (usePartnerSpaceStore.getState().partnerLastActionAt !== null) setPartnerLastActionAt(null);
+      if (partnerLastActionAt !== null) setPartnerLastActionAt(null);
       return;
     }
 
@@ -40,7 +42,7 @@ export function usePresence() {
     // Don't show presence if action was more than 7 days ago
     if (diffDays > 7) {
       if (presenceText !== null) setPartnerPresenceText(null);
-      if (usePartnerSpaceStore.getState().partnerLastActionAt !== null) setPartnerLastActionAt(null);
+      if (partnerLastActionAt !== null) setPartnerLastActionAt(null);
       return;
     }
 
@@ -64,12 +66,11 @@ export function usePresence() {
     }
 
     const text = template.replace('{time}', timeStr);
-    const current = usePartnerSpaceStore.getState();
-    if (current.partnerPresenceText !== text) setPartnerPresenceText(text);
-    if (current.partnerLastActionAt !== latestPartnerAction.updatedAt) {
+    if (presenceText !== text) setPartnerPresenceText(text);
+    if (partnerLastActionAt !== latestPartnerAction.updatedAt) {
       setPartnerLastActionAt(latestPartnerAction.updatedAt);
     }
-  }, [latestPartnerAction, myUserId, presenceText, setPartnerLastActionAt, setPartnerPresenceText]);
+  }, [latestPartnerAction, myUserId, presenceText, partnerLastActionAt, setPartnerLastActionAt, setPartnerPresenceText]);
 
   // Check goodnight status
   const goodnightPresence = useMemo(() => {
@@ -81,7 +82,7 @@ export function usePresence() {
 
   return {
     presenceText: goodnightPresence || presenceText,
-    lastActionAt: usePartnerSpaceStore.getState().partnerLastActionAt,
+    lastActionAt: partnerLastActionAt,
     hasRecentActivity: !!latestPartnerAction,
   };
 }

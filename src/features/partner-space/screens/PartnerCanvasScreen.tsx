@@ -123,12 +123,15 @@ const PartnerCanvasScreen: React.FC = () => {
       // Check if this triggers disappearing (after_reacted condition)
       if (res.data.disappearCondition === 'after_reacted') {
         await SpaceService.markItemDisappeared(res.data.id);
+        // BUG 6 FIX: Remove the item from the store immediately so it
+        // doesn't linger on-screen until the next Realtime event.
+        removeItemFromStore(res.data.id);
       }
     }
 
     setShowReactionBar(false);
     setSelectedItem(null);
-  }, [selectedItem, updateItemInStore]);
+  }, [selectedItem, updateItemInStore, removeItemFromStore]);
 
   // Save canvas → create snapshot
   const handleSave = useCallback(async () => {
@@ -219,16 +222,60 @@ const PartnerCanvasScreen: React.FC = () => {
         </Text>
 
         <View style={styles.topBarRight}>
-          {/* Undo/Redo */}
+          {/* Undo/Redo — BUG 1 FIX: persist undo/redo to Supabase */}
           <TouchableOpacity
-            onPress={() => undo()}
+            onPress={async () => {
+              const action = undo();
+              if (!action) return;
+              // Persist the reverse operation to Supabase
+              switch (action.type) {
+                case 'add':
+                  // Undo of an add = soft-delete the item on server
+                  await SpaceService.softDeleteItem(action.item.id);
+                  break;
+                case 'update':
+                  // Undo of an update = restore previous position/size
+                  if (action.previousItem) {
+                    await SpaceService.updateItem(action.previousItem.id, {
+                      positionX: action.previousItem.positionX,
+                      positionY: action.previousItem.positionY,
+                      width: action.previousItem.width,
+                      height: action.previousItem.height,
+                      zIndex: action.previousItem.zIndex,
+                    });
+                  }
+                  break;
+                // 'remove' undo would re-add, but we don't support that
+                // since the item was soft-deleted on the server.
+              }
+            }}
             disabled={undoStack.length === 0}
             style={[styles.undoRedoBtn, undoStack.length === 0 && styles.disabled]}
           >
             <Text style={styles.undoRedoText}>↩️</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => redo()}
+            onPress={async () => {
+              const action = redo();
+              if (!action) return;
+              switch (action.type) {
+                case 'add':
+                  // Re-add is not possible for soft-deleted server items;
+                  // the Realtime listener will pick up the re-insert if any.
+                  break;
+                case 'update':
+                  if (action.item) {
+                    await SpaceService.updateItem(action.item.id, {
+                      positionX: action.item.positionX,
+                      positionY: action.item.positionY,
+                      width: action.item.width,
+                      height: action.item.height,
+                      zIndex: action.item.zIndex,
+                    });
+                  }
+                  break;
+              }
+            }}
             disabled={redoStack.length === 0}
             style={[styles.undoRedoBtn, redoStack.length === 0 && styles.disabled]}
           >

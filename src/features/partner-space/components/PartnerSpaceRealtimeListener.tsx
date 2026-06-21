@@ -17,6 +17,7 @@ import { syncPartnerSpaceWidgetFromStore } from '../hooks/partnerSpaceWidgetSync
 export function PartnerSpaceRealtimeListener() {
   const user = useAuthStore((s) => s.user);
   const partner = useCoupleStore((s) => s.partner);
+  const myNickname = user?.nickname;
   const space = usePartnerSpaceStore((s) => s.space);
 
   useEffect(() => {
@@ -61,6 +62,12 @@ export function PartnerSpaceRealtimeListener() {
           const row = payload.new as any;
           const isMe = row.added_by === user.id;
 
+          // BUG 2 FIX: Populate addedByNickname from store data
+          // (Realtime payloads don't include joined profile data)
+          const addedByNickname = isMe
+            ? (myNickname || 'You')
+            : (partnerName || undefined);
+
           const mapped: PartnerSpaceItem = {
             id: row.id,
             spaceId: row.space_id,
@@ -86,6 +93,7 @@ export function PartnerSpaceRealtimeListener() {
             seenAt: row.seen_at,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
+            addedByNickname,
           };
 
           // Handle soft-deleted or disappeared items
@@ -97,6 +105,19 @@ export function PartnerSpaceRealtimeListener() {
 
           const prevItem = store.items.find((i) => i.id === mapped.id);
           const exists = !!prevItem;
+
+          // BUG 5 FIX: Skip Realtime echoes of own writes.
+          // If the item already exists and the incoming updatedAt is not
+          // newer, this is a stale echo of our own optimistic update.
+          if (exists && prevItem && isMe) {
+            const incomingTs = new Date(mapped.updatedAt).getTime();
+            const existingTs = new Date(prevItem.updatedAt).getTime();
+            if (incomingTs <= existingTs) {
+              // Stale echo — skip to avoid flicker
+              return;
+            }
+          }
+
           if (exists) {
             store.updateItem(mapped);
           } else {
@@ -160,7 +181,9 @@ export function PartnerSpaceRealtimeListener() {
             updatedAt: row.updated_at,
           });
 
-          // Goodnight activated by partner
+          // BUG 4 FIX: Only show goodnight toast to the partner, not the activator.
+          // If we already had goodnightActive=true in our local store before
+          // the Realtime event, it means WE activated it (optimistic update).
           const isNewGoodnight = row.goodnight_active && !wasGoodnightActive;
           if (isNewGoodnight) {
             store.setToast({
@@ -188,7 +211,7 @@ export function PartnerSpaceRealtimeListener() {
         supabase.removeChannel(channel);
       }
     };
-  }, [space?.id, user?.id, partner?.nickname]);
+  }, [space?.id, user?.id, user?.nickname, partner?.nickname]);
 
   // Render nothing
   return null;

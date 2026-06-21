@@ -25,7 +25,7 @@ const ScheduledDropsScreen: React.FC = () => {
         if (res.success) setScheduledDrops(res.data);
       });
     }
-  }, [space?.id]);
+  }, [space?.id, setScheduledDrops]);
 
   const handleCancel = useCallback(async (item: PartnerSpaceItem) => {
     Alert.alert(
@@ -39,13 +39,16 @@ const ScheduledDropsScreen: React.FC = () => {
           onPress: async () => {
             const res = await SpaceService.cancelScheduledDrop(item.id);
             if (res.success) {
-              setScheduledDrops(scheduledDrops.filter((d) => d.id !== item.id));
+              // BUG 7 FIX: Read current state to avoid stale closure
+              // when cancelling multiple drops in rapid succession.
+              const current = usePartnerSpaceStore.getState().scheduledDrops;
+              setScheduledDrops(current.filter((d) => d.id !== item.id));
             }
           },
         },
       ]
     );
-  }, [scheduledDrops, setScheduledDrops]);
+  }, [setScheduledDrops]);
 
   const formatScheduledTime = (dateStr: string) => {
     const d = new Date(dateStr);

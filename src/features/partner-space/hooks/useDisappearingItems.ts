@@ -12,7 +12,9 @@ import * as SpaceService from '@infrastructure/partner-space/partnerSpaceService
  */
 export function useDisappearingItemsProcessor() {
   const spaceId = usePartnerSpaceStore((s) => s.space?.id);
-  const items = usePartnerSpaceStore((s) => s.items);
+  // BUG 3 FIX: Removed `items` subscription — the processor reads fresh
+  // state via getState() inside the callback. Subscribing here caused
+  // the interval to restart on every item change.
   const myUserId = usePartnerSpaceStore((s) => s.myUserId);
   const removeItem = usePartnerSpaceStore((s) => s.removeItem);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
