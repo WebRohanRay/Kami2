@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -73,6 +73,15 @@ export default function TimelineScreen() {
       setUiSyncStatus('idle');
     }
   }, [isSyncing, pendingSyncCount]);
+
+  // Refetch when background sync completes
+  const prevIsSyncing = useRef(isSyncing);
+  useEffect(() => {
+    if (prevIsSyncing.current && !isSyncing) {
+      loadCoupleAll();
+    }
+    prevIsSyncing.current = isSyncing;
+  }, [isSyncing, loadCoupleAll]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [filterTab, setFilterTab] = useState<'all' | 'letter' | 'journal' | 'memory' | 'goal' | 'answer'>('all');

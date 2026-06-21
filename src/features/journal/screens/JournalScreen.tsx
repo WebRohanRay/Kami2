@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   ActivityIndicator, Alert, AppState, Platform, RefreshControl, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -131,6 +131,19 @@ export function JournalScreen({ navigation }: Props) {
   }, [isSyncing, pendingSyncCount]);
 
   const updatePendingCount = () => { };
+
+  // Refetch when background sync completes
+  const prevIsSyncing = useRef(isSyncing);
+  useEffect(() => {
+    if (prevIsSyncing.current && !isSyncing) {
+      if (user?.activeSpace === 'couple') {
+        loadCoupleJournals();
+      } else if (user?.id) {
+        loadJournal(search.trim() || undefined, selectedTag || undefined);
+      }
+    }
+    prevIsSyncing.current = isSyncing;
+  }, [isSyncing, user?.activeSpace, user?.id, search, selectedTag, loadCoupleJournals, loadJournal]);
 
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
   const [appState, setAppState] = useState(AppState.currentState);

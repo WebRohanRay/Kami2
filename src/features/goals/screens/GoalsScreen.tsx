@@ -5,7 +5,7 @@
  * optional cover image uploading, and countdown target dates.
  */
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -107,6 +107,19 @@ export function GoalsScreen({ navigation }: Props) {
     setVisibleActive(10);
     setVisibleCompleted(10);
   }, [activeSpace]);
+
+  // Refetch when background sync completes
+  const prevIsSyncing = useRef(isSyncing);
+  useEffect(() => {
+    if (prevIsSyncing.current && !isSyncing) {
+      if (activeSpace === 'couple') {
+        coupleActions.loadGoals();
+      } else {
+        refresh();
+      }
+    }
+    prevIsSyncing.current = isSyncing;
+  }, [isSyncing, activeSpace, coupleActions, refresh]);
 
   // Focus listener to auto-refresh data when focused
   useEffect(() => {

@@ -232,6 +232,19 @@ export function MemoriesScreen({ navigation }: Props) {
     dependencies: [search, user?.id, activeSpace],
   });
 
+  // Refetch when background sync completes
+  const prevIsSyncing = useRef(isSyncing);
+  useEffect(() => {
+    if (prevIsSyncing.current && !isSyncing) {
+      if (activeSpace === 'couple') {
+        coupleActions.loadMemories();
+      } else {
+        refresh();
+      }
+    }
+    prevIsSyncing.current = isSyncing;
+  }, [isSyncing, activeSpace, coupleActions, refresh]);
+
   const [isFocused, setIsFocused] = useState(navigation.isFocused());
   const [appState, setAppState] = useState(AppState.currentState);
 

@@ -6,7 +6,7 @@
  * Body content and images are kept sealed on the database level until the unlock date.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -84,6 +84,8 @@ export function FutureScreen({ navigation }: Props) {
       setUiSyncStatus('idle');
     }
   }, [isSyncing, pendingSyncCount]);
+
+
 
   const [letters, setLetters] = useState<Letter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,6 +174,19 @@ export function FutureScreen({ navigation }: Props) {
     setLettersPage(page);
     setLettersHasMore(r.data.length === 20);
   }, []);
+
+  // Refetch when background sync completes
+  const prevIsSyncing = useRef(isSyncing);
+  useEffect(() => {
+    if (prevIsSyncing.current && !isSyncing) {
+      if (activeSpace === 'couple') {
+        coupleActions.loadLetters();
+      } else {
+        loadLetters(1);
+      }
+    }
+    prevIsSyncing.current = isSyncing;
+  }, [isSyncing, activeSpace, coupleActions, loadLetters]);
 
   const handleSave = async (
     subject: string,

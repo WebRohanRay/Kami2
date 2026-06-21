@@ -40,6 +40,50 @@ import type {
 // Refresh if data is older than 5 minutes
 const STALE_MS = 5 * 60 * 1000;
 
+function mergeListById<T extends { id: string }>(
+  existingList: T[],
+  fetchedList: T[],
+  isPageOne: boolean
+): T[] {
+  if (isPageOne) {
+    const fetchedIds = new Set(fetchedList.map(x => x.id));
+    const pendingOrExtra = existingList.filter(item => {
+      const isPending = 'syncStatus' in item && item.syncStatus && String(item.syncStatus).startsWith('pending');
+      const isNotFetched = !fetchedIds.has(item.id);
+      return isPending || isNotFetched;
+    });
+
+    const mergedMap = new Map<string, T>();
+    fetchedList.forEach(item => mergedMap.set(item.id, item));
+
+    const finalItems = [...fetchedList];
+    pendingOrExtra.forEach(item => {
+      if (!mergedMap.has(item.id)) {
+        finalItems.unshift(item);
+        mergedMap.set(item.id, item);
+      }
+    });
+    return finalItems;
+  } else {
+    const mergedMap = new Map<string, T>();
+    existingList.forEach(item => mergedMap.set(item.id, item));
+
+    const finalItems = [...existingList];
+    fetchedList.forEach(item => {
+      if (mergedMap.has(item.id)) {
+        const index = finalItems.findIndex(x => x.id === item.id);
+        if (index !== -1) {
+          finalItems[index] = item;
+        }
+      } else {
+        finalItems.push(item);
+        mergedMap.set(item.id, item);
+      }
+    });
+    return finalItems;
+  }
+}
+
 export function useHome() {
   const user  = useAuthStore((s) => s.user);
   const store = useHomeStore.getState;
@@ -66,11 +110,7 @@ export function useHome() {
     s.setJournalLoading('loading');
     const result = await homeService.fetchJournalEntries(20, searchQuery, tagFilter, page);
     if (result.success) {
-      if (page === 1) {
-        s.setJournalEntries(result.data);
-      } else {
-        s.setJournalEntries([...s.journalEntries, ...result.data]);
-      }
+      s.setJournalEntries(mergeListById(s.journalEntries, result.data, page === 1));
       s.setJournalPage(page);
       s.setJournalHasMore(result.data.length === 20);
     } else {
@@ -89,7 +129,7 @@ export function useHome() {
     const s = store();
     s.setGoalsLoading('loading');
     const result = await homeService.fetchGoals();
-    if (result.success) s.setGoals(result.data);
+    if (result.success) s.setGoals(mergeListById(s.goals, result.data, true));
     else                s.setGoalsError(result.error);
     s.setGoalsLoading('idle');
   }, []);
@@ -333,7 +373,7 @@ export function useHome() {
 
     debounceTimeout = setTimeout(() => {
       setupSubscription();
-    }, 2000);
+    }, 100);
 
     return () => {
       appStateSub.remove();

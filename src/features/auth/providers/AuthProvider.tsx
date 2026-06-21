@@ -6,6 +6,7 @@ import { registerForPushNotificationsAsync } from '@infrastructure/notifications
 import { applyTheme } from '@shared/constants';
 import { useAuthStore } from '../store';
 import type { AuthUser, AuthStatus } from '../types';
+import { processSyncQueue } from '@shared/db/sync';
 
 function statusFor(user: AuthUser, online: boolean = true): AuthStatus {
   if (!user.emailVerified) return 'unverified';
@@ -45,6 +46,7 @@ export async function hydrateUser(
     }
   } else {
     setStatus('authenticated_online');
+    processSyncQueue().catch(err => console.error('[AuthProvider] Failed to run processSyncQueue on online hydration:', err));
   }
 
   // If email is verified/authenticated, request push notification permission and sync token

@@ -174,7 +174,7 @@ export function PartnerSpaceRealtimeListener() {
     // Debounce setup to avoid rapid reconnections
     debounceTimeout = setTimeout(() => {
       setupSubscription();
-    }, 1500);
+    }, 100);
 
     return () => {
       if (debounceTimeout) clearTimeout(debounceTimeout);

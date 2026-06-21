@@ -15,6 +15,18 @@ import type {
 } from '../types';
 import { useNetworkStatus } from '@shared/network/NetworkProvider';
 import { useTheme } from '@shared/hooks';
+import { db } from '@shared/db/client';
+import * as schema from '@shared/db/schema';
+import { eq } from 'drizzle-orm';
+import { 
+  coupleLetterRepo, 
+  coupleJournalRepo, 
+  coupleMemoryRepo, 
+  coupleGoalRepo, 
+  coupleCommentRepo,
+  coupleCandidRepo,
+  coupleCandidStreakRepo,
+} from '@shared/db/repo';
 
 export function CoupleRealtimeListener() {
   const user = useAuthStore(s => s.user);
@@ -78,6 +90,7 @@ export function CoupleRealtimeListener() {
           const store = useCoupleStore.getState();
           if (payload.eventType === 'DELETE') {
             store.removeCoupleLetterFromList(payload.old.id);
+            await db.delete(schema.coupleLetters).where(eq(schema.coupleLetters.id, payload.old.id)).catch(err => console.error('[Realtime] Failed to delete letter from SQLite:', err));
           } else {
             const newRow = payload.new as any;
             const resolvedImages = newRow.image_urls || [];
@@ -105,6 +118,27 @@ export function CoupleRealtimeListener() {
                 emoji: rx.emoji
               }))
             };
+
+            const localInput = {
+              id: newRow.id,
+              coupleId: newRow.couple_id,
+              senderId: newRow.sender_id,
+              subject: newRow.subject,
+              body: newRow.body || '',
+              deliverAt: newRow.deliver_at,
+              imageUrls: resolvedImages,
+              isRead: newRow.is_read ? 1 : 0,
+              isFavorite: newRow.is_favorite ? 1 : 0,
+              isDraft: newRow.is_draft ? 1 : 0,
+              isArchived: newRow.is_archived ? 1 : 0,
+              parentLetterId: newRow.parent_letter_id,
+              createdAt: newRow.created_at,
+              updatedAt: newRow.updated_at,
+              syncStatus: 'synced',
+              serverUpdatedAt: newRow.updated_at,
+            };
+            await coupleLetterRepo.saveLetter(localInput).catch(err => console.error('[Realtime] Failed to save letter to SQLite:', err));
+
             const exists = store.coupleLetters.some(x => x.id === mapped.id);
             if (exists) {
               store.updateCoupleLetterInList(mapped);
@@ -174,6 +208,7 @@ export function CoupleRealtimeListener() {
           const store = useCoupleStore.getState();
           if (payload.eventType === 'DELETE') {
             store.removeCoupleJournalFromList(payload.old.id);
+            await db.delete(schema.coupleJournals).where(eq(schema.coupleJournals.id, payload.old.id)).catch(err => console.error('[Realtime] Failed to delete journal from SQLite:', err));
           } else {
             const newRow = payload.new as any;
             const resolvedImages = newRow.image_urls || [];
@@ -196,6 +231,25 @@ export function CoupleRealtimeListener() {
               comments: [],
               reactions: []
             };
+
+            const localInput = {
+              id: newRow.id,
+              coupleId: newRow.couple_id,
+              userId: newRow.user_id,
+              title: newRow.title || null,
+              body: newRow.body,
+              moodId: newRow.mood_id || null,
+              tags: newRow.tags || [],
+              imageUrls: resolvedImages,
+              entryDate: newRow.entry_date,
+              isPinned: newRow.is_pinned ? 1 : 0,
+              createdAt: newRow.created_at,
+              updatedAt: newRow.updated_at,
+              syncStatus: 'synced',
+              serverUpdatedAt: newRow.updated_at,
+            };
+            await coupleJournalRepo.saveJournal(localInput).catch(err => console.error('[Realtime] Failed to save journal to SQLite:', err));
+
             const existing = store.coupleJournals.find(x => x.id === mapped.id);
             if (existing) {
               mapped.comments = existing.comments;
@@ -237,7 +291,7 @@ export function CoupleRealtimeListener() {
           event: '*', 
           schema: 'public', 
           table: 'couple_journal_comments' 
-        }, (payload) => {
+        }, async (payload) => {
           const store = useCoupleStore.getState();
           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as any;
@@ -250,10 +304,23 @@ export function CoupleRealtimeListener() {
                 };
                 store.updateCoupleJournalInList(updatedJournal);
               }
+              await db.delete(schema.coupleComments).where(eq(schema.coupleComments.id, oldRow.id)).catch(err => console.error('[Realtime] Failed to delete comment from SQLite:', err));
             }
           } else {
             const newRow = payload.new as any;
             if (newRow) {
+              const localInput = {
+                id: newRow.id,
+                entryId: newRow.entry_id,
+                userId: newRow.user_id,
+                body: newRow.body,
+                createdAt: newRow.created_at,
+                updatedAt: newRow.updated_at || newRow.created_at,
+                syncStatus: 'synced',
+                serverUpdatedAt: newRow.updated_at || newRow.created_at,
+              };
+              await coupleCommentRepo.saveComment(localInput).catch(err => console.error('[Realtime] Failed to save comment to SQLite:', err));
+
               const targetJournal = store.coupleJournals.find(x => x.id === newRow.entry_id);
               if (targetJournal) {
                 const isMe = newRow.user_id === user?.id;
@@ -357,10 +424,11 @@ export function CoupleRealtimeListener() {
           schema: 'public', 
           table: 'couple_goals', 
           filter: `couple_id=eq.${coupleId}` 
-        }, (payload) => {
+        }, async (payload) => {
           const store = useCoupleStore.getState();
           if (payload.eventType === 'DELETE') {
             store.removeCoupleGoalFromList(payload.old.id);
+            await db.delete(schema.coupleGoals).where(eq(schema.coupleGoals.id, payload.old.id)).catch(err => console.error('[Realtime] Failed to delete goal from SQLite:', err));
           } else {
             const newRow = payload.new as any;
             const oldRow = payload.old as any;
@@ -378,6 +446,25 @@ export function CoupleRealtimeListener() {
               createdAt: newRow.created_at,
               updatedAt: newRow.updated_at
             };
+
+            const localInput = {
+              id: newRow.id,
+              coupleId: newRow.couple_id,
+              title: newRow.title,
+              description: newRow.description,
+              category: newRow.category || 'relationship',
+              status: newRow.status || 'active',
+              progress: newRow.progress || 0,
+              targetDate: newRow.target_date,
+              completedAt: newRow.completed_at,
+              emoji: newRow.emoji || '🌱',
+              createdAt: newRow.created_at,
+              updatedAt: newRow.updated_at,
+              syncStatus: 'synced',
+              serverUpdatedAt: newRow.updated_at,
+            };
+            await coupleGoalRepo.saveGoal(localInput).catch(err => console.error('[Realtime] Failed to save goal to SQLite:', err));
+
             const exists = store.coupleGoals.some(x => x.id === mapped.id);
             if (exists) {
               store.updateCoupleGoalInList(mapped);
@@ -444,6 +531,7 @@ export function CoupleRealtimeListener() {
           const store = useCoupleStore.getState();
           if (payload.eventType === 'DELETE') {
             store.removeCoupleMemoryFromList(payload.old.id);
+            await db.delete(schema.coupleMemories).where(eq(schema.coupleMemories.id, payload.old.id)).catch(err => console.error('[Realtime] Failed to delete memory from SQLite:', err));
           } else {
             const newRow = payload.new as any;
             const resolvedImages = newRow.image_urls || [];
@@ -463,6 +551,26 @@ export function CoupleRealtimeListener() {
               lastEditedBy: newRow.last_edited_by || null,
               lastEditedNickname: isMe ? (user?.nickname || 'You') : (partner?.nickname || 'Partner')
             };
+
+            const localInput = {
+              id: newRow.id,
+              coupleId: newRow.couple_id,
+              title: newRow.title,
+              description: newRow.description || null,
+              imageUrls: resolvedImages,
+              memoryDate: newRow.memory_date,
+              tags: newRow.tags || [],
+              lastEditedBy: newRow.last_edited_by || null,
+              location: newRow.location || null,
+              mood: newRow.mood || null,
+              memoryTime: newRow.memory_time || null,
+              createdAt: newRow.created_at,
+              updatedAt: newRow.updated_at,
+              syncStatus: 'synced',
+              serverUpdatedAt: newRow.updated_at,
+            };
+            await coupleMemoryRepo.saveMemory(localInput).catch(err => console.error('[Realtime] Failed to save memory to SQLite:', err));
+
             const exists = store.coupleMemories.some(x => x.id === mapped.id);
             if (exists) {
               store.updateCoupleMemoryInList(mapped);
@@ -692,6 +800,7 @@ export function CoupleRealtimeListener() {
             const oldRow = payload.old as any;
             if (oldRow) {
               store.removeCandidFromList(oldRow.id, user.id);
+              await db.delete(schema.coupleCandids).where(eq(schema.coupleCandids.id, oldRow.id)).catch(err => console.error('[Realtime] Failed to delete candid from SQLite:', err));
             }
           } else {
             const newRow = payload.new as any;
@@ -719,6 +828,25 @@ export function CoupleRealtimeListener() {
               updatedAt: newRow.updated_at,
               senderNickname: isMe ? (user?.nickname || 'You') : (partner?.nickname || 'Partner'),
             };
+
+            const localInput = {
+              id: newRow.id,
+              coupleId: newRow.couple_id,
+              senderId: newRow.sender_id,
+              imagePath: newRow.image_path,
+              thumbPath: newRow.thumb_path || null,
+              caption: newRow.caption || null,
+              reactionEmoji: newRow.reaction_emoji || null,
+              isSeen: newRow.is_seen ? 1 : 0,
+              seenAt: newRow.seen_at || null,
+              isFirstCandid: newRow.is_first_candid ? 1 : 0,
+              createdAt: newRow.created_at,
+              updatedAt: newRow.updated_at,
+              syncStatus: 'synced',
+              serverUpdatedAt: newRow.updated_at,
+            };
+            await coupleCandidRepo.saveCandid(localInput).catch(err => console.error('[Realtime] Failed to save candid to SQLite:', err));
+
             const exists = store.candids.some(x => x.id === mapped.id);
             if (exists) {
               store.updateCandidInList(mapped, user.id);
@@ -734,16 +862,28 @@ export function CoupleRealtimeListener() {
           schema: 'public', 
           table: 'couple_candid_streaks', 
           filter: `couple_id=eq.${coupleId}` 
-        }, (payload) => {
+        }, async (payload) => {
           const store = useCoupleStore.getState();
           if (payload.eventType === 'DELETE') {
             store.setCandidStreak(null);
+            await db.delete(schema.coupleCandidStreaks).where(eq(schema.coupleCandidStreaks.coupleId, coupleId)).catch(err => console.error('[Realtime] Failed to delete streak from SQLite:', err));
           } else {
             const newRow = payload.new as any;
             if (newRow) {
               const dates = Object.values(newRow.last_sent_dates || {}) as string[];
               const u1Date = dates[0] || null;
               const u2Date = dates[1] || null;
+
+              const localInput = {
+                coupleId: newRow.couple_id,
+                currentStreak: newRow.current_streak,
+                longestStreak: newRow.longest_streak,
+                lastBothSentDate: newRow.last_both_sent_date,
+                user1LastSentDate: u1Date,
+                user2LastSentDate: u2Date,
+                updatedAt: newRow.updated_at,
+              };
+              await coupleCandidStreakRepo.saveStreak(localInput).catch(err => console.error('[Realtime] Failed to save streak to SQLite:', err));
 
               store.setCandidStreak({
                 coupleId: newRow.couple_id,
@@ -764,7 +904,7 @@ export function CoupleRealtimeListener() {
 
     debounceTimeout = setTimeout(() => {
       setupSubscription();
-    }, 2000);
+    }, 100);
 
     return () => {
       if (debounceTimeout) clearTimeout(debounceTimeout);
@@ -874,7 +1014,7 @@ export function CoupleRealtimeListener() {
 
     debounceTimeout = setTimeout(() => {
       setupSubscription();
-    }, 2000);
+    }, 100);
 
     return () => {
       if (debounceTimeout) clearTimeout(debounceTimeout);

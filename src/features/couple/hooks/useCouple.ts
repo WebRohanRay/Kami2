@@ -16,6 +16,50 @@ import type { Result } from '@shared/types/result';
 import { getRelativePathFromSignedUrl } from '@shared/lib/storage';
 import * as candidService from '../services/candidService';
 
+function mergeListById<T extends { id: string }>(
+  existingList: T[],
+  fetchedList: T[],
+  isPageOne: boolean
+): T[] {
+  if (isPageOne) {
+    const fetchedIds = new Set(fetchedList.map(x => x.id));
+    const pendingOrExtra = existingList.filter(item => {
+      const isPending = 'syncStatus' in item && item.syncStatus && String(item.syncStatus).startsWith('pending');
+      const isNotFetched = !fetchedIds.has(item.id);
+      return isPending || isNotFetched;
+    });
+
+    const mergedMap = new Map<string, T>();
+    fetchedList.forEach(item => mergedMap.set(item.id, item));
+
+    const finalItems = [...fetchedList];
+    pendingOrExtra.forEach(item => {
+      if (!mergedMap.has(item.id)) {
+        finalItems.unshift(item);
+        mergedMap.set(item.id, item);
+      }
+    });
+    return finalItems;
+  } else {
+    const mergedMap = new Map<string, T>();
+    existingList.forEach(item => mergedMap.set(item.id, item));
+
+    const finalItems = [...existingList];
+    fetchedList.forEach(item => {
+      if (mergedMap.has(item.id)) {
+        const index = finalItems.findIndex(x => x.id === item.id);
+        if (index !== -1) {
+          finalItems[index] = item;
+        }
+      } else {
+        finalItems.push(item);
+        mergedMap.set(item.id, item);
+      }
+    });
+    return finalItems;
+  }
+}
+
 export function useCouple() {
   const user = useAuthStore(s => s.user);
   const store = useCoupleStore;
@@ -70,7 +114,7 @@ export function useCouple() {
           body: c.body,
           createdAt: c.createdAt,
           userNickname: c.userId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
-          userAvatarUrl: c.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl,
+          userAvatarUrl: (c.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl) ?? undefined,
         }));
 
         return {
@@ -89,15 +133,11 @@ export function useCouple() {
           comments: commentsMapped,
           reactions: [], // reactions fetched online or realtime
           userNickname: entry.userId === currentUser?.id ? (currentUser?.nickname || 'You') : (partner?.nickname || 'Partner'),
-          userAvatarUrl: entry.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl,
+          userAvatarUrl: (entry.userId === currentUser?.id ? currentUser?.avatarUrl : partner?.avatarUrl) ?? undefined,
         };
       }));
 
-      if (page === 1) {
-        s.setCoupleJournals(mapped as any);
-      } else {
-        s.setCoupleJournals([...s.coupleJournals, ...mapped] as any);
-      }
+      s.setCoupleJournals(mergeListById(s.coupleJournals, mapped, page === 1) as any);
       s.setJournalsPage(page);
       s.setJournalsHasMore(local.length === 20);
     } catch (err) {
@@ -134,11 +174,7 @@ export function useCouple() {
         updatedAt: g.updatedAt,
       }));
 
-      if (page === 1) {
-        s.setCoupleGoals(mapped);
-      } else {
-        s.setCoupleGoals([...s.coupleGoals, ...mapped]);
-      }
+      s.setCoupleGoals(mergeListById(s.coupleGoals, mapped, page === 1) as any);
       s.setGoalsPage(page);
       s.setGoalsHasMore(local.length === 20);
     } catch (err) {
@@ -181,11 +217,7 @@ export function useCouple() {
         };
       }));
 
-      if (page === 1) {
-        s.setCoupleMemories(mapped);
-      } else {
-        s.setCoupleMemories([...s.coupleMemories, ...mapped]);
-      }
+      s.setCoupleMemories(mergeListById(s.coupleMemories, mapped, page === 1) as any);
       s.setMemoriesPage(page);
       s.setMemoriesHasMore(local.length === 15);
     } catch (err) {
@@ -231,11 +263,7 @@ export function useCouple() {
         };
       }));
 
-      if (page === 1) {
-        s.setCoupleLetters(mapped);
-      } else {
-        s.setCoupleLetters([...s.coupleLetters, ...mapped]);
-      }
+      s.setCoupleLetters(mergeListById(s.coupleLetters, mapped, page === 1) as any);
       s.setLettersPage(page);
       s.setLettersHasMore(local.length === 20);
     } catch (err) {
